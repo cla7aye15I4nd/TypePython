@@ -1,0 +1,197 @@
+// ============================================================================
+// Lexical Elements
+// ============================================================================
+
+COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
+NEWLINE = { "\n" | "\r\n" | "\r" }
+
+// Whitespace within a line (not leading indentation)
+WS = _{ " " | "\t" }
+
+// Keywords
+IF = { "if" }
+ELIF = { "elif" }
+ELSE = { "else" }
+WHILE = { "while" }
+DEF = { "def" }
+RETURN = { "return" }
+PASS = { "pass" }
+AND = { "and" }
+OR = { "or" }
+NOT = { "not" }
+TRUE = { "True" }
+FALSE = { "False" }
+
+// Type keywords
+INT_TYPE = { "int" }
+FLOAT_TYPE = { "float" }
+BOOL_TYPE = { "bool" }
+STR_TYPE = { "str" }
+NONE_TYPE = { "None" }
+
+// All keywords (for identifier exclusion)
+keyword = {
+    IF | ELIF | ELSE | WHILE | DEF | RETURN | PASS |
+    AND | OR | NOT | TRUE | FALSE |
+    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | NONE_TYPE
+}
+
+// Identifiers (must not be keywords)
+// Use word boundary to ensure keywords don't match as prefixes
+ID = @{ !(keyword ~ !(ASCII_ALPHANUMERIC | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// Literals
+INT_LIT = @{ ASCII_DIGIT+ }
+FLOAT_LIT = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+STR_LIT = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+// Operators
+PLUS = { "+" }
+MINUS = { "-" }
+STAR = { "*" }
+SLASH = { "/" }
+PERCENT = { "%" }
+
+EQ = { "==" }
+NE = { "!=" }
+LE = { "<=" }
+GE = { ">=" }
+LT = { "<" }
+GT = { ">" }
+
+ASSIGN = { "=" }
+COLON = { ":" }
+COMMA = { "," }
+ARROW = { "->" }
+LPAREN = { "(" }
+RPAREN = { ")" }
+
+// ============================================================================
+// Indentation Tokens
+// ============================================================================
+
+// Match any amount of leading whitespace for indented lines
+INDENT = @{ (" " | "\t")+ }
+
+// ============================================================================
+// Program Structure
+// ============================================================================
+
+program = { SOI ~ (NEWLINE | func_decl | statement)* ~ EOI }
+
+// ============================================================================
+// Statements
+// ============================================================================
+
+statement = {
+    var_decl_stmt
+    | assignment_stmt
+    | if_stmt
+    | while_stmt
+    | return_stmt
+    | pass_stmt
+    | expr_stmt
+}
+
+// Statements that need NEWLINE termination
+var_decl_stmt = { var_decl ~ NEWLINE }
+assignment_stmt = { assignment ~ NEWLINE }
+return_stmt = { return_inner ~ NEWLINE }
+pass_stmt = { PASS ~ NEWLINE }
+expr_stmt = { expression ~ NEWLINE }
+
+// Core statement forms
+var_decl = { ID ~ WS* ~ COLON ~ WS* ~ type_spec ~ WS* ~ ASSIGN ~ WS* ~ expression }
+assignment = { ID ~ WS* ~ ASSIGN ~ WS* ~ expression }
+return_inner = { RETURN ~ (WS+ ~ expression)? }
+
+// ============================================================================
+// Control Flow
+// ============================================================================
+
+if_stmt = {
+    IF ~ WS+ ~ expression ~ WS* ~ COLON ~ block ~
+    elif_clause* ~
+    else_clause?
+}
+
+elif_clause = { INDENT ~ ELIF ~ WS+ ~ expression ~ WS* ~ COLON ~ block }
+else_clause = { INDENT ~ ELSE ~ WS* ~ COLON ~ block }
+
+while_stmt = { WHILE ~ WS+ ~ expression ~ WS* ~ COLON ~ block }
+
+// Block: newline, then indented statements
+block = { NEWLINE ~ indented_statement+ }
+
+indented_statement = { INDENT ~ statement }
+
+// ============================================================================
+// Function Declarations
+// ============================================================================
+
+func_decl = {
+    DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ param_list? ~ WS* ~ RPAREN ~ WS* ~ ARROW ~ WS* ~ type_spec ~ WS* ~ COLON ~ block
+}
+
+param_list = { param ~ (WS* ~ COMMA ~ WS* ~ param)* }
+param = { ID ~ WS* ~ COLON ~ WS* ~ type_spec }
+
+// ============================================================================
+// Types
+// ============================================================================
+
+type_spec = {
+    INT_TYPE
+    | FLOAT_TYPE
+    | BOOL_TYPE
+    | STR_TYPE
+    | NONE_TYPE
+}
+
+// ============================================================================
+// Expressions (Precedence from lowest to highest)
+// ============================================================================
+
+expression = { logic_or }
+
+// Logical OR (lowest precedence)
+logic_or = { logic_and ~ (WS+ ~ OR ~ WS+ ~ logic_and)* }
+
+// Logical AND
+logic_and = { equality ~ (WS+ ~ AND ~ WS+ ~ equality)* }
+
+// Equality: == !=
+equality = { comparison ~ (WS* ~ equality_op ~ WS* ~ comparison)* }
+equality_op = { EQ | NE }
+
+// Comparison: < > <= >=
+comparison = { term ~ (WS* ~ comparison_op ~ WS* ~ term)* }
+comparison_op = { LE | GE | LT | GT }
+
+// Addition/Subtraction
+term = { factor ~ (WS* ~ term_op ~ WS* ~ factor)* }
+term_op = { PLUS | MINUS }
+
+// Multiplication/Division/Modulo
+factor = { unary ~ (WS* ~ factor_op ~ WS* ~ unary)* }
+factor_op = { STAR | SLASH | PERCENT }
+
+// Unary operators
+unary = { unary_op ~ WS* ~ unary | call }
+unary_op = { MINUS | NOT }
+
+// Function calls
+call = { atom ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)? }
+
+arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* }
+
+// Atoms (highest precedence)
+atom = {
+    FLOAT_LIT
+    | INT_LIT
+    | STR_LIT
+    | TRUE
+    | FALSE
+    | ID
+    | LPAREN ~ WS* ~ expression ~ WS* ~ RPAREN
+}

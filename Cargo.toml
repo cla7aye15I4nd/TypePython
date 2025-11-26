@@ -1,0 +1,12 @@
+[package]
+name = "tpy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+pest = "2.8.4"
+pest_derive = "2.8.4"
+
+[dev-dependencies]
+anyhow = "1.0"
