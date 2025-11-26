@@ -1,0 +1,29 @@
+{
+    "name": "TyPy Compiler",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "runArgs": [
+        "--privileged",
+        "--network=host"
+    ],
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh/id_ed25519,target=/root/.ssh/id_ed25519,type=bind"
+    ],
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "lldb.executable": "/usr/bin/lldb",
+                "rust-analyzer.check.command": "clippy"
+            },
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "vadimcn.vscode-lldb",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates",
+                "shd101wyy.markdown-preview-enhanced",
+                "GitHub.copilot"
+            ]
+        }
+    }
+}
