@@ -152,36 +152,41 @@ type_spec = {
 // Expressions (Precedence from lowest to highest)
 // ============================================================================
 
-expression = { logic_or }
+expression = {
+    logic_or_expr
+    | logic_and_expr
+    | equality_expr
+    | comparison_expr
+    | term_expr
+    | factor_expr
+    | unary_expr
+    | call_expr
+    | atom
+}
 
-// Logical OR (lowest precedence)
-logic_or = { logic_and ~ (WS+ ~ OR ~ WS+ ~ logic_and)* }
+// Logical OR (lowest precedence) - only match if OR operator present
+logic_or_expr = { (logic_and_expr | equality_expr | comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom) ~ (WS+ ~ OR ~ WS+ ~ (logic_and_expr | equality_expr | comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom))+ }
 
-// Logical AND
-logic_and = { equality ~ (WS+ ~ AND ~ WS+ ~ equality)* }
+// Logical AND - only match if AND operator present
+logic_and_expr = { (equality_expr | comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom) ~ (WS+ ~ AND ~ WS+ ~ (equality_expr | comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom))+ }
 
-// Equality: == !=
-equality = { comparison ~ (WS* ~ equality_op ~ WS* ~ comparison)* }
-equality_op = { EQ | NE }
+// Equality: == != - only match if operator present
+equality_expr = { (comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom) ~ (WS* ~ (EQ | NE) ~ WS* ~ (comparison_expr | term_expr | factor_expr | unary_expr | call_expr | atom))+ }
 
-// Comparison: < > <= >=
-comparison = { term ~ (WS* ~ comparison_op ~ WS* ~ term)* }
-comparison_op = { LE | GE | LT | GT }
+// Comparison: < > <= >= - only match if operator present
+comparison_expr = { (term_expr | factor_expr | unary_expr | call_expr | atom) ~ (WS* ~ (LE | GE | LT | GT) ~ WS* ~ (term_expr | factor_expr | unary_expr | call_expr | atom))+ }
 
-// Addition/Subtraction
-term = { factor ~ (WS* ~ term_op ~ WS* ~ factor)* }
-term_op = { PLUS | MINUS }
+// Addition/Subtraction - only match if operator present
+term_expr = { (factor_expr | unary_expr | call_expr | atom) ~ (WS* ~ (PLUS | MINUS) ~ WS* ~ (factor_expr | unary_expr | call_expr | atom))+ }
 
-// Multiplication/Division/Modulo
-factor = { unary ~ (WS* ~ factor_op ~ WS* ~ unary)* }
-factor_op = { STAR | SLASH | PERCENT }
+// Multiplication/Division/Modulo - only match if operator present
+factor_expr = { (unary_expr | call_expr | atom) ~ (WS* ~ (STAR | SLASH | PERCENT) ~ WS* ~ (unary_expr | call_expr | atom))+ }
 
 // Unary operators
-unary = { unary_op ~ WS* ~ unary | call }
-unary_op = { MINUS | NOT }
+unary_expr = { (MINUS | NOT) ~ WS* ~ expression }
 
-// Function calls
-call = { atom ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)? }
+// Function calls - only match if parentheses present
+call_expr = { atom ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)+ }
 
 arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* }
 
