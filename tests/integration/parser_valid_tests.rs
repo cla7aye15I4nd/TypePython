@@ -1,115 +1,85 @@
 use inkwell::context::Context;
-use pest::Parser;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
-use tpy::{ast::parser, codegen::CodeGen, preprocessor, LangParser, Rule};
+use tpy::pipeline::{compile_file, compile_to_executable, CompileOptions};
 
-/// Individual tests for each fixture file for better granularity
-#[test]
-fn test_simple() {
-    test_valid("tests/fixtures/valid/simple.py");
+macro_rules! valid_test {
+    ($name:ident, $path:expr) => {
+        #[test]
+        fn $name() {
+            test_valid($path);
+        }
+    };
+    ($name:ident, $path:expr, ignore) => {
+        #[test]
+        #[ignore]
+        fn $name() {
+            test_valid($path);
+        }
+    };
 }
 
-#[test]
-fn test_all_types() {
-    test_valid("tests/fixtures/valid/all_types.py");
-}
+valid_test!(test_simple, "tests/fixtures/valid/simple.py");
+valid_test!(test_all_types, "tests/fixtures/valid/all_types.py");
+valid_test!(
+    test_control_flow,
+    "tests/fixtures/valid/control_flow.py",
+    ignore
+);
+valid_test!(test_expressions, "tests/fixtures/valid/expressions.py");
+valid_test!(test_factorial, "tests/fixtures/valid/factorial.py");
+valid_test!(test_fibonacci, "tests/fixtures/valid/fibonacci.py");
+valid_test!(
+    test_nested_functions,
+    "tests/fixtures/valid/nested_functions.py",
+    ignore
+);
 
-#[test]
-#[ignore]
-fn test_control_flow() {
-    test_valid("tests/fixtures/valid/control_flow.py");
-}
-
-#[test]
-fn test_expressions() {
-    test_valid("tests/fixtures/valid/expressions.py");
-}
-
-#[test]
-fn test_factorial() {
-    test_valid("tests/fixtures/valid/factorial.py");
-}
-
-#[test]
-fn test_fibonacci() {
-    test_valid("tests/fixtures/valid/fibonacci.py");
-}
-
-#[test]
-#[ignore]
-fn test_nested_functions() {
-    test_valid("tests/fixtures/valid/nested_functions.py");
-}
-
-/// Helper function to parse a file, convert to AST, and generate IR
 fn test_valid(path: &str) {
-    let source =
-        fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
-
-    let preprocessed = preprocessor::preprocess(&source).expect("Preprocessing failed");
-
-    // Step 1: Parse with Pest
-    let pairs = LangParser::parse(Rule::program, &preprocessed).expect("Parsing failed");
-
-    // Step 2: Convert Pest AST to our AST
-    let program = parser::build_program(pairs);
-
-    // Step 3: Generate LLVM IR
+    let path = Path::new(path);
     let context = Context::create();
-    let module_name = std::path::Path::new(path)
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let mut codegen = CodeGen::new(&context, module_name);
 
-    if let Err(e) = codegen.generate(&program) {
-        panic!("IR generation error in {}:\n{}", path, e);
-    }
+    let result = compile_file(path, &context, &CompileOptions::default())
+        .unwrap_or_else(|e| panic!("Compilation failed for {}: {}", path.display(), e));
 
-    // Step 4: Verify the generated module
-    if let Err(e) = codegen.get_module().verify() {
-        panic!("IR verification failed in {}:\n{}", path, e);
-    }
-
-    // Step 5: Write bitcode to file
-    let ll_path = std::path::Path::new(path).with_extension("ll");
-    codegen
+    let ll_path = path.with_extension("ll");
+    result
+        .codegen
         .get_module()
         .print_to_file(&ll_path)
         .expect("Failed to write LLVM IR");
 
-    let exe_path = std::path::Path::new(path).with_extension("out");
-    match std::env::var("LLVM_SYS_211_PREFIX") {
-        Err(_) => {
-            eprintln!("Error: LLVM_SYS_211_PREFIX environment variable is not set.");
-            std::process::exit(1);
-        }
-        Ok(prefix) => {
-            let llc = format!("{}/bin/clang", prefix);
+    let exe_path = path.with_extension("out");
+    compile_to_executable(&ll_path, &exe_path)
+        .unwrap_or_else(|e| panic!("Failed to compile executable: {}", e));
 
-            Command::new(&llc)
-                .arg(&ll_path)
-                .arg("-o")
-                .arg(&exe_path)
-                .arg("-Wno-override-module")
-                .status()
-                .expect("Failed to invoke clang");
-        }
-    }
+    let actual_output = run_executable(&exe_path, path);
+    let expected_output = get_or_generate_expected_output(path);
 
-    // Step 6: Run the executable
-    let output_path = std::path::Path::new(path).with_extension("txt");
-    let output = Command::new(&exe_path).output().expect("Failed to execute");
+    assert_eq!(
+        expected_output.trim(),
+        actual_output.trim(),
+        "Output mismatch for {}",
+        path.display()
+    );
+}
+
+fn run_executable(exe_path: &Path, source_path: &Path) -> String {
+    let output = Command::new(exe_path).output().expect("Failed to execute");
     if !output.status.success() {
         panic!(
             "Execution of {} failed with status: {}",
-            path, output.status
+            source_path.display(),
+            output.status
         );
     }
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
 
-    let expected_output = if output_path.exists() {
+fn get_or_generate_expected_output(path: &Path) -> String {
+    let output_path = path.with_extension("txt");
+    if output_path.exists() {
         fs::read_to_string(&output_path).expect("Failed to read expected output file")
     } else {
         let output = String::from_utf8_lossy(
@@ -122,13 +92,5 @@ fn test_valid(path: &str) {
         .into_owned();
         fs::write(&output_path, &output).expect("Failed to write expected output file");
         output
-    };
-
-    let actual_output = String::from_utf8_lossy(&output.stdout);
-    assert_eq!(
-        expected_output.trim(),
-        actual_output.trim(),
-        "Output mismatch for {}",
-        path
-    );
+    }
 }
