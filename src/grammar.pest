@@ -3,8 +3,12 @@
 // ============================================================================
 
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
-NEWLINE = { "\n" | "\r\n" | "\r" }
+NEWLINE = _{ "\n" | "\r\n" | "\r" }
 WS = _{ " " | "\t" }
+
+// Explicit indentation tokens (inserted by preprocessor)
+INDENT = _{ "⟨INDENT⟩" }
+DEDENT = _{ "⟨DEDENT⟩" }
 
 kw_boundary = _{ !(ASCII_ALPHANUMERIC | "_") }
 
@@ -67,13 +71,6 @@ LPAREN = { "(" }
 RPAREN = { ")" }
 
 // ============================================================================
-// Indentation Tokens
-// ============================================================================
-
-// Match any amount of leading whitespace for indented lines
-INDENT = @{ (" " | "\t")+ }
-
-// ============================================================================
 // Program Structure
 // ============================================================================
 
@@ -110,27 +107,25 @@ return_inner = { RETURN ~ (WS+ ~ expression)? }
 // ============================================================================
 
 if_stmt = {
-    IF ~ WS+ ~ expression ~ WS* ~ COLON ~ block ~
+    IF ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block ~
     elif_clause* ~
     else_clause?
 }
 
-elif_clause = { INDENT ~ ELIF ~ WS+ ~ expression ~ WS* ~ COLON ~ block }
-else_clause = { INDENT ~ ELSE ~ WS* ~ COLON ~ block }
+elif_clause = { ELIF ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block }
+else_clause = { ELSE ~ WS* ~ COLON ~ NEWLINE ~ block }
 
-while_stmt = { WHILE ~ WS+ ~ expression ~ WS* ~ COLON ~ block }
+while_stmt = { WHILE ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block }
 
-// Block: newline, then indented statements
-block = { NEWLINE ~ indented_statement+ }
-
-indented_statement = { INDENT ~ statement }
+// Block: INDENT, then statements, then DEDENT
+block = { INDENT ~ NEWLINE* ~ statement+ ~ NEWLINE* ~ DEDENT }
 
 // ============================================================================
 // Function Declarations
 // ============================================================================
 
 func_decl = {
-    DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ param_list? ~ WS* ~ RPAREN ~ WS* ~ ARROW ~ WS* ~ type_spec ~ WS* ~ COLON ~ block
+    DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ param_list? ~ WS* ~ RPAREN ~ WS* ~ ARROW ~ WS* ~ type_spec ~ WS* ~ COLON ~ NEWLINE ~ block
 }
 
 param_list = { param ~ (WS* ~ COMMA ~ WS* ~ param)* }
