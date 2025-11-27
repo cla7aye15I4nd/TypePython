@@ -1,2 +1,2 @@
-mod module_tests;
-mod parser_valid_tests;
+pub mod test_runner;
+mod valid_tests;

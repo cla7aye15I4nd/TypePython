@@ -61,14 +61,12 @@ fn main() {
 
     // Compile using the module-aware pipeline
     debug!(
-        "Compiling {} -> {} (with module support)",
+        "Compiling {} -> {}",
         args.input.display(),
         output_path.display()
     );
 
-    if let Err(e) =
-        tpy::pipeline::compile_and_link_with_modules(&args.input, &output_path, &options)
-    {
+    if let Err(e) = tpy::pipeline::compile(&args.input, &output_path, &options) {
         eprintln!("Compilation error: {}", e);
         std::process::exit(1);
     }
