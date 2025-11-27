@@ -86,23 +86,24 @@ export PATH="$PATH:$(pwd)/target/release"
 
 ### Example
 ```shell
-$ cat > fib.py << 'EOF'
+$ cat > fib.py << EOF
 def fibonacci(n: int) -> int:
     if n <= 1:
         return n
-    
-    a: int = 0
-    b: int = 1
-    
-    # Use tuple unpacking and a for-loop for cleaner iteration
-    for _ in range(n - 1):
-        a, b = b, a + b
-        
-    return b
+    else:
+        a: int = 0
+        b: int = 1
+        i: int = 2
+        while i <= n:
+            temp: int = a + b
+            a = b
+            b = temp
+            i = i + 1
+        return b
 
-if __name__ == "__main__":
-    n: int = 10
-    print(f"10th Fibonacci number: {fibonacci(n)}")
+# Calculate 10th fibonacci number
+fib10: int = fibonacci(10)
+print("10th Fibonacci number:", fib10)
 EOF
 
 $ tpy fib.py -o fib
