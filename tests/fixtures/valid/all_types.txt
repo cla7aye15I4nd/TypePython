@@ -1,0 +1,10 @@
+Testing
+Age: 25
+Count: 100
+Temperature: 98.6
+Price: 19.99
+Is valid: True
+Is complete: False
+Name: TypePython
+Message: Hello, World!
+Result: 1.0

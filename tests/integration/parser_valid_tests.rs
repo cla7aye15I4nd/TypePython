@@ -1,48 +1,49 @@
 use inkwell::context::Context;
 use pest::Parser;
 use std::fs;
+use std::process::Command;
 use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Rule};
 
 /// Individual tests for each fixture file for better granularity
 #[test]
 fn test_simple() {
-    parse_and_validate("tests/fixtures/valid/simple.py");
+    test_valid("tests/fixtures/valid/simple.py");
 }
 
 #[test]
 fn test_all_types() {
-    parse_and_validate("tests/fixtures/valid/all_types.py");
+    test_valid("tests/fixtures/valid/all_types.py");
 }
 
 #[test]
 #[ignore]
 fn test_control_flow() {
-    parse_and_validate("tests/fixtures/valid/control_flow.py");
+    test_valid("tests/fixtures/valid/control_flow.py");
 }
 
 #[test]
 fn test_expressions() {
-    parse_and_validate("tests/fixtures/valid/expressions.py");
+    test_valid("tests/fixtures/valid/expressions.py");
 }
 
 #[test]
 fn test_factorial() {
-    parse_and_validate("tests/fixtures/valid/factorial.py");
+    test_valid("tests/fixtures/valid/factorial.py");
 }
 
 #[test]
 fn test_fibonacci() {
-    parse_and_validate("tests/fixtures/valid/fibonacci.py");
+    test_valid("tests/fixtures/valid/fibonacci.py");
 }
 
 #[test]
 #[ignore]
 fn test_nested_functions() {
-    parse_and_validate("tests/fixtures/valid/nested_functions.py");
+    test_valid("tests/fixtures/valid/nested_functions.py");
 }
 
 /// Helper function to parse a file, convert to AST, and generate IR
-fn parse_and_validate(path: &str) {
+fn test_valid(path: &str) {
     let source =
         fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
 
@@ -75,5 +76,58 @@ fn parse_and_validate(path: &str) {
         panic!("IR verification failed in {}:\n{}", path, e);
     }
 
-    println!("✓ Successfully parsed, generated AST and IR for {}", path);
+    // Step 5: Write bitcode to file
+    let bc_path = std::path::Path::new(path).with_extension("bc");
+    codegen.get_module().write_bitcode_to_path(&bc_path);
+
+    let exe_path = std::path::Path::new(path).with_extension("out");
+    match std::env::var("LLVM_SYS_211_PREFIX") {
+        Err(_) => {
+            eprintln!("Error: LLVM_SYS_211_PREFIX environment variable is not set.");
+            std::process::exit(1);
+        }
+        Ok(prefix) => {
+            let llc = format!("{}/bin/clang", prefix);
+
+            Command::new(&llc)
+                .arg(&bc_path)
+                .arg("-o")
+                .arg(&exe_path)
+                .status()
+                .expect("Failed to invoke clang");
+        }
+    }
+
+    // Step 6: Run the executable
+    let output_path = std::path::Path::new(path).with_extension("txt");
+    let output = Command::new(&exe_path).output().expect("Failed to execute");
+    if !output.status.success() {
+        panic!(
+            "Execution of {} failed with status: {}",
+            path, output.status
+        );
+    }
+
+    let _expected_output = if output_path.exists() {
+        fs::read_to_string(&output_path).expect("Failed to read expected output file")
+    } else {
+        let output = String::from_utf8_lossy(
+            &Command::new("python3")
+                .arg(path)
+                .output()
+                .expect("Failed to execute reference Python interpreter")
+                .stdout,
+        )
+        .into_owned();
+        fs::write(&output_path, &output).expect("Failed to write expected output file");
+        output
+    };
+
+    let _actual_output = String::from_utf8_lossy(&output.stdout);
+    // assert_eq!(
+    //     expected_output.trim(),
+    //     actual_output.trim(),
+    //     "Output mismatch for {}",
+    //     path
+    // );
 }

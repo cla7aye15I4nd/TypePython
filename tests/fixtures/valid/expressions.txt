@@ -1,0 +1,15 @@
+Sum: 30
+Diff: 35
+Product: 42
+Quotient: 20.0
+Remainder: 2
+Complex calc: 9.0
+And result: False
+Or result: True
+Not result: False
+Greater than: True
+Less than: True
+Complex bool: True
+Paren calc: 45
+Negative: -42
+Area: 78.53975
