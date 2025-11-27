@@ -5,6 +5,7 @@ use crate::codegen::CodeGen;
 use crate::preprocessor;
 use crate::{LangParser, Parser, Rule};
 use inkwell::context::Context;
+use log::debug;
 use std::path::Path;
 
 /// Options for the compilation pipeline
@@ -30,6 +31,7 @@ pub fn compile_source<'ctx>(
     options: &CompileOptions,
 ) -> Result<CompileResult<'ctx>, String> {
     // Step 1: Preprocess - convert indentation to explicit tokens
+    debug!("Preprocessing source");
     let preprocessed = preprocessor::preprocess(source)?;
 
     if options.show_preprocessed {
@@ -38,6 +40,7 @@ pub fn compile_source<'ctx>(
     }
 
     // Step 2: Parse with Pest
+    debug!("Parsing with PEST");
     let pairs = LangParser::parse(Rule::program, &preprocessed)
         .map_err(|e| format!("Parse error: {}", e))?;
 
@@ -49,6 +52,7 @@ pub fn compile_source<'ctx>(
     }
 
     // Step 3: Build AST
+    debug!("Building AST");
     let program = parser::build_program(pairs);
 
     if options.show_ast {
@@ -57,6 +61,7 @@ pub fn compile_source<'ctx>(
     }
 
     // Step 4: Generate LLVM IR
+    debug!("Generating LLVM IR");
     let mut codegen = CodeGen::new(context, module_name);
     codegen.generate(&program)?;
 
@@ -66,6 +71,7 @@ pub fn compile_source<'ctx>(
     }
 
     // Step 5: Verify LLVM module
+    debug!("Verifying LLVM module");
     codegen
         .get_module()
         .verify()
@@ -104,6 +110,11 @@ pub fn compile_to_executable(bitcode_path: &Path, output_path: &Path) -> Result<
 
     let clang = format!("{}/bin/clang", llvm_prefix);
 
+    debug!(
+        "Linking with clang: {} -> {}",
+        bitcode_path.display(),
+        output_path.display()
+    );
     let status = std::process::Command::new(&clang)
         .arg("-Wno-override-module")
         .arg(bitcode_path)

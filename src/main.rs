@@ -1,4 +1,5 @@
 use clap::Parser as ClapParser;
+use log::debug;
 use std::path::PathBuf;
 use std::process::Command;
 use tpy::pipeline::{compile_and_link, CompileOptions};
@@ -36,6 +37,9 @@ pub struct Args {
 }
 
 fn main() {
+    // Initialize logger
+    env_logger::init();
+
     let args = Args::parse();
 
     // Verify input file has .py extension
@@ -56,7 +60,7 @@ fn main() {
     let output_path = args.output.unwrap_or_else(|| args.input.with_extension(""));
 
     // Compile using the pipeline
-    println!(
+    debug!(
         "Compiling {} -> {}",
         args.input.display(),
         output_path.display()
@@ -67,11 +71,11 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!("Compilation successful!");
+    debug!("Compilation successful!");
 
     // Run the executable (unless compile-only mode)
     if !args.compile_only {
-        println!("\n--- Running {} ---", output_path.display());
+        debug!("Running {}", output_path.display());
         let run_status = Command::new(&output_path).status().unwrap_or_else(|e| {
             eprintln!("Failed to run executable: {}", e);
             std::process::exit(1);
