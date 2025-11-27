@@ -13,6 +13,7 @@ pub struct CodeGen<'ctx> {
     builder: Builder<'ctx>,
     variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
     current_function: Option<FunctionValue<'ctx>>,
+    strings: HashMap<String, u64>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -26,6 +27,7 @@ impl<'ctx> CodeGen<'ctx> {
             builder,
             variables: HashMap::new(),
             current_function: None,
+            strings: HashMap::new(),
         }
     }
 
@@ -345,11 +347,20 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(self.context.i64_type().const_int(*val as u64, false).into())
             }
             Expression::FloatLit(val) => Ok(self.context.f64_type().const_float(*val).into()),
-            Expression::StrLit(_) => Ok(self
-                .context
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into()),
+            Expression::StrLit(val) => {
+                let str_name = if let Some(&id) = self.strings.get(val) {
+                    format!(".str_{}", id)
+                } else {
+                    let id = self.strings.len() as u64;
+                    self.strings.insert(val.clone(), id);
+                    format!(".str_{}", id)
+                };
+                let str_const = self
+                    .builder
+                    .build_global_string_ptr(val, &str_name)
+                    .unwrap();
+                Ok(str_const.as_pointer_value().into())
+            }
             Expression::BoolLit(val) => Ok(self
                 .context
                 .bool_type()
