@@ -3,7 +3,7 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Parser, Rule};
+use tpy::{codegen::CodeGen, pest_to_ast, preprocessor, LangParser, Parser, Rule};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
@@ -11,6 +11,10 @@ use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Parser, Rule};
 pub struct Args {
     /// Input source files (optional - if none provided, runs examples)
     pub input: Vec<PathBuf>,
+
+    /// Show the preprocessed source (with INDENT/DEDENT markers)
+    #[arg(long)]
+    pub show_pp: bool,
 
     /// Show the PEST parse tree
     #[arg(long)]
@@ -47,7 +51,21 @@ fn main() {
                 std::process::exit(1);
             });
 
-            let pairs = match LangParser::parse(Rule::program, &source).map_err(Box::new) {
+            // Preprocess: convert indentation to explicit tokens
+            let preprocessed = match preprocessor::preprocess(&source) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Preprocessing error in {}:\n{}", path.display(), e);
+                    std::process::exit(1);
+                }
+            };
+
+            if args.show_pp {
+                println!("\n--- Preprocessed Source ---");
+                println!("{}", preprocessed);
+            }
+
+            let pairs = match LangParser::parse(Rule::program, &preprocessed).map_err(Box::new) {
                 Ok(pairs) => pairs,
                 Err(e) => {
                     eprintln!("Parse error in {}:\n{}", path.display(), e);

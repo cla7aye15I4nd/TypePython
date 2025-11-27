@@ -11,3 +11,4 @@ pub use pest::Parser;
 pub mod ast;
 pub mod codegen;
 pub mod pest_to_ast;
+pub mod preprocessor;
