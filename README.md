@@ -60,14 +60,14 @@
 
 ## 🚀 Quick Start
 
-#### Prerequisites
+### Prerequisites
 
   - **Rust** Stable (install via [rustup](https://rustup.rs))
   - **LLVM 21** (including development headers)
   - **Dependencies**: `build-essential`, `pkg-config`, `libssl-dev`, `libzstd-dev`
   - **Clang** (part of LLVM toolchain)
 
-#### Build Steps
+### Build Steps
 
 ```bash
 # Clone the repository
@@ -84,9 +84,10 @@ cargo build --release
 export PATH="$PATH:$(pwd)/target/release"
 ```
 
-### Example
-```shell
-$ cat > fib.py << EOF
+### Example Program
+
+**fib.py**:
+```python
 def fibonacci(n: int) -> int:
     if n <= 1:
         return n
@@ -104,12 +105,21 @@ def fibonacci(n: int) -> int:
 # Calculate 10th fibonacci number
 fib10: int = fibonacci(10)
 print("10th Fibonacci number:", fib10)
-EOF
-
-$ tpy fib.py -o fib
-$ ./fib
-# Output: 10th Fibonacci number: 55
 ```
+
+**Compile and run**:
+```bash
+$ tpy fib.py
+10th Fibonacci number: 55
+```
+
+### More Examples
+
+Check out the [tests/fixtures/valid](tests/fixtures/valid) directory for more example programs:
+- [simple.py](tests/fixtures/valid/simple.py) - Basic variables and arithmetic
+- [expressions.py](tests/fixtures/valid/expressions.py) - Expression evaluation
+- [factorial.py](tests/fixtures/valid/factorial.py) - Recursive factorial
+- [all_types.py](tests/fixtures/valid/all_types.py) - All supported types
 
 ## 🤝 Contributing
 
