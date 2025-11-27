@@ -8,6 +8,7 @@ clap = { version = "4", features = ["derive"] }
 pest = "2.8.4"
 pest_derive = "2.8.4"
 inkwell = { version = "0.7.0", features = ["llvm21-1"] }
+either = "1.9"
 
 [dev-dependencies]
 anyhow = "1.0"
