@@ -9,8 +9,8 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         program: &Program,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        // Declare printf from libc for print function support
-        self.declare_printf();
+        // Declare runtime builtin functions
+        self.declare_runtime_functions();
 
         // Visit all function declarations first
         for function in &program.functions {

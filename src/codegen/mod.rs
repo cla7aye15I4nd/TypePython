@@ -44,13 +44,51 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    pub(crate) fn declare_printf(&mut self) {
-        let i32_type = self.context.i32_type();
+    pub(crate) fn declare_runtime_functions(&mut self) {
+        let i64_type = self.context.i64_type();
+        let f64_type = self.context.f64_type();
+        let _i8_type = self.context.i8_type();
         let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let void_type = self.context.void_type();
 
-        // printf signature: i32 @printf(i8*, ...)
-        let printf_type = i32_type.fn_type(&[str_type.into()], true); // true = variadic
-        self.module.add_function("printf", printf_type, None);
+        // void tpy_print_int(i64)
+        let print_int_type = void_type.fn_type(&[i64_type.into()], false);
+        self.module
+            .add_function("tpy_print_int", print_int_type, None);
+
+        // void tpy_print_float(double)
+        let print_float_type = void_type.fn_type(&[f64_type.into()], false);
+        self.module
+            .add_function("tpy_print_float", print_float_type, None);
+
+        // void tpy_print_bool(i1) - using i1 for bool
+        let bool_type = self.context.bool_type();
+        let print_bool_type = void_type.fn_type(&[bool_type.into()], false);
+        self.module
+            .add_function("tpy_print_bool", print_bool_type, None);
+
+        // void tpy_print_str(i8*)
+        let print_str_type = void_type.fn_type(&[str_type.into()], false);
+        self.module
+            .add_function("tpy_print_str", print_str_type, None);
+
+        // void tpy_print_space(void)
+        let print_space_type = void_type.fn_type(&[], false);
+        self.module
+            .add_function("tpy_print_space", print_space_type, None);
+
+        // void tpy_print_newline(void)
+        let print_newline_type = void_type.fn_type(&[], false);
+        self.module
+            .add_function("tpy_print_newline", print_newline_type, None);
+
+        // double tpy_pow(double, double)
+        let pow_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
+        self.module.add_function("tpy_pow", pow_type, None);
+
+        // i64 tpy_pow_int(i64, i64)
+        let pow_int_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+        self.module.add_function("tpy_pow_int", pow_int_type, None);
     }
 
     pub(crate) fn declare_function(
@@ -476,151 +514,58 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let printf = self.module.get_function("printf").unwrap();
+        // Get runtime print functions
+        let print_int = self.module.get_function("tpy_print_int").unwrap();
+        let print_float = self.module.get_function("tpy_print_float").unwrap();
+        let print_bool = self.module.get_function("tpy_print_bool").unwrap();
+        let print_str = self.module.get_function("tpy_print_str").unwrap();
+        let print_space = self.module.get_function("tpy_print_space").unwrap();
+        let print_newline = self.module.get_function("tpy_print_newline").unwrap();
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.visit_expression(arg)?;
-            let suffix = if i < args.len() - 1 { " " } else { "\n" };
 
             if val.is_int_value() {
                 let int_val = val.into_int_value();
                 if int_val.get_type().get_bit_width() == 1 {
-                    // Boolean - print "True" or "False" like Python
-                    let function = self.current_function.unwrap();
-                    let true_bb = self.context.append_basic_block(function, "print_true");
-                    let false_bb = self.context.append_basic_block(function, "print_false");
-                    let cont_bb = self.context.append_basic_block(function, "print_cont");
-
+                    // Boolean - use tpy_print_bool
                     self.builder
-                        .build_conditional_branch(int_val, true_bb, false_bb)
+                        .build_call(print_bool, &[int_val.into()], "print_bool")
                         .unwrap();
-
-                    // Print "True"
-                    self.builder.position_at_end(true_bb);
-                    let true_str = format!("True{}", suffix);
-                    let true_const = self
-                        .builder
-                        .build_global_string_ptr(&true_str, "true_str")
-                        .unwrap();
-                    self.builder
-                        .build_call(printf, &[true_const.as_pointer_value().into()], "printf")
-                        .unwrap();
-                    self.builder.build_unconditional_branch(cont_bb).unwrap();
-
-                    // Print "False"
-                    self.builder.position_at_end(false_bb);
-                    let false_str = format!("False{}", suffix);
-                    let false_const = self
-                        .builder
-                        .build_global_string_ptr(&false_str, "false_str")
-                        .unwrap();
-                    self.builder
-                        .build_call(printf, &[false_const.as_pointer_value().into()], "printf")
-                        .unwrap();
-                    self.builder.build_unconditional_branch(cont_bb).unwrap();
-
-                    self.builder.position_at_end(cont_bb);
                 } else {
-                    // Integer - use %lld
-                    let format_str = format!("%lld{}", suffix);
-                    let format_const = self
-                        .builder
-                        .build_global_string_ptr(&format_str, "fmt_int")
-                        .unwrap();
+                    // Integer - use tpy_print_int
                     self.builder
-                        .build_call(
-                            printf,
-                            &[format_const.as_pointer_value().into(), val.into()],
-                            "printf",
-                        )
+                        .build_call(print_int, &[int_val.into()], "print_int")
                         .unwrap();
                 }
             } else if val.is_float_value() {
-                // Float - check if it's a whole number for Python-like printing
+                // Float - use tpy_print_float
                 let float_val = val.into_float_value();
-                let function = self.current_function.unwrap();
-
-                // Convert float -> int -> float to truncate decimal part
-                let as_int = self
-                    .builder
-                    .build_float_to_signed_int(float_val, self.context.i64_type(), "fptosi")
-                    .unwrap();
-                let truncated = self
-                    .builder
-                    .build_signed_int_to_float(as_int, self.context.f64_type(), "sitofp")
-                    .unwrap();
-
-                // Check if val == truncated (i.e., it's a whole number)
-                let is_whole = self
-                    .builder
-                    .build_float_compare(FloatPredicate::OEQ, float_val, truncated, "is_whole")
-                    .unwrap();
-
-                let whole_bb = self
-                    .context
-                    .append_basic_block(function, "print_whole_float");
-                let frac_bb = self
-                    .context
-                    .append_basic_block(function, "print_frac_float");
-                let cont_bb = self
-                    .context
-                    .append_basic_block(function, "print_float_cont");
-
                 self.builder
-                    .build_conditional_branch(is_whole, whole_bb, frac_bb)
+                    .build_call(print_float, &[float_val.into()], "print_float")
                     .unwrap();
-
-                // Print whole number float like "1.0"
-                self.builder.position_at_end(whole_bb);
-                let whole_fmt = format!("%.1f{}", suffix);
-                let whole_const = self
-                    .builder
-                    .build_global_string_ptr(&whole_fmt, "fmt_whole_float")
-                    .unwrap();
-                self.builder
-                    .build_call(
-                        printf,
-                        &[whole_const.as_pointer_value().into(), float_val.into()],
-                        "printf",
-                    )
-                    .unwrap();
-                self.builder.build_unconditional_branch(cont_bb).unwrap();
-
-                // Print fractional float with full precision
-                self.builder.position_at_end(frac_bb);
-                let frac_fmt = format!("%.15g{}", suffix);
-                let frac_const = self
-                    .builder
-                    .build_global_string_ptr(&frac_fmt, "fmt_frac_float")
-                    .unwrap();
-                self.builder
-                    .build_call(
-                        printf,
-                        &[frac_const.as_pointer_value().into(), float_val.into()],
-                        "printf",
-                    )
-                    .unwrap();
-                self.builder.build_unconditional_branch(cont_bb).unwrap();
-
-                self.builder.position_at_end(cont_bb);
             } else if val.is_pointer_value() {
-                // String
-                let format_str = format!("%s{}", suffix);
-                let format_const = self
-                    .builder
-                    .build_global_string_ptr(&format_str, "fmt_str")
-                    .unwrap();
+                // String - use tpy_print_str
+                let ptr_val = val.into_pointer_value();
                 self.builder
-                    .build_call(
-                        printf,
-                        &[format_const.as_pointer_value().into(), val.into()],
-                        "printf",
-                    )
+                    .build_call(print_str, &[ptr_val.into()], "print_str")
                     .unwrap();
             } else {
                 return Err("print() only supports int, float, bool, and string types".to_string());
             }
+
+            // Print space between arguments (but not after the last one)
+            if i < args.len() - 1 {
+                self.builder
+                    .build_call(print_space, &[], "print_space")
+                    .unwrap();
+            }
         }
+
+        // Print newline at the end
+        self.builder
+            .build_call(print_newline, &[], "print_newline")
+            .unwrap();
 
         Ok(self.context.i32_type().const_zero().into())
     }
