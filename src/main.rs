@@ -3,7 +3,7 @@ use inkwell::context::Context;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tpy::{codegen::CodeGen, pest_to_ast, preprocessor, LangParser, Parser, Rule};
+use tpy::{ast::parser, codegen::CodeGen, preprocessor, LangParser, Parser, Rule};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
@@ -81,7 +81,7 @@ fn main() {
             }
 
             // Parse Pest AST to our AST
-            let program = pest_to_ast::build_program(pairs);
+            let program = parser::build_program(pairs);
 
             if args.show_ast {
                 println!("\n--- AST ---");

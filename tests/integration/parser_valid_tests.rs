@@ -2,7 +2,7 @@ use inkwell::context::Context;
 use pest::Parser;
 use std::fs;
 use std::process::Command;
-use tpy::{codegen::CodeGen, pest_to_ast, preprocessor, LangParser, Rule};
+use tpy::{ast::parser, codegen::CodeGen, preprocessor, LangParser, Rule};
 
 /// Individual tests for each fixture file for better granularity
 #[test]
@@ -53,7 +53,7 @@ fn test_valid(path: &str) {
     let pairs = LangParser::parse(Rule::program, &preprocessed).expect("Parsing failed");
 
     // Step 2: Convert Pest AST to our AST
-    let program = pest_to_ast::build_program(pairs);
+    let program = parser::build_program(pairs);
 
     // Step 3: Generate LLVM IR
     let context = Context::create();

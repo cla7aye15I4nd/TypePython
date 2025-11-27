@@ -1,3 +1,6 @@
+mod visitor;
+
+use crate::ast::visitor::Visitor;
 use crate::ast::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -8,12 +11,12 @@ use inkwell::{FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 
 pub struct CodeGen<'ctx> {
-    context: &'ctx Context,
-    module: Module<'ctx>,
-    builder: Builder<'ctx>,
-    variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
-    current_function: Option<FunctionValue<'ctx>>,
-    strings: HashMap<String, u64>,
+    pub(crate) context: &'ctx Context,
+    pub(crate) module: Module<'ctx>,
+    pub(crate) builder: Builder<'ctx>,
+    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+    pub(crate) current_function: Option<FunctionValue<'ctx>>,
+    pub(crate) strings: HashMap<String, u64>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -36,28 +39,12 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub fn generate(&mut self, program: &Program) -> Result<(), String> {
-        // Declare printf from libc for print function support
-        self.declare_printf();
-
-        // Generate all function declarations first
-        for func in &program.functions {
-            self.declare_function(func)?;
-        }
-
-        // Generate function bodies
-        for func in &program.functions {
-            self.generate_function(func)?;
-        }
-
-        // Generate a main function that contains all top-level statements
-        if !program.statements.is_empty() {
-            self.generate_main_function(&program.statements)?;
-        }
-
+        // Use the visitor pattern to generate code
+        self.visit_program(program)?;
         Ok(())
     }
 
-    fn declare_printf(&mut self) {
+    pub(crate) fn declare_printf(&mut self) {
         let i32_type = self.context.i32_type();
         let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
 
@@ -66,7 +53,10 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.add_function("printf", printf_type, None);
     }
 
-    fn declare_function(&mut self, func: &Function) -> Result<FunctionValue<'ctx>, String> {
+    pub(crate) fn declare_function(
+        &mut self,
+        func: &Function,
+    ) -> Result<FunctionValue<'ctx>, String> {
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
@@ -94,63 +84,10 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(function)
     }
 
-    fn generate_function(&mut self, func: &Function) -> Result<(), String> {
-        let function = self
-            .module
-            .get_function(&func.name)
-            .ok_or_else(|| format!("Function {} not found", func.name))?;
-
-        self.current_function = Some(function);
-
-        let entry_bb = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(entry_bb);
-
-        // Clear variables for new function scope
-        self.variables.clear();
-
-        // Allocate space for parameters and store them
-        for (i, param) in func.params.iter().enumerate() {
-            let param_value = function.get_nth_param(i as u32).unwrap();
-            let alloca = self.create_entry_block_alloca(&func.name, &param.name, &param.param_type);
-            self.builder.build_store(alloca, param_value).unwrap();
-            let llvm_type = self.type_to_llvm(&param.param_type);
-            self.variables
-                .insert(param.name.clone(), (alloca, llvm_type));
-        }
-
-        // Generate function body
-        for stmt in &func.body {
-            self.generate_statement(stmt)?;
-        }
-
-        // Add default return if needed
-        if !self.is_block_terminated() {
-            match func.return_type {
-                Type::None => {
-                    self.builder.build_return(None).unwrap();
-                }
-                Type::Int => {
-                    let zero = self.context.i64_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
-                }
-                Type::Float => {
-                    let zero = self.context.f64_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
-                }
-                Type::Bool => {
-                    let zero = self.context.bool_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
-                }
-                _ => {
-                    return Err("Unsupported return type".to_string());
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn generate_main_function(&mut self, statements: &[Statement]) -> Result<(), String> {
+    pub(crate) fn generate_main_function(
+        &mut self,
+        statements: &[Statement],
+    ) -> Result<(), String> {
         let i32_type = self.context.i32_type();
         let fn_type = i32_type.fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
@@ -165,7 +102,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Generate all statements
         for stmt in statements {
-            self.generate_statement(stmt)?;
+            self.visit_statement(stmt)?;
         }
 
         // Return 0 if not already terminated
@@ -177,67 +114,14 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn generate_statement(&mut self, stmt: &Statement) -> Result<(), String> {
-        match stmt {
-            Statement::VarDecl {
-                name,
-                var_type,
-                value,
-            } => {
-                let fn_name = self
-                    .current_function
-                    .unwrap()
-                    .get_name()
-                    .to_string_lossy()
-                    .to_string();
-                let alloca = self.create_entry_block_alloca(&fn_name, name, var_type);
-                let val = self.generate_expression(value)?;
-                self.builder.build_store(alloca, val).unwrap();
-                let llvm_type = self.type_to_llvm(var_type);
-                self.variables.insert(name.clone(), (alloca, llvm_type));
-                Ok(())
-            }
-            Statement::Assignment { name, value } => {
-                let (var, _) = *self
-                    .variables
-                    .get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
-                let val = self.generate_expression(value)?;
-                self.builder.build_store(var, val).unwrap();
-                Ok(())
-            }
-            Statement::If {
-                condition,
-                then_block,
-                elif_clauses,
-                else_block,
-            } => self.generate_if_statement(condition, then_block, elif_clauses, else_block),
-            Statement::While { condition, body } => self.generate_while_statement(condition, body),
-            Statement::Return(expr) => {
-                if let Some(expr) = expr {
-                    let val = self.generate_expression(expr)?;
-                    self.builder.build_return(Some(&val)).unwrap();
-                } else {
-                    self.builder.build_return(None).unwrap();
-                }
-                Ok(())
-            }
-            Statement::Pass => Ok(()),
-            Statement::Expr(expr) => {
-                self.generate_expression(expr)?;
-                Ok(())
-            }
-        }
-    }
-
-    fn generate_if_statement(
+    pub(crate) fn generate_if_statement(
         &mut self,
         condition: &Expression,
         then_block: &[Statement],
         elif_clauses: &[(Expression, Vec<Statement>)],
         else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
-        let cond_val = self.generate_expression(condition)?;
+        let cond_val = self.visit_expression(condition)?;
         let cond_int = cond_val.into_int_value();
 
         let function = self.current_function.unwrap();
@@ -258,7 +142,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Generate then block
         self.builder.position_at_end(then_bb);
         for stmt in then_block {
-            self.generate_statement(stmt)?;
+            self.visit_statement(stmt)?;
         }
         if !self.is_block_terminated() {
             self.builder.build_unconditional_branch(merge_bb).unwrap();
@@ -270,7 +154,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             // Process elif clauses
             for (elif_cond, elif_body) in elif_clauses {
-                let elif_cond_val = self.generate_expression(elif_cond)?;
+                let elif_cond_val = self.visit_expression(elif_cond)?;
                 let elif_cond_int = elif_cond_val.into_int_value();
 
                 let elif_then_bb = self.context.append_basic_block(function, "elif_then");
@@ -282,7 +166,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 self.builder.position_at_end(elif_then_bb);
                 for stmt in elif_body {
-                    self.generate_statement(stmt)?;
+                    self.visit_statement(stmt)?;
                 }
                 if !self.is_block_terminated() {
                     self.builder.build_unconditional_branch(merge_bb).unwrap();
@@ -294,7 +178,7 @@ impl<'ctx> CodeGen<'ctx> {
             // Process else block
             if let Some(else_stmts) = else_block {
                 for stmt in else_stmts {
-                    self.generate_statement(stmt)?;
+                    self.visit_statement(stmt)?;
                 }
             }
 
@@ -307,7 +191,7 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn generate_while_statement(
+    pub(crate) fn generate_while_statement(
         &mut self,
         condition: &Expression,
         body: &[Statement],
@@ -321,7 +205,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Condition block
         self.builder.position_at_end(cond_bb);
-        let cond_val = self.generate_expression(condition)?;
+        let cond_val = self.visit_expression(condition)?;
         let cond_int = cond_val.into_int_value();
         self.builder
             .build_conditional_branch(cond_int, body_bb, after_bb)
@@ -330,7 +214,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Body block
         self.builder.position_at_end(body_bb);
         for stmt in body {
-            self.generate_statement(stmt)?;
+            self.visit_statement(stmt)?;
         }
         if !self.is_block_terminated() {
             self.builder.build_unconditional_branch(cond_bb).unwrap();
@@ -341,56 +225,14 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn generate_expression(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
-        match expr {
-            Expression::NoneLit() => {
-                todo!("Handle None literal generation in better way");
-            }
-            Expression::IntLit(val) => {
-                Ok(self.context.i64_type().const_int(*val as u64, false).into())
-            }
-            Expression::FloatLit(val) => Ok(self.context.f64_type().const_float(*val).into()),
-            Expression::StrLit(val) => {
-                let str_name = if let Some(&id) = self.strings.get(val) {
-                    format!(".str_{}", id)
-                } else {
-                    let id = self.strings.len() as u64;
-                    self.strings.insert(val.clone(), id);
-                    format!(".str_{}", id)
-                };
-                let str_const = self
-                    .builder
-                    .build_global_string_ptr(val, &str_name)
-                    .unwrap();
-                Ok(str_const.as_pointer_value().into())
-            }
-            Expression::BoolLit(val) => Ok(self
-                .context
-                .bool_type()
-                .const_int(*val as u64, false)
-                .into()),
-            Expression::Var(name) => {
-                let (var, load_type) = *self
-                    .variables
-                    .get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
-                let val = self.builder.build_load(load_type, var, name).unwrap();
-                Ok(val)
-            }
-            Expression::BinOp { op, left, right } => self.generate_binary_op(op, left, right),
-            Expression::UnaryOp { op, operand } => self.generate_unary_op(op, operand),
-            Expression::Call { name, args } => self.generate_call(name, args),
-        }
-    }
-
-    fn generate_binary_op(
+    pub(crate) fn generate_binary_op(
         &mut self,
         op: &BinaryOp,
         left: &Expression,
         right: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let lhs = self.generate_expression(left)?;
-        let rhs = self.generate_expression(right)?;
+        let lhs = self.visit_expression(left)?;
+        let rhs = self.visit_expression(right)?;
 
         // Determine if we're working with floats or ints
         let is_float = lhs.is_float_value() || rhs.is_float_value();
@@ -553,12 +395,12 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn generate_unary_op(
+    pub(crate) fn generate_unary_op(
         &mut self,
         op: &UnaryOp,
         operand: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let val = self.generate_expression(operand)?;
+        let val = self.visit_expression(operand)?;
 
         match op {
             UnaryOp::Neg => {
@@ -583,7 +425,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn generate_call(
+    pub(crate) fn generate_call(
         &mut self,
         name: &str,
         args: &[Expression],
@@ -600,7 +442,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {
-            arg_values.push(self.generate_expression(arg)?.into());
+            arg_values.push(self.visit_expression(arg)?.into());
         }
 
         let call_site = self
@@ -630,11 +472,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn generate_print_call(&mut self, args: &[Expression]) -> Result<BasicValueEnum<'ctx>, String> {
+    pub(crate) fn generate_print_call(
+        &mut self,
+        args: &[Expression],
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         let printf = self.module.get_function("printf").unwrap();
 
         for (i, arg) in args.iter().enumerate() {
-            let val = self.generate_expression(arg)?;
+            let val = self.visit_expression(arg)?;
             let suffix = if i < args.len() - 1 { " " } else { "\n" };
 
             if val.is_int_value() {
@@ -779,7 +624,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(self.context.i32_type().const_zero().into())
     }
-    fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
+    pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
         match ty {
             Type::Int => self.context.i64_type().into(),
             Type::Float => self.context.f64_type().into(),
@@ -792,7 +637,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn create_entry_block_alloca(
+    pub(crate) fn create_entry_block_alloca(
         &self,
         _fn_name: &str,
         var_name: &str,
@@ -815,7 +660,7 @@ impl<'ctx> CodeGen<'ctx> {
         builder.build_alloca(llvm_type, var_name).unwrap()
     }
 
-    fn is_block_terminated(&self) -> bool {
+    pub(crate) fn is_block_terminated(&self) -> bool {
         if let Some(bb) = self.builder.get_insert_block() {
             if let Some(_terminator) = bb.get_terminator() {
                 return true;

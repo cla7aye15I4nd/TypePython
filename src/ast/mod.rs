@@ -1,4 +1,6 @@
 /// AST representation for the TypePython language
+pub mod parser;
+pub mod visitor;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {

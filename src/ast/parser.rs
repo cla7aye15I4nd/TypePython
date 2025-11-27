@@ -103,6 +103,7 @@ fn build_type(pair: Pair<Rule>) -> Type {
 
 fn build_block(pair: Pair<Rule>) -> Vec<Statement> {
     let mut stmts = Vec::new();
+
     for stmt_pair in pair.into_inner() {
         assert_eq!(stmt_pair.as_rule(), Rule::statement);
         stmts.push(build_statement(stmt_pair));
