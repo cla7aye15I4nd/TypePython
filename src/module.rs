@@ -96,19 +96,10 @@ pub struct ModuleRegistry<'ctx> {
 impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry
     pub fn new(context: &'ctx Context) -> Self {
-        let mut search_paths = vec![
-            PathBuf::from("."), // Current directory
-        ];
-
-        // Add current working directory
-        if let Ok(cwd) = std::env::current_dir() {
-            search_paths.push(cwd);
-        }
-
         ModuleRegistry {
             modules: HashMap::new(),
             context,
-            search_paths,
+            search_paths: vec![],
         }
     }
 
@@ -123,20 +114,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// For example: ["math", "helpers"] -> "math/helpers.py" or "./math/helpers.py"
     /// Supports .py, .tpy, and .c files
     pub fn resolve_module(&self, module_path: &[String]) -> Result<PathBuf, String> {
-        // Special case: "builtin" module - use global builtin library directory
-        if module_path.len() == 1 && module_path[0] == "builtin" {
-            let builtin_path = builtin_lib_dir().join("builtin.c");
-
-            if builtin_path.exists() {
-                debug!("Found builtin module at: {}", builtin_path.display());
-                return Ok(builtin_path);
-            }
-            return Err(format!(
-                "Builtin module 'builtin.c' not found at expected location: {}",
-                builtin_path.display()
-            ));
-        }
-
         // Try different file extensions
         let extensions = ["py", "c"];
         let module_base = module_path.join("/");
@@ -305,17 +282,42 @@ impl<'ctx> ModuleRegistry<'ctx> {
         Ok(bitcode_files)
     }
 
-    /// Compile the builtin module and return the path to its bitcode
+    /// Get the path to the builtin.c file
     /// The builtin module is always compiled and included automatically
-    pub fn compile_builtin(&self, output_dir: &Path) -> Result<PathBuf, String> {
-        // Find builtin.c
-        let builtin_path = self.resolve_module(&[String::from("builtin")])?;
+    pub fn get_builtin_path(&self) -> PathBuf {
+        builtin_lib_dir().join("builtin.c")
+    }
 
-        // Compile to bitcode
-        let builtin_bc = output_dir.join("builtin.bc");
-        self.compile_c_file(&builtin_path, &builtin_bc)?;
+    /// Compile a C module to bitcode and object file
+    /// Returns the path to the generated object file
+    pub fn compile_c_module(
+        &self,
+        c_path: &Path,
+        output_dir: &Path,
+        cache_dir: &Path,
+    ) -> Result<PathBuf, String> {
+        let module_name = c_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| format!("Invalid C file name: {}", c_path.display()))?;
 
-        debug!("Compiled builtin module to {}", builtin_bc.display());
-        Ok(builtin_bc)
+        let bc_path = output_dir.join(format!("{}.bc", module_name));
+        let obj_path = cache_dir.join(format!("{}.o", module_name));
+
+        // Compile C to bitcode
+        self.compile_c_file(c_path, &bc_path)?;
+
+        // Compile bitcode to LTO object
+        crate::pipeline::compile_bitcode_to_lto_object(&bc_path, &obj_path)?;
+
+        // Clean up temporary bitcode file
+        let _ = std::fs::remove_file(&bc_path);
+
+        debug!(
+            "Compiled C module {} to {}",
+            module_name,
+            obj_path.display()
+        );
+        Ok(obj_path)
     }
 }

@@ -317,41 +317,6 @@ pub fn compile_and_link(
     Ok(())
 }
 
-/// Compile a C file to LLVM bitcode
-fn compile_c_to_bitcode(c_file: &Path, output_bc: &Path) -> Result<(), String> {
-    let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX").unwrap();
-
-    let clang = format!("{}/bin/clang", llvm_prefix);
-
-    debug!(
-        "Compiling C file {} to {}",
-        c_file.display(),
-        output_bc.display()
-    );
-
-    let output = std::process::Command::new(&clang)
-        .args([
-            "-c",
-            "-emit-llvm",
-            "-O2",
-            "-o",
-            output_bc.to_str().unwrap(),
-            c_file.to_str().unwrap(),
-        ])
-        .output()
-        .map_err(|e| format!("Failed to execute clang: {}", e))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Failed to compile C file to bitcode:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    debug!("Successfully compiled C file to bitcode");
-    Ok(())
-}
-
 /// Full pipeline: compile source file and all imports to executable
 ///
 /// This function:
@@ -474,14 +439,11 @@ pub fn compile(
     let _ = std::fs::remove_file(&main_bc);
 
     // ============================================================================
-    // Step 3: Compile .c files (builtin and runtime) to .o files
+    // Step 3: Compile C files (builtin and runtime) to .o files
     // ============================================================================
 
-    // Compile builtin module
-    let builtin_bc = module_registry.compile_builtin(&temp_dir)?;
-
-    // Place builtin.o in __tpycache__ next to builtin.c
-    let builtin_path = module_registry.resolve_module(&[String::from("builtin")])?;
+    // Compile builtin module - it's always included
+    let builtin_path = module_registry.get_builtin_path();
     let builtin_dir = builtin_path
         .parent()
         .ok_or_else(|| "Invalid builtin path".to_string())?;
@@ -489,12 +451,11 @@ pub fn compile(
     std::fs::create_dir_all(&builtin_cache_dir)
         .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
 
-    let builtin_obj = builtin_cache_dir.join("builtin.o");
-    compile_bitcode_to_lto_object(&builtin_bc, &builtin_obj)?;
+    let builtin_obj =
+        module_registry.compile_c_module(&builtin_path, &temp_dir, &builtin_cache_dir)?;
     object_files.push(builtin_obj);
-    let _ = std::fs::remove_file(&builtin_bc);
 
-    // Compile runtime library
+    // Compile runtime library if it exists
     let runtime_path = std::env::var("TYPEPYTHON_RUNTIME")
         .map(PathBuf::from)
         .expect("TYPEPYTHON_RUNTIME environment variable not set")
@@ -502,9 +463,6 @@ pub fn compile(
 
     if runtime_path.exists() {
         debug!("Compiling runtime library");
-        let runtime_bc = temp_dir.join("runtime.bc");
-
-        // Place runtime.o in __tpycache__ next to runtime.c
         let runtime_dir = runtime_path
             .parent()
             .ok_or_else(|| "Invalid runtime path".to_string())?;
@@ -512,13 +470,9 @@ pub fn compile(
         std::fs::create_dir_all(&runtime_cache_dir)
             .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
 
-        let runtime_obj = runtime_cache_dir.join("runtime.o");
-
-        compile_c_to_bitcode(&runtime_path, &runtime_bc)?;
-        compile_bitcode_to_lto_object(&runtime_bc, &runtime_obj)?;
+        let runtime_obj =
+            module_registry.compile_c_module(&runtime_path, &temp_dir, &runtime_cache_dir)?;
         object_files.push(runtime_obj);
-
-        let _ = std::fs::remove_file(&runtime_bc);
     }
 
     // ============================================================================

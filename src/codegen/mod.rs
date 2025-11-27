@@ -57,51 +57,56 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    pub(crate) fn declare_runtime_functions(&mut self) {
+    /// Get or declare a builtin function from builtin.c
+    /// These functions are always available and linked from the builtin C module
+    pub(crate) fn get_or_declare_builtin_function(&mut self, name: &str) -> FunctionValue<'ctx> {
+        // Check if already declared
+        if let Some(func) = self.module.get_function(name) {
+            return func;
+        }
+
+        // Declare the builtin function based on its name
         let i64_type = self.context.i64_type();
         let f64_type = self.context.f64_type();
-        let _i8_type = self.context.i8_type();
         let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
         let void_type = self.context.void_type();
-
-        // void tpy_print_int(i64)
-        let print_int_type = void_type.fn_type(&[i64_type.into()], false);
-        self.module
-            .add_function("tpy_print_int", print_int_type, None);
-
-        // void tpy_print_float(double)
-        let print_float_type = void_type.fn_type(&[f64_type.into()], false);
-        self.module
-            .add_function("tpy_print_float", print_float_type, None);
-
-        // void tpy_print_bool(i1) - using i1 for bool
         let bool_type = self.context.bool_type();
-        let print_bool_type = void_type.fn_type(&[bool_type.into()], false);
-        self.module
-            .add_function("tpy_print_bool", print_bool_type, None);
 
-        // void tpy_print_str(i8*)
-        let print_str_type = void_type.fn_type(&[str_type.into()], false);
-        self.module
-            .add_function("tpy_print_str", print_str_type, None);
-
-        // void tpy_print_space(void)
-        let print_space_type = void_type.fn_type(&[], false);
-        self.module
-            .add_function("tpy_print_space", print_space_type, None);
-
-        // void tpy_print_newline(void)
-        let print_newline_type = void_type.fn_type(&[], false);
-        self.module
-            .add_function("tpy_print_newline", print_newline_type, None);
-
-        // double tpy_pow(double, double)
-        let pow_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
-        self.module.add_function("tpy_pow", pow_type, None);
-
-        // i64 tpy_pow_int(i64, i64)
-        let pow_int_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-        self.module.add_function("tpy_pow_int", pow_int_type, None);
+        match name {
+            "tpy_print_int" => {
+                let fn_type = void_type.fn_type(&[i64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_print_float" => {
+                let fn_type = void_type.fn_type(&[f64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_print_bool" => {
+                let fn_type = void_type.fn_type(&[bool_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_print_str" => {
+                let fn_type = void_type.fn_type(&[str_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_print_space" => {
+                let fn_type = void_type.fn_type(&[], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_print_newline" => {
+                let fn_type = void_type.fn_type(&[], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_pow" => {
+                let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_pow_int" => {
+                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            _ => panic!("Unknown builtin function: {}", name),
+        }
     }
 
     pub(crate) fn declare_imported_functions(&mut self, _program: &Program) -> Result<(), String> {
@@ -556,13 +561,13 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        // Get runtime print functions
-        let print_int = self.module.get_function("tpy_print_int").unwrap();
-        let print_float = self.module.get_function("tpy_print_float").unwrap();
-        let print_bool = self.module.get_function("tpy_print_bool").unwrap();
-        let print_str = self.module.get_function("tpy_print_str").unwrap();
-        let print_space = self.module.get_function("tpy_print_space").unwrap();
-        let print_newline = self.module.get_function("tpy_print_newline").unwrap();
+        // Get or declare runtime print functions from builtin.c
+        let print_int = self.get_or_declare_builtin_function("tpy_print_int");
+        let print_float = self.get_or_declare_builtin_function("tpy_print_float");
+        let print_bool = self.get_or_declare_builtin_function("tpy_print_bool");
+        let print_str = self.get_or_declare_builtin_function("tpy_print_str");
+        let print_space = self.get_or_declare_builtin_function("tpy_print_space");
+        let print_newline = self.get_or_declare_builtin_function("tpy_print_newline");
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.visit_expression(arg)?;
