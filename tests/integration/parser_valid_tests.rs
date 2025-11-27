@@ -77,8 +77,11 @@ fn test_valid(path: &str) {
     }
 
     // Step 5: Write bitcode to file
-    let bc_path = std::path::Path::new(path).with_extension("bc");
-    codegen.get_module().write_bitcode_to_path(&bc_path);
+    let ll_path = std::path::Path::new(path).with_extension("ll");
+    codegen
+        .get_module()
+        .print_to_file(&ll_path)
+        .expect("Failed to write LLVM IR");
 
     let exe_path = std::path::Path::new(path).with_extension("out");
     match std::env::var("LLVM_SYS_211_PREFIX") {
@@ -90,9 +93,10 @@ fn test_valid(path: &str) {
             let llc = format!("{}/bin/clang", prefix);
 
             Command::new(&llc)
-                .arg(&bc_path)
+                .arg(&ll_path)
                 .arg("-o")
                 .arg(&exe_path)
+                .arg("-Wno-override-module")
                 .status()
                 .expect("Failed to invoke clang");
         }

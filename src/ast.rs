@@ -61,6 +61,7 @@ pub enum Expression {
     FloatLit(f64),
     StrLit(String),
     BoolLit(bool),
+    NoneLit(),
     Var(String),
     BinOp {
         op: BinaryOp,

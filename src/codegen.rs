@@ -343,6 +343,9 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn generate_expression(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
         match expr {
+            Expression::NoneLit() => {
+                todo!("Handle None literal generation in better way");
+            }
             Expression::IntLit(val) => {
                 Ok(self.context.i64_type().const_int(*val as u64, false).into())
             }

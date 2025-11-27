@@ -14,7 +14,7 @@ pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
                     Rule::func_decl => functions.push(build_function(pair)),
                     Rule::statement => statements.push(build_statement(pair)),
                     Rule::EOI | Rule::NEWLINE => {}
-                    _ => {}
+                    _ => panic!("Unexpected rule in program: {:?}", pair.as_rule()),
                 }
             }
         }
@@ -42,7 +42,8 @@ fn build_function(pair: Pair<Rule>) -> Function {
             Rule::param_list => params = build_param_list(inner),
             Rule::type_spec => return_type = build_type(inner),
             Rule::block => body = build_block(inner),
-            _ => {}
+            Rule::DEF | Rule::LPAREN | Rule::RPAREN | Rule::ARROW | Rule::COLON => {}
+            _ => panic!("Unexpected rule in function: {:?}", inner.as_rule()),
         }
     }
 
@@ -69,7 +70,8 @@ fn build_parameter(pair: Pair<Rule>) -> Parameter {
         match inner.as_rule() {
             Rule::ID => name = inner.as_str().to_string(),
             Rule::type_spec => param_type = build_type(inner),
-            _ => {}
+            Rule::COLON => {}
+            _ => panic!("Unexpected rule in parameter: {:?}", inner.as_rule()),
         }
     }
 
@@ -84,7 +86,7 @@ fn build_type(pair: Pair<Rule>) -> Type {
         Rule::BOOL_TYPE => Type::Bool,
         Rule::STR_TYPE => Type::Str,
         Rule::NONE_TYPE => Type::None,
-        _ => Type::None,
+        _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
     }
 }
 
@@ -112,7 +114,7 @@ fn build_statement(pair: Pair<Rule>) -> Statement {
             Rule::expr_stmt => {
                 Statement::Expr(build_expression(inner.into_inner().next().unwrap()))
             }
-            _ => Statement::Pass,
+            _ => panic!("Unexpected rule in statement: {:?}", inner.as_rule()),
         }
     } else {
         Statement::Pass
@@ -129,7 +131,8 @@ fn build_var_decl(pair: Pair<Rule>) -> Statement {
             Rule::ID => name = inner.as_str().to_string(),
             Rule::type_spec => var_type = build_type(inner),
             Rule::expression => value = build_expression(inner),
-            _ => {}
+            Rule::COLON | Rule::ASSIGN => {}
+            _ => panic!("Unexpected rule in var decl: {:?}", inner.as_rule()),
         }
     }
 
@@ -148,7 +151,7 @@ fn build_assignment(pair: Pair<Rule>) -> Statement {
         match inner.as_rule() {
             Rule::ID => name = inner.as_str().to_string(),
             Rule::expression => value = build_expression(inner),
-            _ => {}
+            _ => panic!("Unexpected rule in assignment: {:?}", inner.as_rule()),
         }
     }
 
@@ -188,7 +191,7 @@ fn build_if_stmt(pair: Pair<Rule>) -> Statement {
                     match elif_inner.as_rule() {
                         Rule::expression => elif_cond = build_expression(elif_inner),
                         Rule::block => elif_body = build_block(elif_inner),
-                        _ => {}
+                        _ => panic!("Unexpected rule in elif clause: {:?}", elif_inner.as_rule()),
                     }
                 }
                 elif_clauses.push((elif_cond, elif_body));
@@ -200,7 +203,7 @@ fn build_if_stmt(pair: Pair<Rule>) -> Statement {
                     }
                 }
             }
-            _ => {}
+            _ => panic!("Unexpected rule in if stmt: {:?}", inner.as_rule()),
         }
     }
 
@@ -220,7 +223,7 @@ fn build_while_stmt(pair: Pair<Rule>) -> Statement {
         match inner.as_rule() {
             Rule::expression => condition = build_expression(inner),
             Rule::block => body = build_block(inner),
-            _ => {}
+            _ => panic!("Unexpected rule in while stmt: {:?}", inner.as_rule()),
         }
     }
 
@@ -258,7 +261,7 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
         Rule::unary_expr => build_unary_expr(pair),
         Rule::call_expr => build_call_expr(pair),
         Rule::atom => build_atom(pair),
-        _ => Expression::IntLit(0),
+        _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
     }
 }
 
@@ -379,7 +382,7 @@ fn build_unary_expr(pair: Pair<Rule>) -> Expression {
             Rule::MINUS => op = UnaryOp::Neg,
             Rule::NOT => op = UnaryOp::Not,
             Rule::expression => operand = build_expression(inner),
-            _ => {}
+            _ => panic!("Unexpected rule in unary expr: {:?}", inner.as_rule()),
         }
     }
 
@@ -408,7 +411,8 @@ fn build_call_expr(pair: Pair<Rule>) -> Expression {
                     .map(build_expression)
                     .collect();
             }
-            _ => {}
+            Rule::LPAREN | Rule::RPAREN => {}
+            _ => panic!("Unexpected rule in call expr: {:?}", inner.as_rule()),
         }
     }
 
@@ -416,7 +420,8 @@ fn build_call_expr(pair: Pair<Rule>) -> Expression {
 }
 
 fn build_atom(pair: Pair<Rule>) -> Expression {
-    match pair.into_inner().next() {
+    let mut inner_iter = pair.into_inner();
+    match inner_iter.next() {
         Some(inner) => match inner.as_rule() {
             Rule::INT_LIT => Expression::IntLit(inner.as_str().parse().unwrap_or(0)),
             Rule::FLOAT_LIT => Expression::FloatLit(inner.as_str().parse().unwrap_or(0.0)),
@@ -428,8 +433,14 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
             Rule::FALSE => Expression::BoolLit(false),
             Rule::ID => Expression::Var(inner.as_str().to_string()),
             Rule::expression => build_expression(inner),
-            _ => Expression::IntLit(0),
+            Rule::LPAREN => {
+                // Handle parenthesized expressions: (expr)
+                // inner_iter already advanced past LPAREN, so next should be the expression
+                let expr_pair = inner_iter.next().unwrap();
+                build_expression(expr_pair)
+            }
+            _ => panic!("Unexpected rule in atom: {:?}", inner.as_rule()),
         },
-        None => Expression::IntLit(0),
+        None => Expression::NoneLit(),
     }
 }
