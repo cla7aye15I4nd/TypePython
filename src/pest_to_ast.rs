@@ -94,7 +94,10 @@ fn build_block(pair: Pair<Rule>) -> Vec<Statement> {
     pair.into_inner()
         .filter_map(|p| {
             if p.as_rule() == Rule::indented_statement {
-                Some(build_statement(p.into_inner().next().unwrap()))
+                let mut inner = p.into_inner();
+                let _indent = inner.next().unwrap();
+                let stmt_pair = inner.next().unwrap();
+                Some(build_statement(stmt_pair))
             } else {
                 None
             }
@@ -144,41 +147,40 @@ fn build_var_decl(pair: Pair<Rule>) -> Statement {
 }
 
 fn build_assignment(pair: Pair<Rule>) -> Statement {
-    let mut name = String::new();
-    let mut value = Expression::IntLit(0);
+    let mut inner = pair.into_inner();
 
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::ID => name = inner.as_str().to_string(),
-            Rule::expression => value = build_expression(inner),
-            _ => panic!("Unexpected rule in assignment: {:?}", inner.as_rule()),
-        }
-    }
+    let id = inner.next().unwrap();
+    assert_eq!(id.as_rule(), Rule::ID);
+    let name = id.as_str().to_string();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::ASSIGN);
+    let expr_pair = inner.next().unwrap();
+    assert_eq!(expr_pair.as_rule(), Rule::expression);
+    let value = build_expression(expr_pair);
+
+    assert_eq!(inner.next(), None);
 
     Statement::Assignment { name, value }
 }
 
 fn build_if_stmt(pair: Pair<Rule>) -> Statement {
-    let mut condition = Expression::BoolLit(true);
-    let mut then_block = Vec::new();
     let mut elif_clauses = Vec::new();
     let mut else_block = None;
 
     let mut iter = pair.into_inner();
 
-    // First expression is the if condition
-    if let Some(expr_pair) = iter.next() {
-        if expr_pair.as_rule() == Rule::expression {
-            condition = build_expression(expr_pair);
-        }
-    }
+    assert_eq!(iter.next().unwrap().as_rule(), Rule::IF);
 
-    // Then comes the if block
-    if let Some(block_pair) = iter.next() {
-        if block_pair.as_rule() == Rule::block {
-            then_block = build_block(block_pair);
-        }
-    }
+    // First expression is the if condition
+    let expr_pair = iter.next().unwrap();
+    assert_eq!(expr_pair.as_rule(), Rule::expression);
+    let condition = build_expression(expr_pair);
+
+    assert_eq!(iter.next().unwrap().as_rule(), Rule::COLON);
+
+    let block_pair = iter.next().unwrap();
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    let then_block = build_block(block_pair);
 
     // Handle elif and else clauses
     for inner in iter {
@@ -216,16 +218,20 @@ fn build_if_stmt(pair: Pair<Rule>) -> Statement {
 }
 
 fn build_while_stmt(pair: Pair<Rule>) -> Statement {
-    let mut condition = Expression::BoolLit(true);
-    let mut body = Vec::new();
+    let mut inner = pair.into_inner();
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::WHILE);
 
-    for inner in pair.into_inner() {
-        match inner.as_rule() {
-            Rule::expression => condition = build_expression(inner),
-            Rule::block => body = build_block(inner),
-            _ => panic!("Unexpected rule in while stmt: {:?}", inner.as_rule()),
-        }
-    }
+    let cond_stmt = inner.next().unwrap();
+    assert_eq!(cond_stmt.as_rule(), Rule::expression);
+    let condition = build_expression(cond_stmt);
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let block_pair = inner.next().unwrap();
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    let body = build_block(block_pair);
+
+    assert_eq!(inner.next(), None);
 
     Statement::While { condition, body }
 }
@@ -382,6 +388,7 @@ fn build_unary_expr(pair: Pair<Rule>) -> Expression {
             Rule::MINUS => op = UnaryOp::Neg,
             Rule::NOT => op = UnaryOp::Not,
             Rule::expression => operand = build_expression(inner),
+            Rule::call_expr => operand = build_call_expr(inner),
             _ => panic!("Unexpected rule in unary expr: {:?}", inner.as_rule()),
         }
     }
