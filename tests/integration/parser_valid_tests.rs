@@ -98,8 +98,8 @@ fn test_nested_functions() {
 
 /// Helper function to parse a file and validate it
 fn parse_and_validate(path: &str) {
-    let source = fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
+    let source =
+        fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
 
     match LangParser::parse(Rule::program, &source) {
         Ok(pairs) => {
