@@ -11,7 +11,21 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     lldb \
+    wget \
+    software-properties-common \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
+
+# Install LLVM 21 for Inkwell
+RUN wget https://apt.llvm.org/llvm.sh && \
+    chmod +x llvm.sh && \
+    ./llvm.sh 21 all && \
+    rm llvm.sh && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set LLVM environment variables for Inkwell
+ENV LLVM_SYS_211_PREFIX="/usr/lib/llvm-21"
 
 # Install Rust using rustup
 # -y disables confirmation prompts
