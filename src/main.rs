@@ -105,6 +105,7 @@ fn main() {
 
             let status = Command::new(&llc)
                 .args(&bc_files)
+                .args(&other_files)
                 .args(&args.llvm_args)
                 .status()
                 .expect("failed to execute llc");
