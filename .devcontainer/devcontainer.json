@@ -23,8 +23,10 @@
                 "shd101wyy.markdown-preview-enhanced",
                 "tamasfe.even-better-toml",
                 "vadimcn.vscode-lldb",
-                "Anthropic.claude-code"
+                "Anthropic.claude-code",
+                "ms-python.python"
             ]
         }
-    }
+    },
+    "postCreateCommand": "bash scripts/install-hooks.sh"
 }
