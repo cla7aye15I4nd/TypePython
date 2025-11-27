@@ -2,6 +2,7 @@ use clap::Parser as ClapParser;
 use inkwell::context::Context;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Parser, Rule};
 
 #[derive(ClapParser, Debug)]
@@ -31,8 +32,16 @@ pub struct Args {
 fn main() {
     let args = Args::parse();
 
+    let mut bc_files: Vec<String> = vec![];
+    let mut other_files: Vec<String> = vec![];
+
     if !args.input.is_empty() {
         for path in &args.input {
+            if path.extension().and_then(|s| s.to_str()) != Some("py") {
+                other_files.push(path.to_string_lossy().to_string());
+                continue;
+            }
+
             let source = fs::read_to_string(path).unwrap_or_else(|e| {
                 eprintln!("Error reading {}: {}", path.display(), e);
                 std::process::exit(1);
@@ -75,17 +84,32 @@ fn main() {
                 println!("{}", codegen.get_module().print_to_string().to_string());
             }
 
-            // Verify the module
             if let Err(e) = codegen.get_module().verify() {
                 eprintln!("Module verification failed: {}", e);
                 std::process::exit(1);
             }
 
-            println!("✓ Successfully compiled {}", path.display());
+            let bc_path = path.with_extension("bc");
+            codegen.get_module().write_bitcode_to_path(&bc_path);
+            bc_files.push(bc_path.to_string_lossy().to_string());
         }
     }
 
-    if !args.llvm_args.is_empty() {
-        println!("\nLLVM args: {:?}", args.llvm_args);
+    match std::env::var("LLVM_SYS_211_PREFIX") {
+        Err(_) => {
+            eprintln!("Error: LLVM_SYS_211_PREFIX environment variable is not set.");
+            std::process::exit(1);
+        }
+        Ok(prefix) => {
+            let llc = format!("{}/bin/clang", prefix);
+
+            let status = Command::new(&llc)
+                .args(&bc_files)
+                .args(&args.llvm_args)
+                .status()
+                .expect("failed to execute llc");
+
+            std::process::exit(status.code().unwrap_or(1));
+        }
     }
 }
