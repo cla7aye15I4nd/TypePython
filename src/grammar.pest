@@ -4,30 +4,30 @@
 
 COMMENT = _{ "#" ~ (!NEWLINE ~ ANY)* }
 NEWLINE = { "\n" | "\r\n" | "\r" }
-
-// Whitespace within a line (not leading indentation)
 WS = _{ " " | "\t" }
 
-// Keywords
-IF = { "if" }
-ELIF = { "elif" }
-ELSE = { "else" }
-WHILE = { "while" }
-DEF = { "def" }
-RETURN = { "return" }
-PASS = { "pass" }
-AND = { "and" }
-OR = { "or" }
-NOT = { "not" }
-TRUE = { "True" }
-FALSE = { "False" }
+kw_boundary = _{ !(ASCII_ALPHANUMERIC | "_") }
 
-// Type keywords
-INT_TYPE = { "int" }
-FLOAT_TYPE = { "float" }
-BOOL_TYPE = { "bool" }
-STR_TYPE = { "str" }
-NONE_TYPE = { "None" }
+// --- Keywords (Updated with boundaries) ---
+IF     = { "if" ~ kw_boundary }
+ELIF   = { "elif" ~ kw_boundary }
+ELSE   = { "else" ~ kw_boundary }
+WHILE  = { "while" ~ kw_boundary }
+DEF    = { "def" ~ kw_boundary }
+RETURN = { "return" ~ kw_boundary }
+PASS   = { "pass" ~ kw_boundary }
+AND    = { "and" ~ kw_boundary }
+OR     = { "or" ~ kw_boundary }
+NOT    = { "not" ~ kw_boundary }
+TRUE   = { "True" ~ kw_boundary }
+FALSE  = { "False" ~ kw_boundary }
+
+// --- Type keywords (Updated with boundaries) ---
+INT_TYPE   = { "int" ~ kw_boundary }
+FLOAT_TYPE = { "float" ~ kw_boundary }
+BOOL_TYPE  = { "bool" ~ kw_boundary }
+STR_TYPE   = { "str" ~ kw_boundary }
+NONE_TYPE  = { "None" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 keyword = {
