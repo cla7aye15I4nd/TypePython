@@ -1,59 +1,74 @@
 use clap::Parser as ClapParser;
-use pest::Parser;
+use inkwell::context::Context;
 use std::fs;
 use std::path::PathBuf;
-use tpy::{LangParser, Rule};
+use tpy::{codegen::CodeGen, pest_to_ast};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
 #[command(about = "A compiler for TypePython language", long_about = None)]
 pub struct Args {
-    /// Input source files
-    #[arg(required = true)]
+    /// Input source files (optional - if none provided, runs examples)
     pub input: Vec<PathBuf>,
+
+    /// Show the AST structure
+    #[arg(long)]
+    pub show_ast: bool,
+
+    /// Show LLVM IR output
+    #[arg(long)]
+    pub show_ir: bool,
 
     /// Arguments passed directly to LLVM
     #[arg(last = true)]
     pub llvm_args: Vec<String>,
 }
 
-fn print_pairs(pairs: pest::iterators::Pairs<Rule>, indent: usize) {
-    for pair in pairs {
-        let rule = pair.as_rule();
-        let span = pair.as_span();
-        let text = span.as_str();
-
-        println!(
-            "{:indent$}{:?} {:?} @ {}..{}",
-            "",
-            rule,
-            text,
-            span.start(),
-            span.end(),
-            indent = indent
-        );
-
-        print_pairs(pair.into_inner(), indent + 2);
-    }
-}
-
 fn main() {
     let args = Args::parse();
 
-    for path in &args.input {
-        println!("=== {} ===", path.display());
+    if !args.input.is_empty() {
+        for path in &args.input {
+            let source = fs::read_to_string(path).unwrap_or_else(|e| {
+                eprintln!("Error reading {}: {}", path.display(), e);
+                std::process::exit(1);
+            });
 
-        let source = fs::read_to_string(path).unwrap_or_else(|e| {
-            eprintln!("Error reading {}: {}", path.display(), e);
-            std::process::exit(1);
-        });
+            // Parse Pest AST to our AST
+            let program = match pest_to_ast::parse_program(&source) {
+                Ok(prog) => prog,
+                Err(e) => {
+                    eprintln!("Parse error in {}:\n{}", path.display(), e);
+                    std::process::exit(1);
+                }
+            };
 
-        match LangParser::parse(Rule::program, &source) {
-            Ok(pairs) => print_pairs(pairs, 0),
-            Err(e) => {
-                eprintln!("Parse error in {}:\n{}", path.display(), e);
+            if args.show_ast {
+                println!("\n--- AST ---");
+                println!("{:#?}", program);
+            }
+
+            // Generate LLVM IR
+            let context = Context::create();
+            let mut codegen = CodeGen::new(&context, path.file_stem().unwrap().to_str().unwrap());
+
+            if let Err(e) = codegen.generate(&program) {
+                eprintln!("Code generation error: {}", e);
                 std::process::exit(1);
             }
+
+            if args.show_ir {
+                println!("\n--- LLVM IR ---");
+                println!("{}", codegen.get_module().print_to_string().to_string());
+            }
+
+            // Verify the module
+            if let Err(e) = codegen.get_module().verify() {
+                eprintln!("Module verification failed: {}", e);
+                std::process::exit(1);
+            }
+
+            println!("✓ Successfully compiled {}", path.display());
         }
     }
 

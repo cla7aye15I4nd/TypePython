@@ -6,3 +6,8 @@ pub struct LangParser;
 
 pub use pest::iterators::Pairs;
 pub use pest::Parser;
+
+// Public modules
+pub mod ast;
+pub mod codegen;
+pub mod pest_to_ast;
