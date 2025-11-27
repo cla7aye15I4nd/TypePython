@@ -1,25 +1,7 @@
 use inkwell::context::Context;
 use pest::Parser;
 use std::fs;
-use std::path::{Path, PathBuf};
 use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Rule};
-
-/// Get all .py files in a directory
-fn get_test_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("py") {
-                files.push(path);
-            }
-        }
-    }
-
-    files.sort();
-    files
-}
 
 /// Individual tests for each fixture file for better granularity
 #[test]
@@ -28,7 +10,6 @@ fn test_simple() {
 }
 
 #[test]
-#[ignore]
 fn test_all_types() {
     parse_and_validate("tests/fixtures/valid/all_types.py");
 }
@@ -40,7 +21,6 @@ fn test_control_flow() {
 }
 
 #[test]
-#[ignore]
 fn test_expressions() {
     parse_and_validate("tests/fixtures/valid/expressions.py");
 }
@@ -67,30 +47,15 @@ fn parse_and_validate(path: &str) {
         fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {}: {}", path, e));
 
     // Step 1: Parse with Pest
-    match LangParser::parse(Rule::program, &source) {
-        Ok(pairs) => {
-            // Verify that we got a program node
-            let mut has_program = false;
-            for pair in pairs {
-                if pair.as_rule() == Rule::program {
-                    has_program = true;
-                    break;
-                }
-            }
-            assert!(has_program, "Expected a program node in parse tree");
-        }
+    let pairs = match LangParser::parse(Rule::program, &source) {
+        Ok(pairs) => pairs,
         Err(e) => {
             panic!("Parse error in {}:\n{}", path, e);
         }
-    }
+    };
 
     // Step 2: Convert Pest AST to our AST
-    let program = match pest_to_ast::parse_program(&source) {
-        Ok(prog) => prog,
-        Err(e) => {
-            panic!("AST conversion error in {}:\n{}", path, e);
-        }
-    };
+    let program = pest_to_ast::build_program(pairs);
 
     // Step 3: Generate LLVM IR
     let context = Context::create();

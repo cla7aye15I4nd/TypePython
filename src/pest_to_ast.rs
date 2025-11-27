@@ -1,14 +1,8 @@
 use crate::ast::*;
-use crate::{LangParser, Rule};
+use crate::Rule;
 use pest::iterators::{Pair, Pairs};
-use pest::Parser;
 
-pub fn parse_program(source: &str) -> Result<Program, Box<pest::error::Error<Rule>>> {
-    let pairs = LangParser::parse(Rule::program, source).map_err(Box::new)?;
-    Ok(build_program(pairs))
-}
-
-fn build_program(mut pairs: Pairs<Rule>) -> Program {
+pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
     let mut functions = Vec::new();
     let mut statements = Vec::new();
 
@@ -61,7 +55,10 @@ fn build_function(pair: Pair<Rule>) -> Function {
 }
 
 fn build_param_list(pair: Pair<Rule>) -> Vec<Parameter> {
-    pair.into_inner().map(build_parameter).collect()
+    pair.into_inner()
+        .filter(|p| p.as_rule() != Rule::COMMA)
+        .map(build_parameter)
+        .collect()
 }
 
 fn build_parameter(pair: Pair<Rule>) -> Parameter {
@@ -405,7 +402,11 @@ fn build_call_expr(pair: Pair<Rule>) -> Expression {
                 }
             }
             Rule::arg_list => {
-                args = inner.into_inner().map(build_expression).collect();
+                args = inner
+                    .into_inner()
+                    .filter(|p| p.as_rule() != Rule::COMMA)
+                    .map(build_expression)
+                    .collect();
             }
             _ => {}
         }

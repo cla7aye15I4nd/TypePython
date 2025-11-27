@@ -2,7 +2,7 @@ use clap::Parser as ClapParser;
 use inkwell::context::Context;
 use std::fs;
 use std::path::PathBuf;
-use tpy::{codegen::CodeGen, pest_to_ast};
+use tpy::{codegen::CodeGen, pest_to_ast, LangParser, Parser, Rule};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
@@ -10,6 +10,10 @@ use tpy::{codegen::CodeGen, pest_to_ast};
 pub struct Args {
     /// Input source files (optional - if none provided, runs examples)
     pub input: Vec<PathBuf>,
+
+    /// Show the PEST parse tree
+    #[arg(long)]
+    pub show_pest: bool,
 
     /// Show the AST structure
     #[arg(long)]
@@ -34,14 +38,23 @@ fn main() {
                 std::process::exit(1);
             });
 
-            // Parse Pest AST to our AST
-            let program = match pest_to_ast::parse_program(&source) {
-                Ok(prog) => prog,
+            let pairs = match LangParser::parse(Rule::program, &source).map_err(Box::new) {
+                Ok(pairs) => pairs,
                 Err(e) => {
                     eprintln!("Parse error in {}:\n{}", path.display(), e);
                     std::process::exit(1);
                 }
             };
+
+            if args.show_pest {
+                println!("\n--- PEST Parse Tree ---");
+                for pair in pairs.clone() {
+                    println!("{:#?}", pair);
+                }
+            }
+
+            // Parse Pest AST to our AST
+            let program = pest_to_ast::build_program(pairs);
 
             if args.show_ast {
                 println!("\n--- AST ---");
