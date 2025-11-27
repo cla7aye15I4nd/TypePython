@@ -10,6 +10,9 @@
     "mounts": [
         "source=${localEnv:HOME}/.ssh/id_ed25519,target=/root/.ssh/id_ed25519,type=bind"
     ],
+    "containerEnv": {
+        "TYPEPYTHON_RUNTIME": "${containerWorkspaceFolder}/src/runtime"
+    },
     "customizations": {
         "vscode": {
             "settings": {

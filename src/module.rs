@@ -3,11 +3,77 @@ use inkwell::context::Context;
 use log::debug;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::ast::Program;
 use crate::codegen::CodeGen;
 use crate::pipeline::CompileOptions;
 use crate::Parser;
+
+/// Global builtin library directory path
+/// This is initialized once on first access and reused throughout the program
+static BUILTIN_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Get the builtin library directory path
+/// Automatically finds and caches the correct path on first call
+pub fn builtin_lib_dir() -> &'static PathBuf {
+    BUILTIN_LIB_DIR.get_or_init(find_builtin_lib_dir)
+}
+
+/// Find the builtin library directory by checking environment variable or searching
+fn find_builtin_lib_dir() -> PathBuf {
+    // First, check if TYPEPYTHON_RUNTIME environment variable is set
+    if let Ok(runtime_dir) = std::env::var("TYPEPYTHON_RUNTIME") {
+        let path = PathBuf::from(runtime_dir);
+        if path.join("builtin.c").exists() {
+            debug!(
+                "Using builtin library directory from TYPEPYTHON_RUNTIME: {}",
+                path.display()
+            );
+            return path;
+        } else {
+            debug!(
+                "Warning: TYPEPYTHON_RUNTIME is set but builtin.c not found at: {}",
+                path.display()
+            );
+        }
+    }
+
+    // Fallback: search multiple candidate locations
+    let candidates = [
+        PathBuf::from("src/runtime"),
+        PathBuf::from("./src/runtime"),
+        PathBuf::from("../src/runtime"),
+        std::env::current_dir()
+            .ok()
+            .map(|p| p.join("src/runtime"))
+            .unwrap_or_default(),
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("src/runtime"))
+            })
+            .unwrap_or_default(),
+    ];
+
+    // Find the first directory that contains builtin.c
+    for candidate in &candidates {
+        let builtin_c = candidate.join("builtin.c");
+        if builtin_c.exists() {
+            debug!(
+                "Found builtin library directory at: {}",
+                candidate.display()
+            );
+            return candidate.clone();
+        }
+    }
+
+    // Fallback to default location
+    debug!("Warning: Builtin library directory not found, using default: src/runtime");
+    PathBuf::from("src/runtime")
+}
 
 /// Represents a compiled module with its LLVM bitcode
 pub struct CompiledModule<'ctx> {
@@ -31,8 +97,7 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry
     pub fn new(context: &'ctx Context) -> Self {
         let mut search_paths = vec![
-            PathBuf::from("."),   // Current directory
-            PathBuf::from("src"), // src directory
+            PathBuf::from("."), // Current directory
         ];
 
         // Add current working directory
@@ -58,42 +123,22 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// For example: ["math", "helpers"] -> "math/helpers.py" or "./math/helpers.py"
     /// Supports .py, .tpy, and .c files
     pub fn resolve_module(&self, module_path: &[String]) -> Result<PathBuf, String> {
-        // Special case: "builtin" module - look for builtin.c in runtime directory
+        // Special case: "builtin" module - use global builtin library directory
         if module_path.len() == 1 && module_path[0] == "builtin" {
-            // Try to find builtin.c in src/runtime
-            let builtin_candidates = [
-                PathBuf::from("src/runtime/builtin.c"),
-                PathBuf::from("../src/runtime/builtin.c"),
-                PathBuf::from("../../src/runtime/builtin.c"),
-                PathBuf::from("../../../src/runtime/builtin.c"),
-                PathBuf::from("../../../../src/runtime/builtin.c"),
-                PathBuf::from("/workspaces/TypePython/src/runtime/builtin.c"),
-                std::env::current_dir()
-                    .ok()
-                    .map(|p| p.join("src/runtime/builtin.c"))
-                    .unwrap_or_default(),
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|p| {
-                        p.parent()
-                            .and_then(|p| p.parent())
-                            .map(|p| p.join("src/runtime/builtin.c"))
-                    })
-                    .unwrap_or_default(),
-            ];
+            let builtin_path = builtin_lib_dir().join("builtin.c");
 
-            for candidate in &builtin_candidates {
-                if candidate.exists() {
-                    debug!("Found builtin module at: {}", candidate.display());
-                    return Ok(candidate.clone());
-                }
+            if builtin_path.exists() {
+                debug!("Found builtin module at: {}", builtin_path.display());
+                return Ok(builtin_path);
             }
-
-            return Err("Builtin module (src/runtime/builtin.c) not found".to_string());
+            return Err(format!(
+                "Builtin module 'builtin.c' not found at expected location: {}",
+                builtin_path.display()
+            ));
         }
 
         // Try different file extensions
-        let extensions = ["py", "tpy", "c"];
+        let extensions = ["py", "c"];
         let module_base = module_path.join("/");
 
         // Search in all search paths

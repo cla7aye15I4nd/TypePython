@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   LLVM_SYS_211_PREFIX: /usr/lib/llvm-21
+  TYPEPYTHON_RUNTIME: ${{ github.workspace }}/src/runtime
 
 jobs:
   lint:

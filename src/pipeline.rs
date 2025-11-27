@@ -181,23 +181,11 @@ pub fn compile_to_executable(bitcode_path: &Path, output_path: &Path) -> Result<
 
     let clang = format!("{}/bin/clang", llvm_prefix);
 
-    // Find the runtime library - try multiple locations
-    let runtime_candidates = [
-        std::path::PathBuf::from("src/runtime/builtin.ll"),
-        std::path::PathBuf::from("../src/runtime/builtin.ll"),
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.join("src/runtime/builtin.ll"))
-            .unwrap_or_default(),
-        // Also try the old location for backwards compatibility
-        std::path::PathBuf::from("runtime/builtin.ll"),
-    ];
-
-    let runtime_path = runtime_candidates
-        .iter()
-        .find(|p| p.exists())
-        .cloned()
-        .unwrap_or_else(|| std::path::PathBuf::from("src/runtime/builtin.ll"));
+    // Use global builtin library directory to find builtin.ll
+    let runtime_path = std::env::var("TYPEPYTHON_RUNTIME")
+        .map(PathBuf::from)
+        .expect("TYPEPYTHON_RUNTIME environment variable not set")
+        .join("runtime.c");
 
     debug!(
         "Linking with clang: {} + {} -> {}",
