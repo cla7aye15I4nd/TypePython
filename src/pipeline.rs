@@ -11,10 +11,10 @@ use std::path::Path;
 /// Options for the compilation pipeline
 #[derive(Debug, Default)]
 pub struct CompileOptions {
-    pub show_preprocessed: bool,
-    pub show_pest: bool,
-    pub show_ast: bool,
-    pub show_ir: bool,
+    pub dump_preprocessed: bool,
+    pub dump_pest: bool,
+    pub dump_ast: bool,
+    pub dump_ir: bool,
 }
 
 /// Result of compilation
@@ -34,9 +34,11 @@ pub fn compile_source<'ctx>(
     debug!("Preprocessing source");
     let preprocessed = preprocessor::preprocess(source)?;
 
-    if options.show_preprocessed {
-        println!("\n--- Preprocessed Source ---");
-        println!("{}", preprocessed);
+    if options.dump_preprocessed {
+        let dump_path = format!("{}_preprocessed.txt", module_name);
+        std::fs::write(&dump_path, &preprocessed)
+            .map_err(|e| format!("Failed to dump preprocessed source: {}", e))?;
+        debug!("Dumped preprocessed source to {}", dump_path);
     }
 
     // Step 2: Parse with Pest
@@ -44,20 +46,28 @@ pub fn compile_source<'ctx>(
     let pairs = LangParser::parse(Rule::program, &preprocessed)
         .map_err(|e| format!("Parse error: {}", e))?;
 
-    if options.show_pest {
-        println!("\n--- PEST Parse Tree ---");
-        for pair in pairs.clone() {
-            println!("{:#?}", pair);
-        }
+    if options.dump_pest {
+        let dump_path = format!("{}_pest.txt", module_name);
+        let pest_output = pairs
+            .clone()
+            .map(|pair| format!("{:#?}", pair))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&dump_path, &pest_output)
+            .map_err(|e| format!("Failed to dump PEST parse tree: {}", e))?;
+        debug!("Dumped PEST parse tree to {}", dump_path);
     }
 
     // Step 3: Build AST
     debug!("Building AST");
     let program = parser::build_program(pairs);
 
-    if options.show_ast {
-        println!("\n--- AST ---");
-        println!("{:#?}", program);
+    if options.dump_ast {
+        let dump_path = format!("{}_ast.txt", module_name);
+        let ast_output = format!("{:#?}", program);
+        std::fs::write(&dump_path, &ast_output)
+            .map_err(|e| format!("Failed to dump AST: {}", e))?;
+        debug!("Dumped AST to {}", dump_path);
     }
 
     // Step 4: Generate LLVM IR
@@ -65,9 +75,12 @@ pub fn compile_source<'ctx>(
     let mut codegen = CodeGen::new(context, module_name);
     codegen.generate(&program)?;
 
-    if options.show_ir {
-        println!("\n--- LLVM IR ---");
-        println!("{}", codegen.get_module().print_to_string().to_string());
+    if options.dump_ir {
+        let dump_path = format!("{}_ir.ll", module_name);
+        let ir_output = codegen.get_module().print_to_string().to_string();
+        std::fs::write(&dump_path, &ir_output)
+            .map_err(|e| format!("Failed to dump LLVM IR: {}", e))?;
+        debug!("Dumped LLVM IR to {}", dump_path);
     }
 
     // Step 5: Verify LLVM module

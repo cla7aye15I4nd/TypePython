@@ -11,21 +11,21 @@ pub struct Args {
     /// Input source file (.py)
     pub input: PathBuf,
 
-    /// Show the preprocessed source (with INDENT/DEDENT markers)
+    /// Dump the preprocessed source (with INDENT/DEDENT markers) to file
     #[arg(long)]
-    pub show_pp: bool,
+    pub dump_pp: bool,
 
-    /// Show the PEST parse tree
+    /// Dump the PEST parse tree to file
     #[arg(long)]
-    pub show_pest: bool,
+    pub dump_pest: bool,
 
-    /// Show the AST structure
+    /// Dump the AST structure to file
     #[arg(long)]
-    pub show_ast: bool,
+    pub dump_ast: bool,
 
-    /// Show LLVM IR output
+    /// Dump LLVM IR output to file
     #[arg(long)]
-    pub show_ir: bool,
+    pub dump_ir: bool,
 
     /// Compile only, don't run the executable
     #[arg(short = 'c', long)]
@@ -50,10 +50,10 @@ fn main() {
 
     // Set up compilation options
     let options = CompileOptions {
-        show_preprocessed: args.show_pp,
-        show_pest: args.show_pest,
-        show_ast: args.show_ast,
-        show_ir: args.show_ir,
+        dump_preprocessed: args.dump_pp,
+        dump_pest: args.dump_pest,
+        dump_ast: args.dump_ast,
+        dump_ir: args.dump_ir,
     };
 
     // Determine output executable name
