@@ -1,0 +1,7 @@
+10 > 20: False
+10 < 20: True
+10 == 20: False
+10 != 20: True
+True and False: False
+True or False: True
+not True: False
