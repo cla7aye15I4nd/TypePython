@@ -18,7 +18,7 @@ message: str = "Hello, World!"
 
 # Function with None return type
 def print_message(msg: str) -> None:
-    pass
+    print(msg)
 
 # Function with multiple parameter types
 def calculate(x: int, y: float, use_precise: bool) -> float:
@@ -30,3 +30,14 @@ def calculate(x: int, y: float, use_precise: bool) -> float:
 # Function calls
 result: float = calculate(10, 3.5, True)
 print_message("Testing")
+
+# Print all the values
+print("Age:", age)
+print("Count:", count)
+print("Temperature:", temperature)
+print("Price:", price)
+print("Is valid:", is_valid)
+print("Is complete:", is_complete)
+print("Name:", name)
+print("Message:", message)
+print("Result:", result)

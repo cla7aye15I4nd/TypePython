@@ -15,3 +15,4 @@ def fibonacci(n: int) -> int:
 
 # Calculate 10th fibonacci number
 fib10: int = fibonacci(10)
+print("10th Fibonacci number:", fib10)

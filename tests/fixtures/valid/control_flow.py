@@ -30,3 +30,7 @@ def classify(age: int, score: int) -> str:
 result1: str = check_number(5)
 result2: int = count_down(10)
 result3: str = classify(20, 95)
+
+print("Check number 5:", result1)
+print("Count down from 10:", result2)
+print("Classify (20, 95):", result3)

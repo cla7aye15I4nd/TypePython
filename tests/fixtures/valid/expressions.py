@@ -39,3 +39,20 @@ negated_bool: bool = not True
 pi: float = 3.14159
 radius: float = 5.0
 area: float = pi * radius * radius
+
+# Print results
+print("Sum:", sum)
+print("Diff:", diff)
+print("Product:", product)
+print("Quotient:", quotient)
+print("Remainder:", remainder)
+print("Complex calc:", complex_calc)
+print("And result:", and_result)
+print("Or result:", or_result)
+print("Not result:", not_result)
+print("Greater than:", gt)
+print("Less than:", lt)
+print("Complex bool:", complex_bool)
+print("Paren calc:", paren_calc)
+print("Negative:", negative)
+print("Area:", area)

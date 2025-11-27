@@ -22,3 +22,6 @@ def is_even(n: int) -> bool:
 # Using the functions
 result: int = compute(5, 3, 2)
 check: bool = is_even(42)
+
+print("Compute (5, 3, 2):", result)
+print("Is 42 even:", check)
