@@ -11,7 +11,6 @@ fn test_simple() {
 }
 
 #[test]
-#[ignore]
 fn test_all_types() {
     test_valid("tests/fixtures/valid/all_types.py");
 }
@@ -23,7 +22,6 @@ fn test_control_flow() {
 }
 
 #[test]
-#[ignore]
 fn test_expressions() {
     test_valid("tests/fixtures/valid/expressions.py");
 }

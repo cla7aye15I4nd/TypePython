@@ -53,7 +53,7 @@ STR_LIT = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 PLUS = { "+" }
 MINUS = { "-" }
 STAR = { "*" }
-SLASH = { "/" }
+SLASH = { "//" }
 PERCENT = { "%" }
 
 EQ = { "==" }

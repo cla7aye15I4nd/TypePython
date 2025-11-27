@@ -1,9 +1,9 @@
 Sum: 30
 Diff: 35
 Product: 42
-Quotient: 20.0
+Quotient: 20
 Remainder: 2
-Complex calc: 9.0
+Complex calc: 9
 And result: False
 Or result: True
 Not result: False

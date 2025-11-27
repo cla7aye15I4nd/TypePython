@@ -4,11 +4,11 @@
 sum: int = 10 + 20
 diff: int = 50 - 15
 product: int = 6 * 7
-quotient: int = 100 / 5
+quotient: int = 100 // 5
 remainder: int = 17 % 5
 
 # Complex arithmetic with precedence
-complex_calc: int = 2 + 3 * 4 - 10 / 2
+complex_calc: int = 2 + 3 * 4 - 10 // 2
 
 # Boolean expressions
 true_val: bool = True
