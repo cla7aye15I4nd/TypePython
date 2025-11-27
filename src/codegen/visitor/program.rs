@@ -12,6 +12,9 @@ impl<'ctx> CodeGen<'ctx> {
         // Declare runtime builtin functions
         self.declare_runtime_functions();
 
+        // Declare external functions from imported modules
+        self.declare_imported_functions(program)?;
+
         // Visit all function declarations first
         for function in &program.functions {
             self.visit_function(function)?;

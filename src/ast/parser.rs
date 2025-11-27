@@ -478,12 +478,20 @@ fn build_unary_expr(pair: Pair<Rule>) -> Expression {
 fn build_call_expr(pair: Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
 
-    let atom_pair = inner.next().unwrap();
-    assert_eq!(atom_pair.as_rule(), Rule::atom);
-    let name = match build_atom(atom_pair) {
-        Expression::Var(var_name) => var_name,
-        _ => panic!("Expected identifier in function call"),
-    };
+    let qualified_name_pair = inner.next().unwrap();
+    assert_eq!(qualified_name_pair.as_rule(), Rule::qualified_name);
+
+    // Build qualified name from parts (e.g., "math_utils1.add" or just "foo")
+    let name_parts: Vec<String> = qualified_name_pair
+        .into_inner()
+        .filter(|p| p.as_rule() != Rule::DOT)
+        .map(|id| {
+            assert_eq!(id.as_rule(), Rule::ID);
+            id.as_str().to_string()
+        })
+        .collect();
+
+    let name = name_parts.join(".");
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::LPAREN);
 

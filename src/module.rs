@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use crate::ast::Program;
 use crate::codegen::CodeGen;
-use crate::pipeline::{compile_source, CompileOptions};
+use crate::pipeline::CompileOptions;
+use crate::Parser;
 
 /// Represents a compiled module with its LLVM bitcode
 pub struct CompiledModule<'ctx> {
@@ -63,9 +64,21 @@ impl<'ctx> ModuleRegistry<'ctx> {
             let builtin_candidates = [
                 PathBuf::from("src/runtime/builtin.c"),
                 PathBuf::from("../src/runtime/builtin.c"),
+                PathBuf::from("../../src/runtime/builtin.c"),
+                PathBuf::from("../../../src/runtime/builtin.c"),
+                PathBuf::from("../../../../src/runtime/builtin.c"),
+                PathBuf::from("/workspaces/TypePython/src/runtime/builtin.c"),
                 std::env::current_dir()
                     .ok()
                     .map(|p| p.join("src/runtime/builtin.c"))
+                    .unwrap_or_default(),
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| {
+                        p.parent()
+                            .and_then(|p| p.parent())
+                            .map(|p| p.join("src/runtime/builtin.c"))
+                    })
                     .unwrap_or_default(),
             ];
 
@@ -174,13 +187,34 @@ impl<'ctx> ModuleRegistry<'ctx> {
         let source = std::fs::read_to_string(&file_path)
             .map_err(|e| format!("Error reading {}: {}", file_path.display(), e))?;
 
-        // Compile the module
-        let result = compile_source(&source, &module_name, self.context, options)?;
+        // Parse to get imports first
+        let preprocessed = crate::preprocessor::preprocess(&source)?;
+        let pairs = crate::LangParser::parse(crate::Rule::program, &preprocessed)
+            .map_err(|e| format!("Parse error: {}", e))?;
+        let program = crate::ast::parser::build_program(pairs);
 
-        // Recursively compile imported modules
-        for import in &result.program.imports {
+        // Recursively compile imported modules first
+        for import in &program.imports {
             self.compile_module(&import.module_path, options)?;
         }
+
+        // Collect programs from imported modules
+        let mut imported_programs = Vec::new();
+        for import in &program.imports {
+            let import_name = import.module_path.join(".");
+            if let Some(compiled_mod) = self.modules.get(&import_name) {
+                imported_programs.push(compiled_mod.program.clone());
+            }
+        }
+
+        // Compile the module with imports
+        let result = crate::pipeline::compile_source_with_imports(
+            &source,
+            &module_name,
+            self.context,
+            options,
+            &imported_programs,
+        )?;
 
         // Store the compiled module
         let compiled_module = CompiledModule {

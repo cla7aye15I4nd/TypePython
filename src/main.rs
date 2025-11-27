@@ -2,7 +2,7 @@ use clap::Parser as ClapParser;
 use log::debug;
 use std::path::PathBuf;
 use std::process::Command;
-use tpy::pipeline::{compile_and_link, CompileOptions};
+use tpy::pipeline::CompileOptions;
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
@@ -59,14 +59,16 @@ fn main() {
     // Determine output executable name
     let output_path = args.output.unwrap_or_else(|| args.input.with_extension(""));
 
-    // Compile using the pipeline
+    // Compile using the module-aware pipeline
     debug!(
-        "Compiling {} -> {}",
+        "Compiling {} -> {} (with module support)",
         args.input.display(),
         output_path.display()
     );
 
-    if let Err(e) = compile_and_link(&args.input, &output_path, &options) {
+    if let Err(e) =
+        tpy::pipeline::compile_and_link_with_modules(&args.input, &output_path, &options)
+    {
         eprintln!("Compilation error: {}", e);
         std::process::exit(1);
     }

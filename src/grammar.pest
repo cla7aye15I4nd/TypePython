@@ -194,7 +194,11 @@ factor_expr = { (unary_expr | call_expr | atom) ~ (WS* ~ (STAR | SLASH | PERCENT
 unary_expr = { (MINUS | NOT) ~ WS* ~ expression }
 
 // Function calls - only match if parentheses present
-call_expr = { atom ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)+ }
+// Support both simple calls (foo()) and qualified calls (module.foo())
+call_expr = { qualified_name ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)+ }
+
+// Qualified name: ID or ID.ID (for module.function)
+qualified_name = { ID ~ (DOT ~ ID)* }
 
 arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* }
 

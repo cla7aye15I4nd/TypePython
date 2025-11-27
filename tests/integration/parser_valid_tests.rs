@@ -1,8 +1,7 @@
-use inkwell::context::Context;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tpy::pipeline::{compile_file, compile_to_executable, CompileOptions};
+use tpy::pipeline::{compile_and_link_with_modules, CompileOptions};
 
 macro_rules! valid_test {
     ($name:ident, $path:expr) => {
@@ -75,20 +74,9 @@ valid_test!(
 
 fn test_valid(path: &str) {
     let path = Path::new(path);
-    let context = Context::create();
-
-    let result = compile_file(path, &context, &CompileOptions::default())
-        .unwrap_or_else(|e| panic!("Compilation failed for {}: {}", path.display(), e));
-
-    let ll_path = path.with_extension("ll");
-    result
-        .codegen
-        .get_module()
-        .print_to_file(&ll_path)
-        .expect("Failed to write LLVM IR");
 
     let exe_path = path.with_extension("out");
-    compile_to_executable(&ll_path, &exe_path)
+    compile_and_link_with_modules(path, &exe_path, &CompileOptions::default())
         .unwrap_or_else(|e| panic!("Failed to compile executable: {}", e));
 
     let actual_output = run_executable(&exe_path, path);

@@ -17,6 +17,7 @@ pub struct CodeGen<'ctx> {
     pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
+    pub(crate) imported_modules: Vec<Program>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -31,7 +32,19 @@ impl<'ctx> CodeGen<'ctx> {
             variables: HashMap::new(),
             current_function: None,
             strings: HashMap::new(),
+            imported_modules: Vec::new(),
         }
+    }
+
+    pub fn add_imported_module(&mut self, program: Program) {
+        log::debug!(
+            "Adding imported module with {} functions",
+            program.functions.len()
+        );
+        for func in &program.functions {
+            log::debug!("  - {}", func.name);
+        }
+        self.imported_modules.push(program);
     }
 
     pub fn get_module(&self) -> &Module<'ctx> {
@@ -89,6 +102,26 @@ impl<'ctx> CodeGen<'ctx> {
         // i64 tpy_pow_int(i64, i64)
         let pow_int_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
         self.module.add_function("tpy_pow_int", pow_int_type, None);
+    }
+
+    pub(crate) fn declare_imported_functions(&mut self, _program: &Program) -> Result<(), String> {
+        // Collect all functions that need to be declared
+        let mut functions_to_declare = Vec::new();
+        for imported_program in &self.imported_modules {
+            for func in &imported_program.functions {
+                // Only declare if not already defined in this module
+                if self.module.get_function(&func.name).is_none() {
+                    functions_to_declare.push(func.clone());
+                }
+            }
+        }
+
+        // Declare all collected functions
+        for func in functions_to_declare {
+            self.declare_function(&func)?;
+        }
+
+        Ok(())
     }
 
     pub(crate) fn declare_function(
@@ -473,10 +506,19 @@ impl<'ctx> CodeGen<'ctx> {
             return self.generate_print_call(args);
         }
 
+        // Handle qualified names (module.function)
+        // Extract the function name from qualified name
+        let function_name = if name.contains('.') {
+            // For "module.function", extract "function"
+            name.split('.').next_back().unwrap()
+        } else {
+            name
+        };
+
         let function = self
             .module
-            .get_function(name)
-            .ok_or_else(|| format!("Function {} not found", name))?;
+            .get_function(function_name)
+            .ok_or_else(|| format!("Function {} not found", function_name))?;
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {

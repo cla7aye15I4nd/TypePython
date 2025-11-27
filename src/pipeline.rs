@@ -31,6 +31,17 @@ pub fn compile_source<'ctx>(
     context: &'ctx Context,
     options: &CompileOptions,
 ) -> Result<CompileResult<'ctx>, String> {
+    compile_source_with_imports(source, module_name, context, options, &[])
+}
+
+/// Complete compilation pipeline from source to LLVM module with imported modules
+pub fn compile_source_with_imports<'ctx>(
+    source: &str,
+    module_name: &str,
+    context: &'ctx Context,
+    options: &CompileOptions,
+    imported_programs: &[Program],
+) -> Result<CompileResult<'ctx>, String> {
     // Step 1: Preprocess - convert indentation to explicit tokens
     debug!("Preprocessing source");
     let preprocessed = preprocessor::preprocess(source)?;
@@ -74,6 +85,12 @@ pub fn compile_source<'ctx>(
     // Step 4: Generate LLVM IR
     debug!("Generating LLVM IR");
     let mut codegen = CodeGen::new(context, module_name);
+
+    // Add imported modules to codegen
+    for imported_prog in imported_programs {
+        codegen.add_imported_module(imported_prog.clone());
+    }
+
     codegen.generate(&program)?;
 
     if options.dump_ir {
@@ -114,6 +131,46 @@ pub fn compile_file<'ctx>(
 /// Write LLVM bitcode to file
 pub fn write_bitcode(codegen: &CodeGen, output_path: &Path) -> Result<(), String> {
     codegen.get_module().write_bitcode_to_path(output_path);
+    Ok(())
+}
+
+/// Compile LLVM bitcode to LTO object file (.o containing bitcode)
+/// These .o files contain LLVM bitcode for link-time optimization
+pub fn compile_bitcode_to_lto_object(
+    bitcode_path: &Path,
+    object_path: &Path,
+) -> Result<(), String> {
+    let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX")
+        .map_err(|_| "LLVM_SYS_211_PREFIX environment variable is not set".to_string())?;
+
+    let clang = format!("{}/bin/clang", llvm_prefix);
+
+    debug!(
+        "Compiling bitcode to LTO object: {} -> {}",
+        bitcode_path.display(),
+        object_path.display()
+    );
+
+    // Use clang -c -flto to create LTO-compatible object files
+    // These .o files actually contain bitcode for LTO
+    let status = std::process::Command::new(&clang)
+        .arg("-c")
+        .arg("-flto")
+        .arg("-O2")
+        .arg("-o")
+        .arg(object_path)
+        .arg(bitcode_path)
+        .status()
+        .map_err(|e| format!("Failed to execute clang: {}", e))?;
+
+    if !status.success() {
+        return Err("Failed to compile bitcode to LTO object file".to_string());
+    }
+
+    debug!(
+        "Successfully compiled to LTO object file: {}",
+        object_path.display()
+    );
     Ok(())
 }
 
@@ -185,7 +242,7 @@ pub fn compile_file_with_modules<'ctx>(
     let source = std::fs::read_to_string(path)
         .map_err(|e| format!("Error reading {}: {}", path.display(), e))?;
 
-    let module_name = path
+    let _module_name = path
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| "Invalid file name".to_string())?;
@@ -210,27 +267,29 @@ pub fn compile_file_with_modules<'ctx>(
         registry.compile_module(&import.module_path, options)?;
     }
 
-    // Now compile the main module
-    let _result = compile_source(&source, module_name, context, options)?;
-
+    // Don't compile the main module here - it will be compiled later with import information
     Ok(registry)
 }
 
-/// Link multiple bitcode files together into an executable
-pub fn link_bitcode_files(bitcode_files: &[PathBuf], output_path: &Path) -> Result<(), String> {
+/// Link multiple object files together into an executable using LTO
+pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result<(), String> {
     let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX")
         .map_err(|_| "LLVM_SYS_211_PREFIX environment variable is not set".to_string())?;
 
     let clang = format!("{}/bin/clang", llvm_prefix);
 
-    debug!("Linking bitcode files: {:?}", bitcode_files);
+    debug!("Linking object files with LTO: {:?}", object_files);
 
     let mut cmd = std::process::Command::new(&clang);
     cmd.arg("-Wno-override-module");
 
-    // Add all bitcode files (builtin should already be included by the caller)
-    for bc_file in bitcode_files {
-        cmd.arg(bc_file);
+    // Enable LTO (Link-Time Optimization)
+    cmd.arg("-flto");
+    cmd.arg("-O2");
+
+    // Add all object files
+    for obj_file in object_files {
+        cmd.arg(obj_file);
     }
 
     cmd.arg("-o").arg(output_path).arg("-lm");
@@ -242,6 +301,8 @@ pub fn link_bitcode_files(bitcode_files: &[PathBuf], output_path: &Path) -> Resu
     if !status.success() {
         return Err("Linking failed".to_string());
     }
+
+    debug!("Successfully linked with LTO to {}", output_path.display());
 
     Ok(())
 }
@@ -276,18 +337,68 @@ pub fn compile_and_link_with_modules(
 ) -> Result<(), String> {
     let context = Context::create();
 
+    debug!("Starting module-aware compilation");
+
     // Compile main file and get module registry
     let registry = compile_file_with_modules(source_path, &context, options)?;
 
-    // Compile the main module and add to registry
+    debug!(
+        "Module registry has {} compiled modules",
+        registry.modules().len()
+    );
+
+    // Compile the main module with imports
     let module_name = source_path
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| "Invalid file name".to_string())?;
 
-    let main_result = compile_file(source_path, &context, options)?;
+    // Read and parse main file to get imports
+    let source = std::fs::read_to_string(source_path)
+        .map_err(|e| format!("Error reading {}: {}", source_path.display(), e))?;
+    let preprocessed = preprocessor::preprocess(&source)?;
+    let pairs = LangParser::parse(Rule::program, &preprocessed)
+        .map_err(|e| format!("Parse error: {}", e))?;
+    let main_program = parser::build_program(pairs);
 
-    // Create unique temporary directory for bitcode files
+    debug!("Main program has {} imports", main_program.imports.len());
+    for imp in &main_program.imports {
+        debug!("  Import: {}", imp.module_path.join("."));
+    }
+
+    // Collect programs from imported modules
+    let mut imported_programs = Vec::new();
+    for import in &main_program.imports {
+        let import_name = import.module_path.join(".");
+        debug!("Looking for imported module: {}", import_name);
+        if let Some(compiled_mod) = registry.get_module(&import_name) {
+            debug!(
+                "Found module {} with {} functions",
+                import_name,
+                compiled_mod.program.functions.len()
+            );
+            imported_programs.push(compiled_mod.program.clone());
+        } else {
+            debug!("Module {} not found in registry", import_name);
+        }
+    }
+    debug!(
+        "Collected {} imported programs for main module",
+        imported_programs.len()
+    );
+
+    // Compile main module with imports
+    let main_result =
+        compile_source_with_imports(&source, module_name, &context, options, &imported_programs)?;
+
+    // Create build directory for object files (in current directory)
+    let build_dir = PathBuf::from("build");
+    std::fs::create_dir_all(&build_dir)
+        .map_err(|e| format!("Failed to create build directory: {}", e))?;
+
+    debug!("Using build directory: {}", build_dir.display());
+
+    // Create temporary directory for intermediate bitcode files
     let temp_dir = std::env::temp_dir().join(format!(
         "typepython_build_{}_{}",
         std::process::id(),
@@ -299,25 +410,55 @@ pub fn compile_and_link_with_modules(
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Failed to create temp directory: {}", e))?;
 
-    // Write all module bitcode files
-    let mut bitcode_files = registry.write_all_bitcode(&temp_dir)?;
+    let mut object_files = Vec::new();
 
-    // Write main module bitcode
-    let main_bc = temp_dir.join(format!("{}.bc", module_name));
-    write_bitcode(&main_result.codegen, &main_bc)?;
-    bitcode_files.push(main_bc);
+    // Compile all imported modules to .o files
+    for (mod_name, compiled_mod) in registry.modules() {
+        let bc_path = temp_dir.join(format!("{}.bc", mod_name.replace(".", "_")));
+        let obj_path = build_dir.join(format!("{}.o", mod_name.replace(".", "_")));
 
-    // Always compile and include builtin module
-    let builtin_bc = registry.compile_builtin(&temp_dir)?;
-    bitcode_files.push(builtin_bc);
+        // Write bitcode
+        compiled_mod
+            .codegen
+            .get_module()
+            .write_bitcode_to_path(&bc_path);
+        debug!(
+            "Wrote bitcode for module '{}': {}",
+            mod_name,
+            bc_path.display()
+        );
 
-    // Link all bitcode files
-    link_bitcode_files(&bitcode_files, output_path)?;
+        // Compile to LTO object file
+        compile_bitcode_to_lto_object(&bc_path, &obj_path)?;
+        object_files.push(obj_path);
 
-    // Clean up temporary files
-    for bc_file in &bitcode_files {
-        let _ = std::fs::remove_file(bc_file);
+        // Clean up temporary bitcode
+        let _ = std::fs::remove_file(&bc_path);
     }
+
+    // Compile main module to .o file
+    let main_bc = temp_dir.join(format!("{}.bc", module_name));
+    let main_obj = build_dir.join(format!("{}.o", module_name));
+    write_bitcode(&main_result.codegen, &main_bc)?;
+    debug!("Wrote main module bitcode: {}", main_bc.display());
+    compile_bitcode_to_lto_object(&main_bc, &main_obj)?;
+    object_files.push(main_obj);
+    let _ = std::fs::remove_file(&main_bc);
+
+    // Compile builtin module to .o file
+    let builtin_bc = registry.compile_builtin(&temp_dir)?;
+    let builtin_obj = build_dir.join("builtin.o");
+    compile_bitcode_to_lto_object(&builtin_bc, &builtin_obj)?;
+    object_files.push(builtin_obj);
+    let _ = std::fs::remove_file(&builtin_bc);
+
+    // Link all object files with LTO
+    link_object_files(&object_files, output_path)?;
+
+    debug!(
+        "Build complete! Object files preserved in {}",
+        build_dir.display()
+    );
 
     Ok(())
 }
