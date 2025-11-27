@@ -1,5 +1,4 @@
 FROM ubuntu:24.04
-
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install common dependencies and build tools
@@ -10,10 +9,14 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \
+    libzstd-dev \
     lldb \
     wget \
     software-properties-common \
     gnupg \
+    python3 \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install LLVM 21 for Inkwell
@@ -37,4 +40,4 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Verify installation
-RUN rustc --version && cargo --version
+RUN rustc --version && cargo --version && python3 --version
