@@ -13,8 +13,14 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub imports: Vec<Import>,
     pub functions: Vec<Function>,
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Import {
+    pub module_path: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

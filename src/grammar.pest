@@ -25,6 +25,8 @@ OR     = { "or" ~ kw_boundary }
 NOT    = { "not" ~ kw_boundary }
 TRUE   = { "True" ~ kw_boundary }
 FALSE  = { "False" ~ kw_boundary }
+IMPORT = { "import" ~ kw_boundary }
+FROM   = { "from" ~ kw_boundary }
 
 // --- Type keywords (Updated with boundaries) ---
 INT_TYPE   = { "int" ~ kw_boundary }
@@ -36,7 +38,7 @@ NONE_TYPE  = { "None" ~ kw_boundary }
 // All keywords (for identifier exclusion)
 keyword = {
     IF | ELIF | ELSE | WHILE | DEF | RETURN | PASS |
-    AND | OR | NOT | TRUE | FALSE |
+    AND | OR | NOT | TRUE | FALSE | IMPORT | FROM |
     INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | NONE_TYPE
 }
 
@@ -69,12 +71,23 @@ COMMA = { "," }
 ARROW = { "->" }
 LPAREN = { "(" }
 RPAREN = { ")" }
+DOT = { "." }
+
+// ============================================================================
+// Module and Import
+// ============================================================================
+
+// Module path: e.g., "math", "utils.helpers", "builtin"
+module_path = { ID ~ (DOT ~ ID)* }
+
+// Import statement: import module_path
+import_stmt = { IMPORT ~ WS+ ~ module_path ~ NEWLINE }
 
 // ============================================================================
 // Program Structure
 // ============================================================================
 
-program = { SOI ~ (NEWLINE | func_decl | statement)* ~ EOI }
+program = { SOI ~ (NEWLINE | import_stmt | func_decl | statement)* ~ EOI }
 
 // ============================================================================
 // Statements

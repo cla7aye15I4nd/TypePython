@@ -10,5 +10,6 @@ pub use pest::Parser;
 // Public modules - now organized in folders
 pub mod ast;
 pub mod codegen;
+pub mod module;
 pub mod pipeline;
 pub mod preprocessor;

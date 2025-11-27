@@ -3,6 +3,7 @@ use crate::Rule;
 use pest::iterators::{Pair, Pairs};
 
 pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
+    let mut imports = Vec::new();
     let mut functions = Vec::new();
     let mut statements = Vec::new();
 
@@ -11,6 +12,7 @@ pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
         if program_pair.as_rule() == Rule::program {
             for pair in program_pair.into_inner() {
                 match pair.as_rule() {
+                    Rule::import_stmt => imports.push(build_import(pair)),
                     Rule::func_decl => functions.push(build_function(pair)),
                     Rule::statement => statements.push(build_statement(pair)),
                     Rule::EOI | Rule::NEWLINE => {}
@@ -21,9 +23,35 @@ pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
     }
 
     Program {
+        imports,
         functions,
         statements,
     }
+}
+
+fn build_import(pair: Pair<Rule>) -> Import {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::IMPORT);
+
+    let module_path_pair = inner.next().unwrap();
+    assert_eq!(module_path_pair.as_rule(), Rule::module_path);
+
+    let module_path = build_module_path(module_path_pair);
+
+    assert_eq!(inner.next(), None);
+
+    Import { module_path }
+}
+
+fn build_module_path(pair: Pair<Rule>) -> Vec<String> {
+    pair.into_inner()
+        .filter(|p| p.as_rule() != Rule::DOT)
+        .map(|id| {
+            assert_eq!(id.as_rule(), Rule::ID);
+            id.as_str().to_string()
+        })
+        .collect()
 }
 
 fn build_function(pair: Pair<Rule>) -> Function {
