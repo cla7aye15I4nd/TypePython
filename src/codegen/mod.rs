@@ -811,6 +811,11 @@ impl<'ctx> CodeGen<'ctx> {
             return self.generate_print_call(args);
         }
 
+        // Handle Python built-in math functions
+        if let Some(result) = self.try_generate_builtin_math_call(name, args)? {
+            return Ok(result);
+        }
+
         // Determine the module and function name, then lazily declare if needed
         let function = if name.contains('.') {
             // Qualified call: module.function
@@ -919,6 +924,401 @@ impl<'ctx> CodeGen<'ctx> {
                 .into(),
         ))
     }
+
+    /// Helper to extract int result from a call site
+    fn extract_int_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+        match call_site.as_any_value_enum() {
+            inkwell::values::AnyValueEnum::IntValue(iv) => Ok(PyValue::int(iv.into())),
+            _ => Err("Expected int return value".to_string()),
+        }
+    }
+
+    /// Helper to extract float result from a call site
+    fn extract_float_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+        match call_site.as_any_value_enum() {
+            inkwell::values::AnyValueEnum::FloatValue(fv) => Ok(PyValue::float(fv.into())),
+            _ => Err("Expected float return value".to_string()),
+        }
+    }
+
+    /// Try to generate code for Python built-in math functions
+    /// Returns Some(result) if the function is a builtin, None if it should be handled as a regular call
+    fn try_generate_builtin_math_call(
+        &mut self,
+        name: &str,
+        args: &[Expression],
+    ) -> Result<Option<PyValue<'ctx>>, String> {
+        match name {
+            "abs" => {
+                if args.len() != 1 {
+                    return Err("abs() takes exactly one argument".to_string());
+                }
+                let val = self.evaluate_expression(&args[0])?;
+                let result = match &val.ty {
+                    PyType::Int(_) => {
+                        let abs_fn = self.get_or_declare_builtin_function("abs_int");
+                        let call = self
+                            .builder
+                            .build_call(abs_fn, &[val.value.into()], "abs")
+                            .unwrap();
+                        self.extract_int_call_result(call)?
+                    }
+                    PyType::Float(_) => {
+                        let abs_fn = self.get_or_declare_builtin_function("abs_float");
+                        let call = self
+                            .builder
+                            .build_call(abs_fn, &[val.value.into()], "abs")
+                            .unwrap();
+                        self.extract_float_call_result(call)?
+                    }
+                    PyType::Bool(_) => {
+                        // abs(bool) -> int (0 or 1)
+                        let int_val = self
+                            .builder
+                            .build_int_z_extend(
+                                val.value.into_int_value(),
+                                self.context.i64_type(),
+                                "btoi",
+                            )
+                            .unwrap();
+                        PyValue::int(int_val.into())
+                    }
+                    _ => return Err("abs() argument must be a number".to_string()),
+                };
+                Ok(Some(result))
+            }
+
+            "round" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err("round() takes 1 or 2 arguments".to_string());
+                }
+                let val = self.evaluate_expression(&args[0])?;
+
+                if args.len() == 1 {
+                    // round(x) - returns int
+                    let result = match &val.ty {
+                        PyType::Int(_) => val, // Already an int
+                        PyType::Float(_) => {
+                            let round_fn = self.get_or_declare_builtin_function("round_float");
+                            let call = self
+                                .builder
+                                .build_call(round_fn, &[val.value.into()], "round")
+                                .unwrap();
+                            self.extract_int_call_result(call)?
+                        }
+                        PyType::Bool(_) => {
+                            let int_val = self
+                                .builder
+                                .build_int_z_extend(
+                                    val.value.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap();
+                            PyValue::int(int_val.into())
+                        }
+                        _ => return Err("round() argument must be a number".to_string()),
+                    };
+                    Ok(Some(result))
+                } else {
+                    // round(x, ndigits) - returns float
+                    let ndigits = self.evaluate_expression(&args[1])?;
+                    let ndigits_int = match &ndigits.ty {
+                        PyType::Int(_) => ndigits.value,
+                        PyType::Bool(_) => self
+                            .builder
+                            .build_int_z_extend(
+                                ndigits.value.into_int_value(),
+                                self.context.i64_type(),
+                                "btoi",
+                            )
+                            .unwrap()
+                            .into(),
+                        _ => return Err("round() ndigits must be an integer".to_string()),
+                    };
+
+                    let val_float = match &val.ty {
+                        PyType::Float(_) => val.value,
+                        PyType::Int(_) => self
+                            .builder
+                            .build_signed_int_to_float(
+                                val.value.into_int_value(),
+                                self.context.f64_type(),
+                                "itof",
+                            )
+                            .unwrap()
+                            .into(),
+                        PyType::Bool(_) => {
+                            let int_val = self
+                                .builder
+                                .build_int_z_extend(
+                                    val.value.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap();
+                            self.builder
+                                .build_signed_int_to_float(int_val, self.context.f64_type(), "itof")
+                                .unwrap()
+                                .into()
+                        }
+                        _ => return Err("round() argument must be a number".to_string()),
+                    };
+
+                    let round_fn = self.get_or_declare_builtin_function("round_float_ndigits");
+                    let call = self
+                        .builder
+                        .build_call(round_fn, &[val_float.into(), ndigits_int.into()], "round")
+                        .unwrap();
+                    Ok(Some(self.extract_float_call_result(call)?))
+                }
+            }
+
+            "min" => {
+                if args.len() != 2 {
+                    return Err("min() currently supports exactly 2 arguments".to_string());
+                }
+                let a = self.evaluate_expression(&args[0])?;
+                let b = self.evaluate_expression(&args[1])?;
+
+                // Coerce to common type
+                let (op_type, a_coerced, b_coerced) =
+                    self.coerce_operands_for_binary_op(&a.ty, &b.ty, a.value, b.value)?;
+
+                let result = match &op_type {
+                    PyType::Int(_) | PyType::Bool(_) => {
+                        let a_int = if matches!(&op_type, PyType::Bool(_)) {
+                            self.builder
+                                .build_int_z_extend(
+                                    a_coerced.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap()
+                                .into()
+                        } else {
+                            a_coerced
+                        };
+                        let b_int = if matches!(&op_type, PyType::Bool(_)) {
+                            self.builder
+                                .build_int_z_extend(
+                                    b_coerced.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap()
+                                .into()
+                        } else {
+                            b_coerced
+                        };
+                        let min_fn = self.get_or_declare_builtin_function("min_int");
+                        let call = self
+                            .builder
+                            .build_call(min_fn, &[a_int.into(), b_int.into()], "min")
+                            .unwrap();
+                        self.extract_int_call_result(call)?
+                    }
+                    PyType::Float(_) => {
+                        let min_fn = self.get_or_declare_builtin_function("min_float");
+                        let call = self
+                            .builder
+                            .build_call(min_fn, &[a_coerced.into(), b_coerced.into()], "min")
+                            .unwrap();
+                        self.extract_float_call_result(call)?
+                    }
+                    _ => return Err("min() arguments must be numbers".to_string()),
+                };
+                Ok(Some(result))
+            }
+
+            "max" => {
+                if args.len() != 2 {
+                    return Err("max() currently supports exactly 2 arguments".to_string());
+                }
+                let a = self.evaluate_expression(&args[0])?;
+                let b = self.evaluate_expression(&args[1])?;
+
+                // Coerce to common type
+                let (op_type, a_coerced, b_coerced) =
+                    self.coerce_operands_for_binary_op(&a.ty, &b.ty, a.value, b.value)?;
+
+                let result = match &op_type {
+                    PyType::Int(_) | PyType::Bool(_) => {
+                        let a_int = if matches!(&op_type, PyType::Bool(_)) {
+                            self.builder
+                                .build_int_z_extend(
+                                    a_coerced.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap()
+                                .into()
+                        } else {
+                            a_coerced
+                        };
+                        let b_int = if matches!(&op_type, PyType::Bool(_)) {
+                            self.builder
+                                .build_int_z_extend(
+                                    b_coerced.into_int_value(),
+                                    self.context.i64_type(),
+                                    "btoi",
+                                )
+                                .unwrap()
+                                .into()
+                        } else {
+                            b_coerced
+                        };
+                        let max_fn = self.get_or_declare_builtin_function("max_int");
+                        let call = self
+                            .builder
+                            .build_call(max_fn, &[a_int.into(), b_int.into()], "max")
+                            .unwrap();
+                        self.extract_int_call_result(call)?
+                    }
+                    PyType::Float(_) => {
+                        let max_fn = self.get_or_declare_builtin_function("max_float");
+                        let call = self
+                            .builder
+                            .build_call(max_fn, &[a_coerced.into(), b_coerced.into()], "max")
+                            .unwrap();
+                        self.extract_float_call_result(call)?
+                    }
+                    _ => return Err("max() arguments must be numbers".to_string()),
+                };
+                Ok(Some(result))
+            }
+
+            "pow" => {
+                if args.len() < 2 || args.len() > 3 {
+                    return Err("pow() takes 2 or 3 arguments".to_string());
+                }
+                let base = self.evaluate_expression(&args[0])?;
+                let exp = self.evaluate_expression(&args[1])?;
+
+                if args.len() == 3 {
+                    // pow(base, exp, mod) - modular exponentiation (integers only)
+                    let modulo = self.evaluate_expression(&args[2])?;
+
+                    // All arguments must be integers for modular exponentiation
+                    let base_int = match &base.ty {
+                        PyType::Int(_) => base.value,
+                        PyType::Bool(_) => self
+                            .builder
+                            .build_int_z_extend(
+                                base.value.into_int_value(),
+                                self.context.i64_type(),
+                                "btoi",
+                            )
+                            .unwrap()
+                            .into(),
+                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
+                    };
+                    let exp_int = match &exp.ty {
+                        PyType::Int(_) => exp.value,
+                        PyType::Bool(_) => self
+                            .builder
+                            .build_int_z_extend(
+                                exp.value.into_int_value(),
+                                self.context.i64_type(),
+                                "btoi",
+                            )
+                            .unwrap()
+                            .into(),
+                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
+                    };
+                    let mod_int = match &modulo.ty {
+                        PyType::Int(_) => modulo.value,
+                        PyType::Bool(_) => self
+                            .builder
+                            .build_int_z_extend(
+                                modulo.value.into_int_value(),
+                                self.context.i64_type(),
+                                "btoi",
+                            )
+                            .unwrap()
+                            .into(),
+                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
+                    };
+
+                    let pow_mod_fn = self.get_or_declare_builtin_function("pow_int_mod");
+                    let call = self
+                        .builder
+                        .build_call(
+                            pow_mod_fn,
+                            &[base_int.into(), exp_int.into(), mod_int.into()],
+                            "pow",
+                        )
+                        .unwrap();
+                    Ok(Some(self.extract_int_call_result(call)?))
+                } else {
+                    // pow(base, exp) - same as ** operator
+                    // Coerce to common type
+                    let (op_type, base_coerced, exp_coerced) = self
+                        .coerce_operands_for_binary_op(&base.ty, &exp.ty, base.value, exp.value)?;
+
+                    let result = match &op_type {
+                        PyType::Int(_) | PyType::Bool(_) => {
+                            let base_int = if matches!(&op_type, PyType::Bool(_)) {
+                                self.builder
+                                    .build_int_z_extend(
+                                        base_coerced.into_int_value(),
+                                        self.context.i64_type(),
+                                        "btoi",
+                                    )
+                                    .unwrap()
+                                    .into()
+                            } else {
+                                base_coerced
+                            };
+                            let exp_int = if matches!(&op_type, PyType::Bool(_)) {
+                                self.builder
+                                    .build_int_z_extend(
+                                        exp_coerced.into_int_value(),
+                                        self.context.i64_type(),
+                                        "btoi",
+                                    )
+                                    .unwrap()
+                                    .into()
+                            } else {
+                                exp_coerced
+                            };
+                            let pow_fn = self.get_or_declare_builtin_function("pow_int");
+                            let call = self
+                                .builder
+                                .build_call(pow_fn, &[base_int.into(), exp_int.into()], "pow")
+                                .unwrap();
+                            self.extract_int_call_result(call)?
+                        }
+                        PyType::Float(_) => {
+                            let pow_fn = self.get_or_declare_builtin_function("pow_float");
+                            let call = self
+                                .builder
+                                .build_call(
+                                    pow_fn,
+                                    &[base_coerced.into(), exp_coerced.into()],
+                                    "pow",
+                                )
+                                .unwrap();
+                            self.extract_float_call_result(call)?
+                        }
+                        _ => return Err("pow() arguments must be numbers".to_string()),
+                    };
+                    Ok(Some(result))
+                }
+            }
+
+            _ => Ok(None), // Not a builtin math function
+        }
+    }
+
     pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
         match ty {
             Type::Int => self.context.i64_type().into(),

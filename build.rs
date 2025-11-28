@@ -18,6 +18,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let runtime_dir = manifest_dir.join("src/runtime");
+    let builtins_dir = runtime_dir.join("builtins");
     let build_dir = runtime_dir.join("build");
 
     fs::create_dir_all(&build_dir).expect("Failed to create build directory");
@@ -28,18 +29,17 @@ fn main() {
     let llvm_nm = format!("{}/bin/llvm-nm", llvm_prefix);
     let llvm_dis = format!("{}/bin/llvm-dis", llvm_prefix);
 
-    // Discover modules by scanning src/runtime/*/
+    // Discover modules by scanning src/runtime/builtins/*.c
     let mut modules: Vec<String> = Vec::new();
-    if let Ok(entries) = fs::read_dir(&runtime_dir) {
+    if let Ok(entries) = fs::read_dir(&builtins_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                let dir_name = path.file_name().unwrap().to_string_lossy().to_string();
-                if dir_name != "build" && !dir_name.starts_with('.') {
-                    let c_file = path.join(format!("{}.c", dir_name));
-                    if c_file.exists() {
-                        modules.push(dir_name);
-                        println!("cargo:rerun-if-changed={}", c_file.display());
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext == "c" {
+                        let module_name = path.file_stem().unwrap().to_string_lossy().to_string();
+                        modules.push(module_name);
+                        println!("cargo:rerun-if-changed={}", path.display());
                     }
                 }
             }
@@ -53,7 +53,7 @@ fn main() {
     let mut all_symbols: Vec<String> = Vec::new();
 
     for module in &modules {
-        let source_path = runtime_dir.join(module).join(format!("{}.c", module));
+        let source_path = builtins_dir.join(format!("{}.c", module));
         let temp_object = temp_dir.join(format!("{}.o", module));
 
         let status = Command::new(&clang)
@@ -100,7 +100,7 @@ fn main() {
     let mut all_functions: HashMap<String, Vec<BuiltinFunction>> = HashMap::new();
 
     for module in &modules {
-        let source_path = runtime_dir.join(module).join(format!("{}.c", module));
+        let source_path = builtins_dir.join(format!("{}.c", module));
         let object_path = build_dir.join(format!("{}.o", module));
 
         let mut cmd = Command::new(&clang);
@@ -164,6 +164,8 @@ fn is_stdlib_symbol(symbol: &str) -> bool {
             | "floor"
             | "pow"
             | "fmod"
+            | "fabs"
+            | "round"
     )
 }
 

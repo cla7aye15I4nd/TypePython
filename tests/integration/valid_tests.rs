@@ -433,3 +433,12 @@ test_case!(
     test_namespace_test,
     "tests/fixtures/valid/modules/namespace_test/main.py"
 );
+
+// ============================================================================
+// Builtin Functions Tests
+// ============================================================================
+
+test_case!(
+    test_math_builtins,
+    "tests/fixtures/valid/builtins/math_builtins.py"
+);
