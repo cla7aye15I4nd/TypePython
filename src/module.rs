@@ -52,16 +52,24 @@ pub struct ModuleRegistry<'ctx> {
     _context: &'ctx Context,
     /// Root paths for all module
     root: PathBuf,
+    /// Preprocessed module data: map of file paths to (module_name, program, imported_symbols)
+    pub module_data: HashMap<PathBuf, PreprocessedModule>,
 }
 
 impl<'ctx> ModuleRegistry<'ctx> {
-    /// Create a new module registry
-    pub fn new(context: &'ctx Context, root: PathBuf) -> Self {
-        ModuleRegistry {
+    /// Create a new module registry and preprocess all modules starting from entry_path
+    pub fn new(context: &'ctx Context, root: PathBuf, entry_path: &Path) -> Result<Self, String> {
+        let mut registry = ModuleRegistry {
             modules: HashMap::new(),
             _context: context,
             root,
-        }
+            module_data: HashMap::new(),
+        };
+
+        // Automatically preprocess all modules
+        registry.module_data = registry.preprocess_modules(entry_path)?;
+
+        Ok(registry)
     }
 
     /// Generate a module name from a file path
@@ -347,12 +355,7 @@ impl<'ctx> ModuleRegistry<'ctx> {
 
     /// Compile a C module directly to LTO object file
     /// Returns the path to the generated object file
-    pub fn compile_c_module(
-        &self,
-        c_path: &Path,
-        _output_dir: &Path,
-        cache_dir: &Path,
-    ) -> Result<PathBuf, String> {
+    pub fn compile_c_module(&self, c_path: &Path, cache_dir: &Path) -> Result<PathBuf, String> {
         let module_name = c_path
             .file_stem()
             .and_then(|s| s.to_str())
