@@ -72,6 +72,26 @@ test_case!(
 test_case!(test_if_else, "tests/fixtures/valid/basic/if_else.py");
 test_case!(test_while_loop, "tests/fixtures/valid/basic/while_loop.py");
 test_case!(
+    test_break_statement,
+    "tests/fixtures/valid/basic/break_statement.py"
+);
+test_case!(
+    test_continue_statement,
+    "tests/fixtures/valid/basic/continue_statement.py"
+);
+test_case!(
+    test_power_operator,
+    "tests/fixtures/valid/basic/power_operator.py"
+);
+test_case!(
+    test_floor_division,
+    "tests/fixtures/valid/basic/floor_division.py"
+);
+test_case!(
+    test_identity_operators,
+    "tests/fixtures/valid/basic/identity_operators.py"
+);
+test_case!(
     test_sum_numbers,
     "tests/fixtures/valid/basic/sum_numbers.py"
 );

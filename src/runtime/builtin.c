@@ -37,9 +37,13 @@ void tpy_print_newline(void) {
     printf("\n");
 }
 
-// Power function
+// Math functions
 double tpy_pow(double base, double exponent) {
     return pow(base, exponent);
+}
+
+double tpy_floor(double value) {
+    return floor(value);
 }
 
 // Integer power function (returns int)

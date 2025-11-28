@@ -2,6 +2,7 @@ mod visitor;
 
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -10,6 +11,12 @@ use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
 use std::collections::HashMap;
+
+/// Context for tracking loop control flow (break/continue)
+pub(crate) struct LoopContext<'ctx> {
+    pub(crate) continue_block: BasicBlock<'ctx>,
+    pub(crate) break_block: BasicBlock<'ctx>,
+}
 
 pub struct CodeGen<'ctx> {
     pub(crate) context: &'ctx Context,
@@ -23,6 +30,8 @@ pub struct CodeGen<'ctx> {
     pub(crate) imported_symbols: HashMap<String, String>,
     /// Map of module_name -> Program for lazy function declaration
     pub(crate) module_data: HashMap<String, Program>,
+    /// Stack of loop contexts for break/continue statements
+    pub(crate) loop_stack: Vec<LoopContext<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -63,6 +72,7 @@ impl<'ctx> CodeGen<'ctx> {
             module_name: module_name.to_string(),
             imported_symbols: HashMap::new(),
             module_data: HashMap::new(),
+            loop_stack: Vec::new(),
         }
     }
 
@@ -199,6 +209,10 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "tpy_pow_int" => {
                 let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_floor" => {
+                let fn_type = f64_type.fn_type(&[f64_type.into()], false);
                 self.module.add_function(name, fn_type, None)
             }
             _ => panic!("Unknown builtin function: {}", name),
@@ -426,9 +440,20 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Body block
         self.builder.position_at_end(body_bb);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
         for stmt in body {
             self.visit_statement(stmt)?;
         }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
         if !self.is_block_terminated() {
             self.builder.build_unconditional_branch(cond_bb).unwrap();
         }
@@ -541,18 +566,70 @@ impl<'ctx> CodeGen<'ctx> {
                 BinaryOp::And | BinaryOp::Or => {
                     return Err("Logical operators not supported on floats".to_string());
                 }
-                BinaryOp::FloorDiv
-                | BinaryOp::Pow
-                | BinaryOp::BitOr
+                BinaryOp::Pow => {
+                    // Call tpy_pow builtin for float power
+                    let pow_fn = self.get_or_declare_builtin_function("tpy_pow");
+                    let call_site = self
+                        .builder
+                        .build_call(
+                            pow_fn,
+                            &[lhs_float.into(), rhs_float.into()],
+                            "fpow",
+                        )
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
+                        return Ok(fv.into());
+                    } else {
+                        return Err("tpy_pow did not return a float value".to_string());
+                    }
+                }
+                BinaryOp::FloorDiv => {
+                    // Floor division for floats: divide then floor
+                    let div_result = self
+                        .builder
+                        .build_float_div(lhs_float, rhs_float, "fdiv")
+                        .unwrap();
+                    // Call floor function from math library
+                    let floor_fn = self.get_or_declare_builtin_function("tpy_floor");
+                    let call_site = self
+                        .builder
+                        .build_call(floor_fn, &[div_result.into()], "floor")
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
+                        return Ok(fv.into());
+                    } else {
+                        return Err("tpy_floor did not return a float value".to_string());
+                    }
+                }
+                BinaryOp::Is => {
+                    // Identity comparison for floats - compare bit patterns
+                    let cmp = self
+                        .builder
+                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "is")
+                        .unwrap();
+                    return Ok(cmp.into());
+                }
+                BinaryOp::IsNot => {
+                    // Inverse identity comparison
+                    let cmp = self
+                        .builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "isnot")
+                        .unwrap();
+                    return Ok(cmp.into());
+                }
+                BinaryOp::BitOr
                 | BinaryOp::BitXor
                 | BinaryOp::BitAnd
                 | BinaryOp::LShift
-                | BinaryOp::RShift
-                | BinaryOp::In
-                | BinaryOp::NotIn
-                | BinaryOp::Is
-                | BinaryOp::IsNot => {
-                    return Err(format!("Operator {:?} not supported on floats", op));
+                | BinaryOp::RShift => {
+                    return Err(format!("Bitwise operator {:?} not supported on floats", op));
+                }
+                BinaryOp::In | BinaryOp::NotIn => {
+                    return Err(format!("Membership operator {:?} requires container support", op));
                 }
             };
             Ok(result.into())
@@ -631,8 +708,43 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_right_shift(lhs_int, rhs_int, true, "rshift")
                     .unwrap(),
-                BinaryOp::Pow | BinaryOp::In | BinaryOp::NotIn | BinaryOp::Is | BinaryOp::IsNot => {
-                    return Err(format!("Operator {:?} not yet implemented", op));
+                BinaryOp::Pow => {
+                    // Call tpy_pow_int builtin for integer power
+                    let pow_fn = self.get_or_declare_builtin_function("tpy_pow_int");
+                    let call_site = self
+                        .builder
+                        .build_call(
+                            pow_fn,
+                            &[lhs_int.into(), rhs_int.into()],
+                            "ipow",
+                        )
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
+                        return Ok(iv.into());
+                    } else {
+                        return Err("tpy_pow_int did not return an int value".to_string());
+                    }
+                }
+                BinaryOp::Is => {
+                    // Identity comparison for integers - compare values
+                    let cmp = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "is")
+                        .unwrap();
+                    return Ok(cmp.into());
+                }
+                BinaryOp::IsNot => {
+                    // Inverse identity comparison for integers
+                    let cmp = self
+                        .builder
+                        .build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "isnot")
+                        .unwrap();
+                    return Ok(cmp.into());
+                }
+                BinaryOp::In | BinaryOp::NotIn => {
+                    return Err(format!("Membership operator {:?} requires container support", op));
                 }
             };
             Ok(result.into())

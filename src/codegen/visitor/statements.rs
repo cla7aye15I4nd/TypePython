@@ -170,11 +170,25 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_break_impl(&mut self) -> Result<(), String> {
-        Err("Break statements are not yet supported in code generation".to_string())
+        if let Some(loop_ctx) = self.loop_stack.last() {
+            self.builder
+                .build_unconditional_branch(loop_ctx.break_block)
+                .unwrap();
+            Ok(())
+        } else {
+            Err("Break statement outside of loop".to_string())
+        }
     }
 
     pub(crate) fn visit_continue_impl(&mut self) -> Result<(), String> {
-        Err("Continue statements are not yet supported in code generation".to_string())
+        if let Some(loop_ctx) = self.loop_stack.last() {
+            self.builder
+                .build_unconditional_branch(loop_ctx.continue_block)
+                .unwrap();
+            Ok(())
+        } else {
+            Err("Continue statement outside of loop".to_string())
+        }
     }
 
     pub(crate) fn visit_if_impl(
