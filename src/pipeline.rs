@@ -102,40 +102,30 @@ pub fn compile(
         // For Python modules, compile to LLVM IR
         debug!("Compiling module '{}' to LLVM IR", module_name);
 
-        // Collect imported programs with their module names
-        let mut imported_modules_data = Vec::new();
-        for imported_symbol in imported_symbols.values() {
+        // Build symbol map and module data map for lazy function declaration
+        let mut imported_symbols_map = HashMap::new();
+        let mut module_data_map = HashMap::new();
+
+        for (local_name, imported_symbol) in imported_symbols.iter() {
             if let crate::module::ImportedSymbol::Module(real_module_name) = imported_symbol {
-                // Find the imported module's program
-                for (other_module_name, other_program, _) in module_registry.module_data.values() {
-                    if other_module_name == real_module_name {
-                        imported_modules_data
-                            .push((real_module_name.clone(), other_program.clone()));
-                        break;
-                    }
+                // Add to symbols map for name mangling
+                imported_symbols_map.insert(local_name.clone(), real_module_name.clone());
+
+                // Find the imported module's program and add to module_data
+                if let Some((_, other_program, _)) = module_registry
+                    .module_data
+                    .values()
+                    .find(|(other_module_name, _, _)| other_module_name == real_module_name)
+                {
+                    module_data_map.insert(real_module_name.clone(), other_program.clone());
                 }
             }
         }
 
         // Generate LLVM IR for this module
         let mut codegen = CodeGen::new(&context, module_name);
-
-        // Set imported symbols for name mangling
-        let imported_symbols_map: HashMap<String, String> = imported_symbols
-            .iter()
-            .filter_map(|(local_name, symbol)| {
-                if let crate::module::ImportedSymbol::Module(real_name) = symbol {
-                    Some((local_name.clone(), real_name.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
         codegen.set_imported_symbols(imported_symbols_map);
-
-        for (mod_name, imported_prog) in imported_modules_data {
-            codegen.add_imported_module(mod_name, imported_prog);
-        }
+        codegen.set_module_data(module_data_map);
         codegen.generate(program)?;
 
         // Verify LLVM module

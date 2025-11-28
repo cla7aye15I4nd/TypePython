@@ -18,10 +18,11 @@ pub struct CodeGen<'ctx> {
     pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
-    pub(crate) imported_modules: Vec<(String, Program)>, // (module_name, program)
     pub(crate) module_name: String,
     /// Map of imported symbols: local_name -> real_module_name (for name mangling)
     pub(crate) imported_symbols: HashMap<String, String>,
+    /// Map of module_name -> Program for lazy function declaration
+    pub(crate) module_data: HashMap<String, Program>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -59,9 +60,9 @@ impl<'ctx> CodeGen<'ctx> {
             variables: HashMap::new(),
             current_function: None,
             strings: HashMap::new(),
-            imported_modules: Vec::new(),
             module_name: module_name.to_string(),
             imported_symbols: HashMap::new(),
+            module_data: HashMap::new(),
         }
     }
 
@@ -80,16 +81,8 @@ impl<'ctx> CodeGen<'ctx> {
         format!("{}_{}", clean_module, function_name)
     }
 
-    pub fn add_imported_module(&mut self, module_name: String, program: Program) {
-        log::debug!(
-            "Adding imported module '{}' with {} functions",
-            module_name,
-            program.functions.len()
-        );
-        for func in &program.functions {
-            log::debug!("  - {}", func.name);
-        }
-        self.imported_modules.push((module_name, program));
+    pub fn set_module_data(&mut self, module_data: HashMap<String, Program>) {
+        self.module_data = module_data;
     }
 
     pub fn get_module(&self) -> &Module<'ctx> {
@@ -154,53 +147,56 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn declare_imported_functions(&mut self, _program: &Program) -> Result<(), String> {
-        // Collect all functions that need to be declared with their module names
-        let mut functions_to_declare = Vec::new();
-        for (module_name, imported_program) in &self.imported_modules {
-            for func in &imported_program.functions {
-                let mangled_name = self.mangle_function_name(module_name, &func.name);
-                // Only declare if not already defined
-                if self.module.get_function(&mangled_name).is_none() {
-                    functions_to_declare.push((module_name.clone(), func.clone()));
-                }
-            }
-        }
-
-        // Declare all collected functions
-        for (module_name, func) in functions_to_declare {
-            self.declare_imported_function(&module_name, &func)?;
-        }
-
-        Ok(())
-    }
-
-    /// Declare an imported function with its mangled name
-    fn declare_imported_function(
+    /// Lazily declare an external function when needed
+    /// Looks up the function in module_data and declares it if not already declared
+    fn get_or_declare_external_function(
         &mut self,
         module_name: &str,
-        func: &Function,
+        function_name: &str,
     ) -> Result<FunctionValue<'ctx>, String> {
-        let param_types: Vec<BasicMetadataTypeEnum> = func
+        let mangled_name = self.mangle_function_name(module_name, function_name);
+
+        // If already declared, return it
+        if let Some(func) = self.module.get_function(&mangled_name) {
+            return Ok(func);
+        }
+
+        // Look up the function definition in module_data
+        let program = self
+            .module_data
+            .get(module_name)
+            .ok_or_else(|| format!("Module '{}' not found in module_data", module_name))?;
+
+        let func_def = program
+            .functions
+            .iter()
+            .find(|f| f.name == function_name)
+            .ok_or_else(|| {
+                format!(
+                    "Function '{}' not found in module '{}'",
+                    function_name, module_name
+                )
+            })?;
+
+        // Declare the function
+        let param_types: Vec<BasicMetadataTypeEnum> = func_def
             .params
             .iter()
             .map(|p| self.type_to_llvm(&p.param_type).into())
             .collect();
 
-        let fn_type = match func.return_type {
+        let fn_type = match func_def.return_type {
             Type::None => self.context.void_type().fn_type(&param_types, false),
             _ => {
-                let return_type = self.type_to_llvm(&func.return_type);
+                let return_type = self.type_to_llvm(&func_def.return_type);
                 return_type.fn_type(&param_types, false)
             }
         };
 
-        // Mangle function name with the imported module name
-        let mangled_name = self.mangle_function_name(module_name, &func.name);
         let function = self.module.add_function(&mangled_name, fn_type, None);
 
         // Set parameter names
-        for (i, param) in func.params.iter().enumerate() {
+        for (i, param) in func_def.params.iter().enumerate() {
             function
                 .get_nth_param(i as u32)
                 .unwrap()
@@ -594,28 +590,29 @@ impl<'ctx> CodeGen<'ctx> {
             return self.generate_print_call(args);
         }
 
-        // Determine the mangled function name
-        let mangled_name = if name.contains('.') {
+        // Determine the module and function name, then lazily declare if needed
+        let function = if name.contains('.') {
             // Qualified call: module.function
             let parts: Vec<&str> = name.split('.').collect();
             let module_local_name = parts[0];
             let function_name = parts[1];
 
             // Look up the real module name from imported symbols
-            if let Some(real_module_name) = self.imported_symbols.get(module_local_name) {
-                self.mangle_function_name(real_module_name, function_name)
-            } else {
-                return Err(format!("Module {} not found in imports", module_local_name));
-            }
+            let real_module_name = self
+                .imported_symbols
+                .get(module_local_name)
+                .ok_or_else(|| format!("Module {} not found in imports", module_local_name))?
+                .clone();
+
+            // Lazily declare the external function
+            self.get_or_declare_external_function(&real_module_name, function_name)?
         } else {
             // Unqualified call: function - use current module name
-            self.mangle_function_name(&self.module_name, name)
+            let mangled_name = self.mangle_function_name(&self.module_name, name);
+            self.module
+                .get_function(&mangled_name)
+                .ok_or_else(|| format!("Function {} (mangled: {}) not found", name, mangled_name))?
         };
-
-        let function = self
-            .module
-            .get_function(&mangled_name)
-            .ok_or_else(|| format!("Function {} (mangled: {}) not found", name, mangled_name))?;
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {

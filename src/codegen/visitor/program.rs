@@ -9,8 +9,7 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         program: &Program,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        // Declare external functions from imported modules (including builtin)
-        self.declare_imported_functions(program)?;
+        // External functions are now lazily declared when called
 
         // Visit all function declarations first
         for function in &program.functions {
