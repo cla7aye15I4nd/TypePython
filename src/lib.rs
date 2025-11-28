@@ -13,3 +13,4 @@ pub mod codegen;
 pub mod module;
 pub mod pipeline;
 pub mod preprocessor;
+pub mod types;

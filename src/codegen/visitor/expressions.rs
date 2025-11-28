@@ -15,7 +15,10 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(self.context.f64_type().const_float(val).into())
     }
 
-    pub(crate) fn visit_str_lit_impl(&mut self, _val: &str) -> Result<BasicValueEnum<'ctx>, String> {
+    pub(crate) fn visit_str_lit_impl(
+        &mut self,
+        _val: &str,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
         todo!("str type (use bytes instead)")
     }
 

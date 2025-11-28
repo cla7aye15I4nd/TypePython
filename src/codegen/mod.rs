@@ -2,6 +2,7 @@ mod visitor;
 
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
+use crate::types::{infer_type_from_value, TypeCodeGen};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -9,7 +10,6 @@ use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::{FloatPredicate, IntPredicate};
 use std::collections::HashMap;
 
 /// Context for tracking loop control flow (break/continue)
@@ -483,351 +483,122 @@ impl<'ctx> CodeGen<'ctx> {
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
-        // Handle bytes operations (C-style null-terminated byte sequences)
-        if lhs.is_pointer_value() && rhs.is_pointer_value() {
-            match op {
-                BinaryOp::Add => {
-                    // Bytes concatenation - call tpy_strcat builtin
-                    let lhs_ptr = lhs.into_pointer_value();
-                    let rhs_ptr = rhs.into_pointer_value();
-                    let strcat_fn = self.get_or_declare_builtin_function("tpy_strcat");
-                    let call_site = self
-                        .builder
-                        .build_call(strcat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescat")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::PointerValue(pv) = any_val {
-                        return Ok(pv.into());
-                    } else {
-                        return Err("tpy_strcat did not return a pointer value".to_string());
-                    }
-                }
-                BinaryOp::Eq => {
-                    // Bytes equality - call tpy_strcmp builtin
-                    let lhs_ptr = lhs.into_pointer_value();
-                    let rhs_ptr = rhs.into_pointer_value();
-                    let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
-                    let call_site = self
-                        .builder
-                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                        // Convert i64 to i1 (boolean) by truncating
-                        let bool_val = self
-                            .builder
-                            .build_int_truncate(iv, self.context.bool_type(), "to_bool")
-                            .unwrap();
-                        return Ok(bool_val.into());
-                    } else {
-                        return Err("tpy_strcmp did not return an int value".to_string());
-                    }
-                }
-                BinaryOp::Ne => {
-                    // Bytes inequality - call strcmp and negate
-                    let lhs_ptr = lhs.into_pointer_value();
-                    let rhs_ptr = rhs.into_pointer_value();
-                    let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
-                    let call_site = self
-                        .builder
-                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                        // Convert i64 to i1, then negate
-                        let bool_val = self
-                            .builder
-                            .build_int_truncate(iv, self.context.bool_type(), "to_bool")
-                            .unwrap();
-                        let negated = self.builder.build_not(bool_val, "ne").unwrap();
-                        return Ok(negated.into());
-                    } else {
-                        return Err("tpy_strcmp did not return an int value".to_string());
-                    }
-                }
-                _ => {
-                    return Err(format!("Operator {:?} not supported for bytes type", op));
-                }
+        // Infer types from values
+        let lhs_type = infer_type_from_value(&lhs)?;
+        let rhs_type = infer_type_from_value(&rhs)?;
+
+        // Determine the common type for the operation
+        let (op_type, lhs_coerced, rhs_coerced) =
+            self.coerce_operands_for_binary_op(&lhs_type, &rhs_type, lhs, rhs)?;
+
+        // Delegate to the type-specific implementation
+        op_type.binary_op(
+            self.context,
+            &self.builder,
+            &self.module,
+            op,
+            lhs_coerced,
+            rhs_coerced,
+        )
+    }
+
+    /// Coerce operands to a common type for binary operations
+    fn coerce_operands_for_binary_op(
+        &self,
+        lhs_type: &TypeCodeGen,
+        rhs_type: &TypeCodeGen,
+        lhs: BasicValueEnum<'ctx>,
+        rhs: BasicValueEnum<'ctx>,
+    ) -> Result<(TypeCodeGen, BasicValueEnum<'ctx>, BasicValueEnum<'ctx>), String> {
+        use crate::types::{BoolType, BytesType, FloatType, IntType};
+
+        match (lhs_type, rhs_type) {
+            // Same types - no coercion needed
+            (TypeCodeGen::Int(_), TypeCodeGen::Int(_)) => Ok((TypeCodeGen::Int(IntType), lhs, rhs)),
+            (TypeCodeGen::Float(_), TypeCodeGen::Float(_)) => {
+                Ok((TypeCodeGen::Float(FloatType), lhs, rhs))
             }
-        }
+            (TypeCodeGen::Bool(_), TypeCodeGen::Bool(_)) => {
+                Ok((TypeCodeGen::Bool(BoolType), lhs, rhs))
+            }
+            (TypeCodeGen::Bytes(_), TypeCodeGen::Bytes(_)) => {
+                Ok((TypeCodeGen::Bytes(BytesType), lhs, rhs))
+            }
 
-        // Determine if we're working with floats or ints
-        let is_float = lhs.is_float_value() || rhs.is_float_value();
-
-        if is_float {
-            let lhs_float = if lhs.is_float_value() {
-                lhs.into_float_value()
-            } else {
-                self.builder
+            // Int/Float coercion - promote to Float
+            (TypeCodeGen::Int(_), TypeCodeGen::Float(_)) => {
+                let lhs_float = self
+                    .builder
                     .build_signed_int_to_float(
                         lhs.into_int_value(),
                         self.context.f64_type(),
                         "itof",
                     )
-                    .unwrap()
-            };
-
-            let rhs_float = if rhs.is_float_value() {
-                rhs.into_float_value()
-            } else {
-                self.builder
+                    .unwrap();
+                Ok((TypeCodeGen::Float(FloatType), lhs_float.into(), rhs))
+            }
+            (TypeCodeGen::Float(_), TypeCodeGen::Int(_)) => {
+                let rhs_float = self
+                    .builder
                     .build_signed_int_to_float(
                         rhs.into_int_value(),
                         self.context.f64_type(),
                         "itof",
                     )
-                    .unwrap()
-            };
+                    .unwrap();
+                Ok((TypeCodeGen::Float(FloatType), lhs, rhs_float.into()))
+            }
 
-            let result = match op {
-                BinaryOp::Add => self
+            // Bool/Int coercion - promote Bool to Int
+            (TypeCodeGen::Bool(_), TypeCodeGen::Int(_)) => {
+                let lhs_int = self
                     .builder
-                    .build_float_add(lhs_float, rhs_float, "fadd")
-                    .unwrap(),
-                BinaryOp::Sub => self
+                    .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
+                    .unwrap();
+                Ok((TypeCodeGen::Int(IntType), lhs_int.into(), rhs))
+            }
+            (TypeCodeGen::Int(_), TypeCodeGen::Bool(_)) => {
+                let rhs_int = self
                     .builder
-                    .build_float_sub(lhs_float, rhs_float, "fsub")
-                    .unwrap(),
-                BinaryOp::Mul => self
-                    .builder
-                    .build_float_mul(lhs_float, rhs_float, "fmul")
-                    .unwrap(),
-                BinaryOp::Div => self
-                    .builder
-                    .build_float_div(lhs_float, rhs_float, "fdiv")
-                    .unwrap(),
-                BinaryOp::Mod => self
-                    .builder
-                    .build_float_rem(lhs_float, rhs_float, "frem")
-                    .unwrap(),
-                BinaryOp::Eq => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "feq")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Ne => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "fne")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Lt => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OLT, lhs_float, rhs_float, "flt")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Le => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OLE, lhs_float, rhs_float, "fle")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Gt => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OGT, lhs_float, rhs_float, "fgt")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Ge => {
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OGE, lhs_float, rhs_float, "fge")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::And | BinaryOp::Or => {
-                    return Err("Logical operators not supported on floats".to_string());
-                }
-                BinaryOp::Pow => {
-                    // Call tpy_pow builtin for float power
-                    let pow_fn = self.get_or_declare_builtin_function("tpy_pow");
-                    let call_site = self
-                        .builder
-                        .build_call(pow_fn, &[lhs_float.into(), rhs_float.into()], "fpow")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-                        return Ok(fv.into());
-                    } else {
-                        return Err("tpy_pow did not return a float value".to_string());
-                    }
-                }
-                BinaryOp::FloorDiv => {
-                    // Floor division for floats: divide then floor
-                    let div_result = self
-                        .builder
-                        .build_float_div(lhs_float, rhs_float, "fdiv")
-                        .unwrap();
-                    // Call floor function from math library
-                    let floor_fn = self.get_or_declare_builtin_function("tpy_floor");
-                    let call_site = self
-                        .builder
-                        .build_call(floor_fn, &[div_result.into()], "floor")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-                        return Ok(fv.into());
-                    } else {
-                        return Err("tpy_floor did not return a float value".to_string());
-                    }
-                }
-                BinaryOp::Is => {
-                    // Identity comparison for floats - compare bit patterns
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "is")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::IsNot => {
-                    // Inverse identity comparison
-                    let cmp = self
-                        .builder
-                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "isnot")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::BitOr
-                | BinaryOp::BitXor
-                | BinaryOp::BitAnd
-                | BinaryOp::LShift
-                | BinaryOp::RShift => {
-                    return Err(format!("Bitwise operator {:?} not supported on floats", op));
-                }
-                BinaryOp::In | BinaryOp::NotIn => {
-                    return Err(format!(
-                        "Membership operator {:?} requires container support",
-                        op
-                    ));
-                }
-            };
-            Ok(result.into())
-        } else {
-            let lhs_int = lhs.into_int_value();
-            let rhs_int = rhs.into_int_value();
+                    .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
+                    .unwrap();
+                Ok((TypeCodeGen::Int(IntType), lhs, rhs_int.into()))
+            }
 
-            let result = match op {
-                BinaryOp::Add => self.builder.build_int_add(lhs_int, rhs_int, "add").unwrap(),
-                BinaryOp::Sub => self.builder.build_int_sub(lhs_int, rhs_int, "sub").unwrap(),
-                BinaryOp::Mul => self.builder.build_int_mul(lhs_int, rhs_int, "mul").unwrap(),
-                BinaryOp::Div => self
+            // Bool/Float coercion - promote Bool to Float
+            (TypeCodeGen::Bool(_), TypeCodeGen::Float(_)) => {
+                let lhs_int = self
                     .builder
-                    .build_int_signed_div(lhs_int, rhs_int, "div")
-                    .unwrap(),
-                BinaryOp::Mod => self
+                    .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
+                    .unwrap();
+                let lhs_float = self
                     .builder
-                    .build_int_signed_rem(lhs_int, rhs_int, "mod")
-                    .unwrap(),
-                BinaryOp::Eq => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "eq")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Ne => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "ne")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Lt => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::SLT, lhs_int, rhs_int, "lt")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Le => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::SLE, lhs_int, rhs_int, "le")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Gt => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::SGT, lhs_int, rhs_int, "gt")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::Ge => {
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::SGE, lhs_int, rhs_int, "ge")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::And => self.builder.build_and(lhs_int, rhs_int, "and").unwrap(),
-                BinaryOp::Or => self.builder.build_or(lhs_int, rhs_int, "or").unwrap(),
-                BinaryOp::FloorDiv => self
+                    .build_signed_int_to_float(lhs_int, self.context.f64_type(), "itof")
+                    .unwrap();
+                Ok((TypeCodeGen::Float(FloatType), lhs_float.into(), rhs))
+            }
+            (TypeCodeGen::Float(_), TypeCodeGen::Bool(_)) => {
+                let rhs_int = self
                     .builder
-                    .build_int_signed_div(lhs_int, rhs_int, "floordiv")
-                    .unwrap(),
-                BinaryOp::BitOr => self.builder.build_or(lhs_int, rhs_int, "bitor").unwrap(),
-                BinaryOp::BitXor => self.builder.build_xor(lhs_int, rhs_int, "bitxor").unwrap(),
-                BinaryOp::BitAnd => self.builder.build_and(lhs_int, rhs_int, "bitand").unwrap(),
-                BinaryOp::LShift => self
+                    .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
+                    .unwrap();
+                let rhs_float = self
                     .builder
-                    .build_left_shift(lhs_int, rhs_int, "lshift")
-                    .unwrap(),
-                BinaryOp::RShift => self
-                    .builder
-                    .build_right_shift(lhs_int, rhs_int, true, "rshift")
-                    .unwrap(),
-                BinaryOp::Pow => {
-                    // Call tpy_pow_int builtin for integer power
-                    let pow_fn = self.get_or_declare_builtin_function("tpy_pow_int");
-                    let call_site = self
-                        .builder
-                        .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "ipow")
-                        .unwrap();
-                    use inkwell::values::AnyValue;
-                    let any_val = call_site.as_any_value_enum();
-                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                        return Ok(iv.into());
-                    } else {
-                        return Err("tpy_pow_int did not return an int value".to_string());
-                    }
-                }
-                BinaryOp::Is => {
-                    // Identity comparison for integers - compare values
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "is")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::IsNot => {
-                    // Inverse identity comparison for integers
-                    let cmp = self
-                        .builder
-                        .build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "isnot")
-                        .unwrap();
-                    return Ok(cmp.into());
-                }
-                BinaryOp::In | BinaryOp::NotIn => {
-                    return Err(format!(
-                        "Membership operator {:?} requires container support",
-                        op
-                    ));
-                }
-            };
-            Ok(result.into())
+                    .build_signed_int_to_float(rhs_int, self.context.f64_type(), "itof")
+                    .unwrap();
+                Ok((TypeCodeGen::Float(FloatType), lhs, rhs_float.into()))
+            }
+
+            // None type
+            (TypeCodeGen::None(_), TypeCodeGen::None(_)) => {
+                Ok((TypeCodeGen::None(crate::types::NoneType), lhs, rhs))
+            }
+
+            _ => Err(format!(
+                "Incompatible types for binary operation: {:?} and {:?}",
+                std::mem::discriminant(lhs_type),
+                std::mem::discriminant(rhs_type)
+            )),
         }
     }
 
@@ -838,35 +609,9 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         let val = self.evaluate_expression(operand)?;
 
-        match op {
-            UnaryOp::Neg => {
-                if val.is_float_value() {
-                    Ok(self
-                        .builder
-                        .build_float_neg(val.into_float_value(), "fneg")
-                        .unwrap()
-                        .into())
-                } else {
-                    Ok(self
-                        .builder
-                        .build_int_neg(val.into_int_value(), "neg")
-                        .unwrap()
-                        .into())
-                }
-            }
-            UnaryOp::Not => {
-                let int_val = val.into_int_value();
-                Ok(self.builder.build_not(int_val, "not").unwrap().into())
-            }
-            UnaryOp::Pos => {
-                // Unary plus is a no-op
-                Ok(val)
-            }
-            UnaryOp::BitNot => {
-                let int_val = val.into_int_value();
-                Ok(self.builder.build_not(int_val, "bitnot").unwrap().into())
-            }
-        }
+        // Infer type from value and delegate to type-specific implementation
+        let val_type = infer_type_from_value(&val)?;
+        val_type.unary_op(self.context, &self.builder, op, val)
     }
 
     pub(crate) fn generate_call(
@@ -939,45 +684,17 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        // Get or declare runtime print functions from builtin.c
-        let print_int = self.get_or_declare_builtin_function("tpy_print_int");
-        let print_float = self.get_or_declare_builtin_function("tpy_print_float");
-        let print_bool = self.get_or_declare_builtin_function("tpy_print_bool");
-        let print_str = self.get_or_declare_builtin_function("tpy_print_str");
         let print_space = self.get_or_declare_builtin_function("tpy_print_space");
         let print_newline = self.get_or_declare_builtin_function("tpy_print_newline");
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.evaluate_expression(arg)?;
 
-            if val.is_int_value() {
-                let int_val = val.into_int_value();
-                if int_val.get_type().get_bit_width() == 1 {
-                    // Boolean - use tpy_print_bool
-                    self.builder
-                        .build_call(print_bool, &[int_val.into()], "print_bool")
-                        .unwrap();
-                } else {
-                    // Integer - use tpy_print_int
-                    self.builder
-                        .build_call(print_int, &[int_val.into()], "print_int")
-                        .unwrap();
-                }
-            } else if val.is_float_value() {
-                // Float - use tpy_print_float
-                let float_val = val.into_float_value();
-                self.builder
-                    .build_call(print_float, &[float_val.into()], "print_float")
-                    .unwrap();
-            } else if val.is_pointer_value() {
-                // Bytes - use tpy_print_str
-                let ptr_val = val.into_pointer_value();
-                self.builder
-                    .build_call(print_str, &[ptr_val.into()], "print_bytes")
-                    .unwrap();
-            } else {
-                return Err("print() only supports int, float, bool, and bytes types".to_string());
-            }
+            // Infer type and delegate to type-specific print
+            let val_type = infer_type_from_value(&val)?;
+            let print_fn_name = val_type.print_function_name();
+            let print_fn = self.get_or_declare_builtin_function(print_fn_name);
+            val_type.print(&self.builder, print_fn, val)?;
 
             // Print space between arguments (but not after the last one)
             if i < args.len() - 1 {
