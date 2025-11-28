@@ -3,15 +3,16 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <math.h>
 
 void print_int(int64_t value) {
     printf("%ld", (long)value);
 }
 
 void print_float(double value) {
-    // Check if it's a whole number
-    if (value == floor(value) && value >= -9007199254740992.0 && value <= 9007199254740992.0) {
+    // Check if it's a whole number (without using libm's floor)
+    // Cast to int64 and back - if equal, it's a whole number
+    int64_t as_int = (int64_t)value;
+    if ((double)as_int == value && value >= -9007199254740992.0 && value <= 9007199254740992.0) {
         printf("%.1f", value);
     } else {
         // Try minimal precision first, increase until round-trip works

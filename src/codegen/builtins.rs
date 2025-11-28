@@ -14,22 +14,6 @@ pub fn get_builtin_object_path(module_name: &str) -> std::path::PathBuf {
 }
 
 impl BuiltinFunction {
-    /// Convert the return type to an LLVM type
-    pub fn return_type_to_llvm<'ctx>(
-        &self,
-        context: &'ctx inkwell::context::Context,
-    ) -> Option<inkwell::types::BasicTypeEnum<'ctx>> {
-        match self.return_type {
-            BuiltinType::Void => None,
-            BuiltinType::I64 => Some(context.i64_type().into()),
-            BuiltinType::I32 => Some(context.i32_type().into()),
-            BuiltinType::F64 => Some(context.f64_type().into()),
-            BuiltinType::F32 => Some(context.f32_type().into()),
-            BuiltinType::Bool => Some(context.bool_type().into()),
-            BuiltinType::Ptr => Some(context.ptr_type(inkwell::AddressSpace::default()).into()),
-        }
-    }
-
     /// Convert a parameter type to an LLVM type
     pub fn param_type_to_llvm<'ctx>(
         param_type: &BuiltinType,

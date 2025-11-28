@@ -41,9 +41,9 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_none_lit_impl(&mut self) -> Result<PyValue<'ctx>, String> {
-        // Represent None as a null pointer
-        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
-        Ok(PyValue::none(ptr_type.const_null().into()))
+        // Represent None as i32(0) - consistent with type_to_llvm(Type::None)
+        let ir_val = self.context.i32_type().const_zero().into();
+        Ok(PyValue::none(ir_val))
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {

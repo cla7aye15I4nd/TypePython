@@ -1,0 +1,4 @@
+b'None is None:' True
+b'None is not None:' False
+b'None == None:' True
+b'None != None:' False

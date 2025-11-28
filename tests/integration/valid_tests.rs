@@ -116,8 +116,7 @@ test_case!(
 );
 test_case!(
     test_none_operations,
-    "tests/fixtures/valid/basic/none_operations.py",
-    ignore
+    "tests/fixtures/valid/basic/none_operations.py"
 );
 test_case!(
     test_type_coercion,

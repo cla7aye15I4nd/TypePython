@@ -36,9 +36,6 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 
     cmd.arg("-o").arg(output_path);
 
-    // Link math library for floor, pow, fmod, etc.
-    cmd.arg("-lm");
-
     let output = cmd
         .output()
         .map_err(|e| format!("Failed to execute clang: {}", e))?;

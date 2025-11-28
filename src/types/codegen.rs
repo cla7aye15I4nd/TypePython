@@ -899,19 +899,10 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::NoneType {
             ));
         }
 
-        let lhs_ptr = lhs.into_pointer_value();
-        let rhs_ptr = rhs.value.into_pointer_value();
-
-        // Convert pointers to integers for comparison
-        let ptr_int_type = cg.ctx.i64_type();
-        let lhs_int = cg
-            .builder
-            .build_ptr_to_int(lhs_ptr, ptr_int_type, "ptr_to_int")
-            .unwrap();
-        let rhs_int = cg
-            .builder
-            .build_ptr_to_int(rhs_ptr, ptr_int_type, "ptr_to_int")
-            .unwrap();
+        // None is represented as i32 in LLVM IR (as a sentinel value)
+        // All None values are equal to each other
+        let lhs_int = lhs.into_int_value();
+        let rhs_int = rhs.value.into_int_value();
 
         match op {
             BinaryOp::Is | BinaryOp::Eq => Ok(PyValue::bool(
