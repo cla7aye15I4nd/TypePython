@@ -1,43 +1,43 @@
-# Strings in conditional logic
+# Bytes in conditional logic
 def describe_number(n: int) -> None:
     if n < 0:
-        print("negative")
+        print(b"negative")
     else:
         if n == 0:
-            print("zero")
+            print(b"zero")
         else:
             if n < 10:
-                print("small positive")
+                print(b"small positive")
             else:
                 if n < 100:
-                    print("medium positive")
+                    print(b"medium positive")
                 else:
-                    print("large positive")
+                    print(b"large positive")
 
 def categorize(value: int, threshold: int) -> None:
-    category: str = "unknown"
+    category: bytes = b"unknown"
 
     if value < threshold:
-        category = "below"
+        category = b"below"
     else:
         if value == threshold:
-            category = "equal"
+            category = b"equal"
         else:
-            category = "above"
+            category = b"above"
 
-    print("Category:", category)
+    print(b"Category:", category)
 
 def status_message(code: int) -> None:
     if code == 0:
-        print("Success")
+        print(b"Success")
     else:
         if code == 1:
-            print("Warning")
+            print(b"Warning")
         else:
             if code == 2:
-                print("Error")
+                print(b"Error")
             else:
-                print("Unknown")
+                print(b"Unknown")
 
 describe_number(-5)
 describe_number(0)

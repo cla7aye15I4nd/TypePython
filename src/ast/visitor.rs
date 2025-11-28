@@ -153,6 +153,7 @@ pub trait Visitor {
             Expression::IntLit(val) => self.visit_int_lit(*val),
             Expression::FloatLit(val) => self.visit_float_lit(*val),
             Expression::StrLit(val) => self.visit_str_lit(val),
+            Expression::BytesLit(val) => self.visit_bytes_lit(val),
             Expression::BoolLit(val) => self.visit_bool_lit(*val),
             Expression::NoneLit => self.visit_none_lit(),
             Expression::Var(name) => self.visit_var(name),
@@ -177,6 +178,9 @@ pub trait Visitor {
 
     /// Visit string literal
     fn visit_str_lit(&mut self, val: &str) -> Result<(), Self::Error>;
+
+    /// Visit bytes literal
+    fn visit_bytes_lit(&mut self, val: &str) -> Result<(), Self::Error>;
 
     /// Visit boolean literal
     fn visit_bool_lit(&mut self, val: bool) -> Result<(), Self::Error>;

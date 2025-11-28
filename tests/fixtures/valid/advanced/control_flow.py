@@ -1,11 +1,11 @@
 # Testing various control flow structures
-def check_number(x: int) -> str:
+def check_number(x: int) -> bytes:
     if x > 0:
-        return "positive"
+        return b"positive"
     elif x < 0:
-        return "negative"
+        return b"negative"
     else:
-        return "zero"
+        return b"zero"
 
 # Loop with conditions
 def count_down(start: int) -> int:
@@ -15,22 +15,22 @@ def count_down(start: int) -> int:
     return counter
 
 # Nested if statements
-def classify(age: int, score: int) -> str:
+def classify(age: int, score: int) -> bytes:
     if age >= 18:
         if score >= 90:
-            return "adult_excellent"
+            return b"adult_excellent"
         else:
-            return "adult_good"
+            return b"adult_good"
     else:
         if score >= 90:
-            return "young_excellent"
+            return b"young_excellent"
         else:
-            return "young_good"
+            return b"young_good"
 
-result1: str = check_number(5)
+result1: bytes = check_number(5)
 result2: int = count_down(10)
-result3: str = classify(20, 95)
+result3: bytes = classify(20, 95)
 
-print("Check number 5:", result1)
-print("Count down from 10:", result2)
-print("Classify (20, 95):", result3)
+print(b"Check number 5:", result1)
+print(b"Count down from 10:", result2)
+print(b"Classify (20, 95):", result3)

@@ -92,6 +92,10 @@ test_case!(
     "tests/fixtures/valid/basic/identity_operators.py"
 );
 test_case!(
+    test_string_concat_compare,
+    "tests/fixtures/valid/basic/string_concat_compare.py"
+);
+test_case!(
     test_sum_numbers,
     "tests/fixtures/valid/basic/sum_numbers.py"
 );

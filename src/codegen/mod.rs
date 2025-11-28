@@ -115,6 +115,7 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::IntLit(val) => self.visit_int_lit_impl(*val),
             Expression::FloatLit(val) => self.visit_float_lit_impl(*val),
             Expression::StrLit(val) => self.visit_str_lit_impl(val),
+            Expression::BytesLit(val) => self.visit_bytes_lit_impl(val),
             Expression::BoolLit(val) => self.visit_bool_lit_impl(*val),
             Expression::NoneLit => self.visit_none_lit_impl(),
             Expression::Var(name) => self.visit_var_impl(name),
@@ -213,6 +214,16 @@ impl<'ctx> CodeGen<'ctx> {
             }
             "tpy_floor" => {
                 let fn_type = f64_type.fn_type(&[f64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_strcat" => {
+                let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                let fn_type = str_type.fn_type(&[str_type.into(), str_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_strcmp" => {
+                let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
+                let fn_type = i64_type.fn_type(&[str_type.into(), str_type.into()], false);
                 self.module.add_function(name, fn_type, None)
             }
             _ => panic!("Unknown builtin function: {}", name),
@@ -472,6 +483,79 @@ impl<'ctx> CodeGen<'ctx> {
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
+        // Handle string operations first (implemented as C-style null-terminated strings)
+        // Note: TypePython's str type is currently implemented as C-style char* pointers
+        // until full Python string objects with UTF-8 support are added
+        if lhs.is_pointer_value() && rhs.is_pointer_value() {
+            match op {
+                BinaryOp::Add => {
+                    // String concatenation - call tpy_strcat builtin
+                    let lhs_ptr = lhs.into_pointer_value();
+                    let rhs_ptr = rhs.into_pointer_value();
+                    let strcat_fn = self.get_or_declare_builtin_function("tpy_strcat");
+                    let call_site = self
+                        .builder
+                        .build_call(strcat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcat")
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::PointerValue(pv) = any_val {
+                        return Ok(pv.into());
+                    } else {
+                        return Err("tpy_strcat did not return a pointer value".to_string());
+                    }
+                }
+                BinaryOp::Eq => {
+                    // String equality - call tpy_strcmp builtin
+                    let lhs_ptr = lhs.into_pointer_value();
+                    let rhs_ptr = rhs.into_pointer_value();
+                    let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
+                    let call_site = self
+                        .builder
+                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp")
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
+                        // Convert i64 to i1 (boolean) by truncating
+                        let bool_val = self
+                            .builder
+                            .build_int_truncate(iv, self.context.bool_type(), "to_bool")
+                            .unwrap();
+                        return Ok(bool_val.into());
+                    } else {
+                        return Err("tpy_strcmp did not return an int value".to_string());
+                    }
+                }
+                BinaryOp::Ne => {
+                    // String inequality - call strcmp and negate
+                    let lhs_ptr = lhs.into_pointer_value();
+                    let rhs_ptr = rhs.into_pointer_value();
+                    let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
+                    let call_site = self
+                        .builder
+                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp")
+                        .unwrap();
+                    use inkwell::values::AnyValue;
+                    let any_val = call_site.as_any_value_enum();
+                    if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
+                        // Convert i64 to i1, then negate
+                        let bool_val = self
+                            .builder
+                            .build_int_truncate(iv, self.context.bool_type(), "to_bool")
+                            .unwrap();
+                        let negated = self.builder.build_not(bool_val, "ne").unwrap();
+                        return Ok(negated.into());
+                    } else {
+                        return Err("tpy_strcmp did not return an int value".to_string());
+                    }
+                }
+                _ => {
+                    return Err(format!("Operator {:?} not supported for string type", op));
+                }
+            }
+        }
+
         // Determine if we're working with floats or ints
         let is_float = lhs.is_float_value() || rhs.is_float_value();
 
@@ -571,11 +655,7 @@ impl<'ctx> CodeGen<'ctx> {
                     let pow_fn = self.get_or_declare_builtin_function("tpy_pow");
                     let call_site = self
                         .builder
-                        .build_call(
-                            pow_fn,
-                            &[lhs_float.into(), rhs_float.into()],
-                            "fpow",
-                        )
+                        .build_call(pow_fn, &[lhs_float.into(), rhs_float.into()], "fpow")
                         .unwrap();
                     use inkwell::values::AnyValue;
                     let any_val = call_site.as_any_value_enum();
@@ -629,7 +709,10 @@ impl<'ctx> CodeGen<'ctx> {
                     return Err(format!("Bitwise operator {:?} not supported on floats", op));
                 }
                 BinaryOp::In | BinaryOp::NotIn => {
-                    return Err(format!("Membership operator {:?} requires container support", op));
+                    return Err(format!(
+                        "Membership operator {:?} requires container support",
+                        op
+                    ));
                 }
             };
             Ok(result.into())
@@ -713,11 +796,7 @@ impl<'ctx> CodeGen<'ctx> {
                     let pow_fn = self.get_or_declare_builtin_function("tpy_pow_int");
                     let call_site = self
                         .builder
-                        .build_call(
-                            pow_fn,
-                            &[lhs_int.into(), rhs_int.into()],
-                            "ipow",
-                        )
+                        .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "ipow")
                         .unwrap();
                     use inkwell::values::AnyValue;
                     let any_val = call_site.as_any_value_enum();
@@ -744,7 +823,10 @@ impl<'ctx> CodeGen<'ctx> {
                     return Ok(cmp.into());
                 }
                 BinaryOp::In | BinaryOp::NotIn => {
-                    return Err(format!("Membership operator {:?} requires container support", op));
+                    return Err(format!(
+                        "Membership operator {:?} requires container support",
+                        op
+                    ));
                 }
             };
             Ok(result.into())
@@ -920,6 +1002,10 @@ impl<'ctx> CodeGen<'ctx> {
             Type::Float => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
             Type::Str => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            Type::Bytes => self
                 .context
                 .ptr_type(inkwell::AddressSpace::default())
                 .into(),

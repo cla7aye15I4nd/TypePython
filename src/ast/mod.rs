@@ -8,6 +8,7 @@ pub enum Type {
     Float,
     Bool,
     Str,
+    Bytes, // C-style null-terminated strings
     None,
     List(Box<Type>),            // List[int], etc.
     Dict(Box<Type>, Box<Type>), // Dict[str, int], etc.
@@ -132,6 +133,7 @@ pub enum Expression {
     IntLit(i64),
     FloatLit(f64),
     StrLit(String),
+    BytesLit(String), // Bytes literal b"..."
     BoolLit(bool),
     NoneLit,
     Var(String),

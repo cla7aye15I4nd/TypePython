@@ -269,6 +269,7 @@ fn build_type(pair: Pair<Rule>) -> Type {
         Rule::FLOAT_TYPE => Type::Float,
         Rule::BOOL_TYPE => Type::Bool,
         Rule::STR_TYPE => Type::Str,
+        Rule::BYTES_TYPE => Type::Bytes,
         Rule::NONE_TYPE => Type::None,
         _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
     }
@@ -966,6 +967,13 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
                 // Strip quotes and process escape sequences
                 let content = &s[1..s.len() - 1];
                 Expression::StrLit(process_escape_sequences(content))
+            }
+            Rule::BYTES_LIT => {
+                assert_eq!(inner.next(), None);
+                let s = first.as_str();
+                // Strip b"..." to get content (skip 'b' and quotes)
+                let content = &s[2..s.len() - 1];
+                Expression::BytesLit(process_escape_sequences(content))
             }
             Rule::list_literal => {
                 assert_eq!(inner.next(), None);

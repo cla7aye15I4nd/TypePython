@@ -30,6 +30,26 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(str_const.as_pointer_value().into())
     }
 
+    pub(crate) fn visit_bytes_lit_impl(
+        &mut self,
+        val: &str,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        // Bytes literals are the same as string literals in C (char*)
+        // They're both null-terminated byte sequences
+        let str_name = if let Some(&id) = self.strings.get(val) {
+            format!(".bytes_{}", id)
+        } else {
+            let id = self.strings.len() as u64;
+            self.strings.insert(val.to_string(), id);
+            format!(".bytes_{}", id)
+        };
+        let str_const = self
+            .builder
+            .build_global_string_ptr(val, &str_name)
+            .unwrap();
+        Ok(str_const.as_pointer_value().into())
+    }
+
     pub(crate) fn visit_bool_lit_impl(
         &mut self,
         val: bool,
@@ -38,7 +58,10 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_none_lit_impl(&mut self) -> Result<BasicValueEnum<'ctx>, String> {
-        todo!("Handle None literal generation in better way");
+        // Represent None as a null pointer
+        // This is a simple implementation - a more complete one would use Option types
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        Ok(ptr_type.const_null().into())
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<BasicValueEnum<'ctx>, String> {

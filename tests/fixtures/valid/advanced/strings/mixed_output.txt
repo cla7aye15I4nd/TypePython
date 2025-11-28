@@ -1,7 +1,7 @@
 Integer: 42
 Float: 3.14159
 Boolean: True
-String: TypePython
+Bytes: TypePython
 Sum: 24
 Difference: 16
 Product: 80

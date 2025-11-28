@@ -42,13 +42,14 @@ INT_TYPE   = { "int" ~ kw_boundary }
 FLOAT_TYPE = { "float" ~ kw_boundary }
 BOOL_TYPE  = { "bool" ~ kw_boundary }
 STR_TYPE   = { "str" ~ kw_boundary }
+BYTES_TYPE = { "bytes" ~ kw_boundary }
 NONE_TYPE  = { "None" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
     AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
-    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | NONE_TYPE
+    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE
 }
 
 // Identifiers (must not be keywords)
@@ -58,6 +59,7 @@ ID = @{ !(keyword ~ !(ASCII_ALPHANUMERIC | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_
 // Literals
 INT_LIT = @{ ASCII_DIGIT+ }
 FLOAT_LIT = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+BYTES_LIT = @{ "b" ~ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 STR_LIT = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 // Operators (order matters for proper matching!)
@@ -243,6 +245,7 @@ type_spec = {
     | FLOAT_TYPE
     | BOOL_TYPE
     | STR_TYPE
+    | BYTES_TYPE
     | NONE_TYPE
 }
 
@@ -318,6 +321,7 @@ atom = {
     | FALSE
     | FLOAT_LIT
     | INT_LIT
+    | BYTES_LIT
     | STR_LIT
     | list_literal
     | dict_literal

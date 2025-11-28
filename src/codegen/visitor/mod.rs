@@ -135,6 +135,11 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         Ok(())
     }
 
+    fn visit_bytes_lit(&mut self, val: &str) -> Result<(), Self::Error> {
+        self.visit_bytes_lit_impl(val)?;
+        Ok(())
+    }
+
     fn visit_bool_lit(&mut self, val: bool) -> Result<(), Self::Error> {
         self.visit_bool_lit_impl(val)?;
         Ok(())

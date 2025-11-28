@@ -46,6 +46,29 @@ double tpy_floor(double value) {
     return floor(value);
 }
 
+// String operations (implemented as C-style null-terminated strings)
+// Note: TypePython str type is currently implemented as C-style char* pointers
+// until full Python string objects with UTF-8 support are added
+#include <string.h>
+#include <stdlib.h>
+
+// String concatenation - allocates new C-string
+// Implements the + operator for str type (C-style strings)
+const char* tpy_strcat(const char* s1, const char* s2) {
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+    char* result = (char*)malloc(len1 + len2 + 1);
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
+// String comparison - returns 1 if equal, 0 if not
+// Implements == operator for str type (C-style strings)
+int64_t tpy_strcmp(const char* s1, const char* s2) {
+    return strcmp(s1, s2) == 0 ? 1 : 0;
+}
+
 // Integer power function (returns int)
 int64_t tpy_pow_int(int64_t base, int64_t exponent) {
     if (exponent < 0) {

@@ -1,0 +1,6 @@
+Hello World
+TypePython Compiler
+test == test: True
+test == other: False
+test != other: True
+test != test: False

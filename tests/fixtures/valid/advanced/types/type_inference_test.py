@@ -8,19 +8,19 @@ def return_float_literal() -> float:
 def return_bool_literal() -> bool:
     return True
 
-def return_string_literal() -> str:
-    return "Hello"
+def return_bytes_literal() -> bytes:
+    return b"Hello"
 
 def use_all_literals() -> None:
     i: int = return_int_literal()
     f: float = return_float_literal()
     b: bool = return_bool_literal()
-    s: str = return_string_literal()
+    s: bytes = return_bytes_literal()
 
-    print("Int:", i)
-    print("Float:", f)
-    print("Bool:", b)
-    print("String:", s)
+    print(b"Int:", i)
+    print(b"Float:", f)
+    print(b"Bool:", b)
+    print(b"Bytes:", s)
 
 def literal_arithmetic() -> int:
     a: int = 10
@@ -32,4 +32,4 @@ def literal_arithmetic() -> int:
 
 use_all_literals()
 result: int = literal_arithmetic()
-print("Literal arithmetic:", result)
+print(b"Literal arithmetic:", result)

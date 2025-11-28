@@ -12,12 +12,12 @@ price: float = 19.99
 is_valid: bool = True
 is_complete: bool = False
 
-# String type
-name: str = "TypePython"
-message: str = "Hello, World!"
+# Bytes type (C-style null-terminated strings)
+name: bytes = b"TypePython"
+message: bytes = b"Hello, World!"
 
 # Function with None return type
-def print_message(msg: str) -> None:
+def print_message(msg: bytes) -> None:
     print(msg)
 
 # Function with multiple parameter types
@@ -29,15 +29,15 @@ def calculate(x: int, y: float, use_precise: bool) -> float:
 
 # Function calls
 result: float = calculate(10, 3.5, True)
-print_message("Testing")
+print_message(b"Testing")
 
 # Print all the values
-print("Age:", age)
-print("Count:", count)
-print("Temperature:", temperature)
-print("Price:", price)
-print("Is valid:", is_valid)
-print("Is complete:", is_complete)
-print("Name:", name)
-print("Message:", message)
-print("Result:", result)
+print(b"Age:", age)
+print(b"Count:", count)
+print(b"Temperature:", temperature)
+print(b"Price:", price)
+print(b"Is valid:", is_valid)
+print(b"Is complete:", is_complete)
+print(b"Name:", name)
+print(b"Message:", message)
+print(b"Result:", result)

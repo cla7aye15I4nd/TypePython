@@ -1,10 +1,11 @@
-# Basic string operations
-greeting: str = "Hello"
-name: str = "World"
+# Basic bytes operations (C-style null-terminated strings)
+# Note: TypePython uses bytes type for C char* pointers
+greeting: bytes = b"Hello"
+name: bytes = b"World"
 
-# String variables
-msg1: str = "TypePython"
-msg2: str = "Compiler"
+# Bytes variables
+msg1: bytes = b"TypePython"
+msg2: bytes = b"Compiler"
 
 print(greeting)
 print(name)
