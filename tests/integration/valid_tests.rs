@@ -2,39 +2,19 @@
 // Combines basic, advanced, and module tests
 
 use crate::integration::test_runner::compile_and_run_test;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
-
-fn run_with_timeout(test_path: &str) {
-    let test_path = test_path.to_string();
-    let (tx, rx) = mpsc::channel();
-
-    let _handle = thread::spawn(move || {
-        let result = compile_and_run_test(&test_path);
-        let _ = tx.send(result);
-    });
-
-    match rx.recv_timeout(Duration::from_secs(10)) {
-        Ok(result) => result.unwrap(),
-        Err(_) => {
-            panic!("Test timed out after 10 seconds");
-        }
-    }
-}
 
 macro_rules! test_case {
     ($name:ident, $path:expr) => {
         #[test]
         fn $name() {
-            run_with_timeout($path);
+            compile_and_run_test($path).unwrap();
         }
     };
     ($name:ident, $path:expr, ignore) => {
         #[test]
         #[ignore]
         fn $name() {
-            run_with_timeout($path);
+            compile_and_run_test($path).unwrap();
         }
     };
 }

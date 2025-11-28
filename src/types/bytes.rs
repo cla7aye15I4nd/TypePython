@@ -29,20 +29,3 @@ impl<'ctx> TypeInfo<'ctx> for BytesType {
         matches!(target, Type::Bytes)
     }
 }
-
-impl BytesType {
-    /// Get the builtin function name for bytes concatenation
-    pub fn concat_function_name() -> &'static str {
-        "strcat_bytes"
-    }
-
-    /// Get the builtin function name for bytes comparison
-    pub fn compare_function_name() -> &'static str {
-        "strcmp_bytes"
-    }
-
-    /// Get the builtin function name for bytes repetition
-    pub fn repeat_function_name() -> &'static str {
-        "strrepeat_bytes"
-    }
-}

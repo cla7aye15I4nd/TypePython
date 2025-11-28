@@ -1191,36 +1191,6 @@ impl<'ctx> PyValue<'ctx> {
         Self::new(value, PyType::None(NoneType))
     }
 
-    /// Check if this is an int type
-    pub fn is_int(&self) -> bool {
-        matches!(self.ty, PyType::Int(_))
-    }
-
-    /// Check if this is a float type
-    pub fn is_float(&self) -> bool {
-        matches!(self.ty, PyType::Float(_))
-    }
-
-    /// Check if this is a bool type
-    pub fn is_bool(&self) -> bool {
-        matches!(self.ty, PyType::Bool(_))
-    }
-
-    /// Check if this is a bytes type
-    pub fn is_bytes(&self) -> bool {
-        matches!(self.ty, PyType::Bytes(_))
-    }
-
-    /// Check if this is a none type
-    pub fn is_none(&self) -> bool {
-        matches!(self.ty, PyType::None(_))
-    }
-
-    /// Get the AST type for this value
-    pub fn ast_type(&self) -> Type {
-        self.ty.to_ast_type()
-    }
-
     /// Perform a binary operation: self op rhs
     /// This is the main entry point for binary operations on PyValue.
     pub fn binary_op<'a>(
