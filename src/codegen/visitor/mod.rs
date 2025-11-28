@@ -46,8 +46,47 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_var_decl_impl(name, var_type, value)
     }
 
-    fn visit_assignment(&mut self, name: &str, value: &Expression) -> Result<(), Self::Error> {
-        self.visit_assignment_impl(name, value)
+    fn visit_import(&mut self, _import: &Import) -> Result<(), Self::Error> {
+        // Imports are handled at module level, no code gen needed
+        Ok(())
+    }
+
+    fn visit_class(&mut self, _class: &Class) -> Result<(), Self::Error> {
+        Err("Classes are not yet supported in code generation".to_string())
+    }
+
+    fn visit_assignment(
+        &mut self,
+        target: &AssignTarget,
+        value: &Expression,
+    ) -> Result<(), Self::Error> {
+        self.visit_assignment_impl(target, value)
+    }
+
+    fn visit_aug_assignment(
+        &mut self,
+        target: &AssignTarget,
+        op: &AugAssignOp,
+        value: &Expression,
+    ) -> Result<(), Self::Error> {
+        self.visit_aug_assignment_impl(target, op, value)
+    }
+
+    fn visit_for(
+        &mut self,
+        var: &str,
+        iterable: &Expression,
+        body: &[Statement],
+    ) -> Result<(), Self::Error> {
+        self.visit_for_impl(var, iterable, body)
+    }
+
+    fn visit_break(&mut self) -> Result<(), Self::Error> {
+        self.visit_break_impl()
+    }
+
+    fn visit_continue(&mut self) -> Result<(), Self::Error> {
+        self.visit_continue_impl()
     }
 
     fn visit_if(
@@ -81,48 +120,87 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     }
 
     // Expression methods
-    fn visit_int_lit(&mut self, val: i64) -> Result<Self::Result, Self::Error> {
-        self.visit_int_lit_impl(val)
+    fn visit_int_lit(&mut self, val: i64) -> Result<(), Self::Error> {
+        self.visit_int_lit_impl(val)?;
+        Ok(())
     }
 
-    fn visit_float_lit(&mut self, val: f64) -> Result<Self::Result, Self::Error> {
-        self.visit_float_lit_impl(val)
+    fn visit_float_lit(&mut self, val: f64) -> Result<(), Self::Error> {
+        self.visit_float_lit_impl(val)?;
+        Ok(())
     }
 
-    fn visit_str_lit(&mut self, val: &str) -> Result<Self::Result, Self::Error> {
-        self.visit_str_lit_impl(val)
+    fn visit_str_lit(&mut self, val: &str) -> Result<(), Self::Error> {
+        self.visit_str_lit_impl(val)?;
+        Ok(())
     }
 
-    fn visit_bool_lit(&mut self, val: bool) -> Result<Self::Result, Self::Error> {
-        self.visit_bool_lit_impl(val)
+    fn visit_bool_lit(&mut self, val: bool) -> Result<(), Self::Error> {
+        self.visit_bool_lit_impl(val)?;
+        Ok(())
     }
 
-    fn visit_none_lit(&mut self) -> Result<Self::Result, Self::Error> {
-        self.visit_none_lit_impl()
+    fn visit_none_lit(&mut self) -> Result<(), Self::Error> {
+        self.visit_none_lit_impl()?;
+        Ok(())
     }
 
-    fn visit_var(&mut self, name: &str) -> Result<Self::Result, Self::Error> {
-        self.visit_var_impl(name)
+    fn visit_var(&mut self, name: &str) -> Result<(), Self::Error> {
+        self.visit_var_impl(name)?;
+        Ok(())
     }
 
-    fn visit_binary_op(
+    fn visit_list(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
+        Err("List literals are not yet supported in code generation".to_string())
+    }
+
+    fn visit_tuple(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
+        Err("Tuple literals are not yet supported in code generation".to_string())
+    }
+
+    fn visit_dict(&mut self, _pairs: &[(Expression, Expression)]) -> Result<(), Self::Error> {
+        Err("Dict literals are not yet supported in code generation".to_string())
+    }
+
+    fn visit_set(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
+        Err("Set literals are not yet supported in code generation".to_string())
+    }
+
+    fn visit_binop(
         &mut self,
         op: &BinaryOp,
         left: &Expression,
         right: &Expression,
-    ) -> Result<Self::Result, Self::Error> {
-        self.visit_binary_op_impl(op, left, right)
+    ) -> Result<(), Self::Error> {
+        self.visit_binop_impl(op, left, right)
     }
 
-    fn visit_unary_op(
+    fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error> {
+        self.visit_unaryop_impl(op, operand)
+    }
+
+    fn visit_call(&mut self, func: &Expression, args: &[Expression]) -> Result<(), Self::Error> {
+        self.visit_call_impl(func, args)
+    }
+
+    fn visit_attribute(&mut self, _object: &Expression, _attr: &str) -> Result<(), Self::Error> {
+        Err("Attribute access is not yet supported in code generation".to_string())
+    }
+
+    fn visit_subscript(
         &mut self,
-        op: &UnaryOp,
-        operand: &Expression,
-    ) -> Result<Self::Result, Self::Error> {
-        self.visit_unary_op_impl(op, operand)
+        _object: &Expression,
+        _index: &Expression,
+    ) -> Result<(), Self::Error> {
+        Err("Subscript operation is not yet supported in code generation".to_string())
     }
 
-    fn visit_call(&mut self, name: &str, args: &[Expression]) -> Result<Self::Result, Self::Error> {
-        self.visit_call_impl(name, args)
+    fn visit_slice(
+        &mut self,
+        _start: &Option<Box<Expression>>,
+        _stop: &Option<Box<Expression>>,
+        _step: &Option<Box<Expression>>,
+    ) -> Result<(), Self::Error> {
+        Err("Slice operation is not yet supported in code generation".to_string())
     }
 }

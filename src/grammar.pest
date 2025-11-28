@@ -13,20 +13,29 @@ DEDENT = _{ "⟨DEDENT⟩" }
 kw_boundary = _{ !(ASCII_ALPHANUMERIC | "_") }
 
 // --- Keywords (Updated with boundaries) ---
-IF     = { "if" ~ kw_boundary }
-ELIF   = { "elif" ~ kw_boundary }
-ELSE   = { "else" ~ kw_boundary }
-WHILE  = { "while" ~ kw_boundary }
-DEF    = { "def" ~ kw_boundary }
-RETURN = { "return" ~ kw_boundary }
-PASS   = { "pass" ~ kw_boundary }
-AND    = { "and" ~ kw_boundary }
-OR     = { "or" ~ kw_boundary }
-NOT    = { "not" ~ kw_boundary }
-TRUE   = { "True" ~ kw_boundary }
-FALSE  = { "False" ~ kw_boundary }
-IMPORT = { "import" ~ kw_boundary }
-FROM   = { "from" ~ kw_boundary }
+IF       = { "if" ~ kw_boundary }
+ELIF     = { "elif" ~ kw_boundary }
+ELSE     = { "else" ~ kw_boundary }
+WHILE    = { "while" ~ kw_boundary }
+FOR      = { "for" ~ kw_boundary }
+IN       = { "in" ~ kw_boundary }
+DEF      = { "def" ~ kw_boundary }
+CLASS    = { "class" ~ kw_boundary }
+RETURN   = { "return" ~ kw_boundary }
+BREAK    = { "break" ~ kw_boundary }
+CONTINUE = { "continue" ~ kw_boundary }
+PASS     = { "pass" ~ kw_boundary }
+AND      = { "and" ~ kw_boundary }
+OR       = { "or" ~ kw_boundary }
+NOT      = { "not" ~ kw_boundary }
+IS       = { "is" ~ kw_boundary }
+TRUE     = { "True" ~ kw_boundary }
+FALSE    = { "False" ~ kw_boundary }
+NONE     = { "None" ~ kw_boundary }
+IMPORT   = { "import" ~ kw_boundary }
+FROM     = { "from" ~ kw_boundary }
+AS       = { "as" ~ kw_boundary }
+SELF     = { "self" ~ kw_boundary }
 
 // --- Type keywords (Updated with boundaries) ---
 INT_TYPE   = { "int" ~ kw_boundary }
@@ -37,8 +46,8 @@ NONE_TYPE  = { "None" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 keyword = {
-    IF | ELIF | ELSE | WHILE | DEF | RETURN | PASS |
-    AND | OR | NOT | TRUE | FALSE | IMPORT | FROM |
+    IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
+    AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
     INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | NONE_TYPE
 }
 
@@ -51,27 +60,59 @@ INT_LIT = @{ ASCII_DIGIT+ }
 FLOAT_LIT = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 STR_LIT = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-// Operators
-PLUS = { "+" }
-MINUS = { "-" }
-STAR = { "*" }
-SLASH = { "//" }
-PERCENT = { "%" }
+// Operators (order matters for proper matching!)
+// Augmented assignment operators
+PLUS_ASSIGN    = { "+=" }
+MINUS_ASSIGN   = { "-=" }
+STAR_ASSIGN    = { "*=" }
+SLASH_ASSIGN   = { "/=" }
+DSLASH_ASSIGN  = { "//=" }
+PERCENT_ASSIGN = { "%=" }
+POW_ASSIGN     = { "**=" }
+BITOR_ASSIGN   = { "|=" }
+BITXOR_ASSIGN  = { "^=" }
+BITAND_ASSIGN  = { "&=" }
+LSHIFT_ASSIGN  = { "<<=" }
+RSHIFT_ASSIGN  = { ">>=" }
 
+// Comparison operators
 EQ = { "==" }
 NE = { "!=" }
 LE = { "<=" }
 GE = { ">=" }
+LSHIFT = { "<<" }
+RSHIFT = { ">>" }
 LT = { "<" }
 GT = { ">" }
 
+// Arithmetic operators
+POW = { "**" }
+DSLASH = { "//" }
+PLUS = { "+" }
+MINUS = { "-" }
+STAR = { "*" }
+SLASH = { "/" }
+PERCENT = { "%" }
+
+// Bitwise operators
+BITOR = { "|" }
+BITXOR = { "^" }
+BITAND = { "&" }
+BITNOT = { "~" }
+
+// Other operators
 ASSIGN = { "=" }
 COLON = { ":" }
 COMMA = { "," }
 ARROW = { "->" }
 LPAREN = { "(" }
 RPAREN = { ")" }
+LBRACKET = { "[" }
+RBRACKET = { "]" }
+LBRACE = { "{" }
+RBRACE = { "}" }
 DOT = { "." }
+SEMICOLON = { ";" }
 
 // ============================================================================
 // Module and Import
@@ -87,7 +128,7 @@ import_stmt = { IMPORT ~ WS+ ~ module_path ~ NEWLINE }
 // Program Structure
 // ============================================================================
 
-program = { SOI ~ (NEWLINE | import_stmt | func_decl | statement)* ~ EOI }
+program = { SOI ~ (NEWLINE | import_stmt | func_decl | class_decl | statement)* ~ EOI }
 
 // ============================================================================
 // Statements
@@ -95,25 +136,43 @@ program = { SOI ~ (NEWLINE | import_stmt | func_decl | statement)* ~ EOI }
 
 statement = {
     var_decl_stmt
+    | aug_assignment_stmt
     | assignment_stmt
     | if_stmt
     | while_stmt
+    | for_stmt
     | return_stmt
+    | break_stmt
+    | continue_stmt
     | pass_stmt
     | expr_stmt
 }
 
 // Statements that need NEWLINE termination
 var_decl_stmt = { var_decl ~ NEWLINE }
+aug_assignment_stmt = { aug_assignment ~ NEWLINE }
 assignment_stmt = { assignment ~ NEWLINE }
 return_stmt = { return_inner ~ NEWLINE }
+break_stmt = { BREAK ~ NEWLINE }
+continue_stmt = { CONTINUE ~ NEWLINE }
 pass_stmt = { PASS ~ NEWLINE }
 expr_stmt = { expression ~ NEWLINE }
 
 // Core statement forms
-var_decl = { ID ~ WS* ~ COLON ~ WS* ~ type_spec ~ WS* ~ ASSIGN ~ WS* ~ expression }
-assignment = { ID ~ WS* ~ ASSIGN ~ WS* ~ expression }
+var_decl = { target ~ WS* ~ COLON ~ WS* ~ type_spec ~ WS* ~ ASSIGN ~ WS* ~ expression }
+assignment = { target ~ WS* ~ ASSIGN ~ WS* ~ expression }
+aug_assignment = { target ~ WS* ~ aug_op ~ WS* ~ expression }
 return_inner = { RETURN ~ (WS+ ~ expression)? }
+
+// Augmented assignment operators
+aug_op = {
+    PLUS_ASSIGN | MINUS_ASSIGN | STAR_ASSIGN | SLASH_ASSIGN | DSLASH_ASSIGN |
+    PERCENT_ASSIGN | POW_ASSIGN | BITOR_ASSIGN | BITXOR_ASSIGN | BITAND_ASSIGN |
+    LSHIFT_ASSIGN | RSHIFT_ASSIGN
+}
+
+// Assignment target (can be simple name or subscript/attribute)
+target = { subscript_expr | attribute_expr | ID }
 
 // ============================================================================
 // Control Flow
@@ -130,6 +189,10 @@ else_clause = { ELSE ~ WS* ~ COLON ~ NEWLINE ~ block }
 
 while_stmt = { WHILE ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block }
 
+for_stmt = {
+    FOR ~ WS+ ~ ID ~ WS+ ~ IN ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block
+}
+
 // Block: INDENT, then statements (with optional blank lines between), then DEDENT
 block = { INDENT ~ NEWLINE* ~ (statement ~ NEWLINE*)+ ~ DEDENT }
 
@@ -143,6 +206,33 @@ func_decl = {
 
 param_list = { param ~ (WS* ~ COMMA ~ WS* ~ param)* }
 param = { ID ~ WS* ~ COLON ~ WS* ~ type_spec }
+
+// ============================================================================
+// Class Declarations
+// ============================================================================
+
+class_decl = {
+    CLASS ~ WS+ ~ ID ~ WS* ~ class_inheritance? ~ WS* ~ COLON ~ NEWLINE ~ class_body
+}
+
+class_inheritance = { LPAREN ~ WS* ~ ID ~ WS* ~ RPAREN }
+
+class_body = { INDENT ~ NEWLINE* ~ class_member+ ~ DEDENT }
+
+class_member = {
+    method_decl
+    | var_decl_stmt
+    | pass_stmt
+}
+
+method_decl = {
+    DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ method_param_list? ~ WS* ~ RPAREN ~ WS* ~ method_return_type? ~ WS* ~ COLON ~ NEWLINE ~ block
+}
+
+method_param_list = { method_param ~ (WS* ~ COMMA ~ WS* ~ method_param)* }
+method_param = { ID ~ WS* ~ COLON ~ WS* ~ type_spec }
+
+method_return_type = { ARROW ~ WS* ~ type_spec }
 
 // ============================================================================
 // Types
@@ -166,42 +256,101 @@ expression = { logic_or_expr }
 logic_or_expr = { logic_and_expr ~ (WS+ ~ OR ~ WS+ ~ logic_and_expr)* }
 
 // Logical AND
-logic_and_expr = { equality_expr ~ (WS+ ~ AND ~ WS+ ~ equality_expr)* }
+logic_and_expr = { logic_not_expr ~ (WS+ ~ AND ~ WS+ ~ logic_not_expr)* }
 
-// Equality: == !=
-equality_expr = { comparison_expr ~ (WS* ~ (EQ | NE) ~ WS* ~ comparison_expr)* }
+// Logical NOT
+logic_not_expr = { (NOT ~ WS+)* ~ comparison_expr }
 
-// Comparison: < > <= >=
-comparison_expr = { term_expr ~ (WS* ~ (LE | GE | LT | GT) ~ WS* ~ term_expr)* }
+// Comparison: == != < > <= >= in is
+comparison_expr = { bitwise_or_expr ~ (WS* ~ comp_op ~ WS* ~ bitwise_or_expr)* }
+
+comp_op = { EQ | NE | LE | GE | LT | GT | (NOT ~ WS+ ~ IN) | IN | (IS ~ WS+ ~ NOT) | IS }
+
+// Bitwise OR
+bitwise_or_expr = { bitwise_xor_expr ~ (WS* ~ BITOR ~ WS* ~ bitwise_xor_expr)* }
+
+// Bitwise XOR
+bitwise_xor_expr = { bitwise_and_expr ~ (WS* ~ BITXOR ~ WS* ~ bitwise_and_expr)* }
+
+// Bitwise AND
+bitwise_and_expr = { shift_expr ~ (WS* ~ BITAND ~ WS* ~ shift_expr)* }
+
+// Shift operators
+shift_expr = { arith_expr ~ (WS* ~ (LSHIFT | RSHIFT) ~ WS* ~ arith_expr)* }
 
 // Addition/Subtraction
-term_expr = { factor_expr ~ (WS* ~ (PLUS | MINUS) ~ WS* ~ factor_expr)* }
+arith_expr = { term_expr ~ (WS* ~ (PLUS | MINUS) ~ WS* ~ term_expr)* }
 
-// Multiplication/Division/Modulo
-factor_expr = { unary_expr ~ (WS* ~ (STAR | SLASH | PERCENT) ~ WS* ~ unary_expr)* }
+// Multiplication/Division/Modulo/FloorDiv
+term_expr = { factor_expr ~ (WS* ~ (STAR | DSLASH | SLASH | PERCENT) ~ WS* ~ factor_expr)* }
 
 // Unary operators (high precedence)
-unary_expr = { (MINUS | NOT) ~ WS* ~ unary_expr | primary }
+factor_expr = { unary_op ~ WS* ~ factor_expr | power_expr }
+
+unary_op = { PLUS | MINUS | BITNOT }
+
+// Power (exponentiation) - right associative
+power_expr = { postfix_expr ~ (WS* ~ POW ~ WS* ~ factor_expr)? }
+
+// Postfix expressions (attribute access, subscript, call)
+postfix_expr = { atom ~ postfix_trailer* }
+
+postfix_trailer = {
+    WS* ~ DOT ~ WS* ~ ID           // attribute access
+    | WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET  // subscript
+    | WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN  // function call
+}
+
+// Slice expression: start:stop or start:stop:step
+slice_expr = {
+    expression? ~ COLON ~ expression? ~ (COLON ~ expression?)?
+}
 
 // Primary expressions (highest precedence)
-primary = { call_expr | atom }
+primary = { postfix_expr }
 
-// Function calls - only match if parentheses present
-// Support both simple calls (foo()) and qualified calls (module.foo())
-call_expr = { qualified_name ~ (WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN)+ }
-
-// Qualified name: ID or ID.ID (for module.function)
-qualified_name = { ID ~ (DOT ~ ID)* }
-
-arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* }
+arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)? }
 
 // Atoms (highest precedence)
 atom = {
-    FLOAT_LIT
-    | INT_LIT
-    | STR_LIT
+    NONE
     | TRUE
     | FALSE
+    | FLOAT_LIT
+    | INT_LIT
+    | STR_LIT
+    | list_literal
+    | dict_literal
+    | set_literal
+    | tuple_literal
     | ID
     | LPAREN ~ WS* ~ expression ~ WS* ~ RPAREN
 }
+
+// List literal: [1, 2, 3] or []
+list_literal = {
+    LBRACKET ~ WS* ~ (expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACKET
+}
+
+// Tuple literal: (1, 2) or (1,) - needs at least one comma to distinguish from grouping
+tuple_literal = {
+    LPAREN ~ WS* ~ (expression ~ WS* ~ COMMA ~ WS* ~ (expression ~ (WS* ~ COMMA ~ WS* ~ expression)*)?)? ~ WS* ~ RPAREN
+}
+
+// Dict literal: {key: value, ...} or {}
+dict_literal = {
+    LBRACE ~ WS* ~ (dict_pair ~ (WS* ~ COMMA ~ WS* ~ dict_pair)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACE
+}
+
+dict_pair = { expression ~ WS* ~ COLON ~ WS* ~ expression }
+
+// Set literal: {1, 2, 3} - must have at least one element to distinguish from dict
+set_literal = {
+    LBRACE ~ WS* ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ ~ (WS* ~ COMMA)? ~ WS* ~ RBRACE
+    | LBRACE ~ WS* ~ expression ~ WS* ~ COMMA ~ WS* ~ RBRACE  // Single element with trailing comma
+}
+
+// Additional expression helpers
+// These are only used in assignment targets - they match postfix expressions that actually have subscript/attribute access
+subscript_expr = { ID ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+attribute_expr = { ID ~ (WS* ~ DOT ~ WS* ~ ID)+ }

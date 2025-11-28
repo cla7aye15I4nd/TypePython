@@ -95,6 +95,64 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
+    /// Evaluate an expression and return its LLVM value
+    /// This is separate from visit_expression which is part of the Visitor trait
+    pub(crate) fn evaluate_expression(
+        &mut self,
+        expr: &Expression,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        match expr {
+            Expression::IntLit(val) => self.visit_int_lit_impl(*val),
+            Expression::FloatLit(val) => self.visit_float_lit_impl(*val),
+            Expression::StrLit(val) => self.visit_str_lit_impl(val),
+            Expression::BoolLit(val) => self.visit_bool_lit_impl(*val),
+            Expression::NoneLit => self.visit_none_lit_impl(),
+            Expression::Var(name) => self.visit_var_impl(name),
+            Expression::BinOp { op, left, right } => self.generate_binary_op(op, left, right),
+            Expression::UnaryOp { op, operand } => self.generate_unary_op(op, operand),
+            Expression::Call { func, args } => {
+                match func.as_ref() {
+                    // Simple function call: function_name()
+                    Expression::Var(name) => self.generate_call(name, args),
+                    // Qualified call: module.function()
+                    Expression::Attribute { object, attr } => {
+                        if let Expression::Var(module_name) = object.as_ref() {
+                            let qualified_name = format!("{}.{}", module_name, attr);
+                            self.generate_call(&qualified_name, args)
+                        } else {
+                            Err("Only simple module.function() calls are supported".to_string())
+                        }
+                    }
+                    _ => Err(
+                        "Only simple function calls and module.function() calls are supported"
+                            .to_string(),
+                    ),
+                }
+            }
+            Expression::List(_) => {
+                Err("List literals are not yet supported in code generation".to_string())
+            }
+            Expression::Tuple(_) => {
+                Err("Tuple literals are not yet supported in code generation".to_string())
+            }
+            Expression::Dict(_) => {
+                Err("Dict literals are not yet supported in code generation".to_string())
+            }
+            Expression::Set(_) => {
+                Err("Set literals are not yet supported in code generation".to_string())
+            }
+            Expression::Attribute { .. } => {
+                Err("Attribute access is not yet supported in code generation".to_string())
+            }
+            Expression::Subscript { .. } => {
+                Err("Subscript operation is not yet supported in code generation".to_string())
+            }
+            Expression::Slice { .. } => {
+                Err("Slice operation is not yet supported in code generation".to_string())
+            }
+        }
+    }
+
     /// Get or declare a builtin function from builtin.c
     /// These functions are always available and linked from the builtin C module
     pub(crate) fn get_or_declare_builtin_function(&mut self, name: &str) -> FunctionValue<'ctx> {
@@ -276,7 +334,7 @@ impl<'ctx> CodeGen<'ctx> {
         elif_clauses: &[(Expression, Vec<Statement>)],
         else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
-        let cond_val = self.visit_expression(condition)?;
+        let cond_val = self.evaluate_expression(condition)?;
         let cond_int = cond_val.into_int_value();
 
         let function = self.current_function.unwrap();
@@ -309,7 +367,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             // Process elif clauses
             for (elif_cond, elif_body) in elif_clauses {
-                let elif_cond_val = self.visit_expression(elif_cond)?;
+                let elif_cond_val = self.evaluate_expression(elif_cond)?;
                 let elif_cond_int = elif_cond_val.into_int_value();
 
                 let elif_then_bb = self.context.append_basic_block(function, "elif_then");
@@ -360,7 +418,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Condition block
         self.builder.position_at_end(cond_bb);
-        let cond_val = self.visit_expression(condition)?;
+        let cond_val = self.evaluate_expression(condition)?;
         let cond_int = cond_val.into_int_value();
         self.builder
             .build_conditional_branch(cond_int, body_bb, after_bb)
@@ -386,8 +444,8 @@ impl<'ctx> CodeGen<'ctx> {
         left: &Expression,
         right: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let lhs = self.visit_expression(left)?;
-        let rhs = self.visit_expression(right)?;
+        let lhs = self.evaluate_expression(left)?;
+        let rhs = self.evaluate_expression(right)?;
 
         // Determine if we're working with floats or ints
         let is_float = lhs.is_float_value() || rhs.is_float_value();
@@ -483,6 +541,19 @@ impl<'ctx> CodeGen<'ctx> {
                 BinaryOp::And | BinaryOp::Or => {
                     return Err("Logical operators not supported on floats".to_string());
                 }
+                BinaryOp::FloorDiv
+                | BinaryOp::Pow
+                | BinaryOp::BitOr
+                | BinaryOp::BitXor
+                | BinaryOp::BitAnd
+                | BinaryOp::LShift
+                | BinaryOp::RShift
+                | BinaryOp::In
+                | BinaryOp::NotIn
+                | BinaryOp::Is
+                | BinaryOp::IsNot => {
+                    return Err(format!("Operator {:?} not supported on floats", op));
+                }
             };
             Ok(result.into())
         } else {
@@ -545,6 +616,24 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 BinaryOp::And => self.builder.build_and(lhs_int, rhs_int, "and").unwrap(),
                 BinaryOp::Or => self.builder.build_or(lhs_int, rhs_int, "or").unwrap(),
+                BinaryOp::FloorDiv => self
+                    .builder
+                    .build_int_signed_div(lhs_int, rhs_int, "floordiv")
+                    .unwrap(),
+                BinaryOp::BitOr => self.builder.build_or(lhs_int, rhs_int, "bitor").unwrap(),
+                BinaryOp::BitXor => self.builder.build_xor(lhs_int, rhs_int, "bitxor").unwrap(),
+                BinaryOp::BitAnd => self.builder.build_and(lhs_int, rhs_int, "bitand").unwrap(),
+                BinaryOp::LShift => self
+                    .builder
+                    .build_left_shift(lhs_int, rhs_int, "lshift")
+                    .unwrap(),
+                BinaryOp::RShift => self
+                    .builder
+                    .build_right_shift(lhs_int, rhs_int, true, "rshift")
+                    .unwrap(),
+                BinaryOp::Pow | BinaryOp::In | BinaryOp::NotIn | BinaryOp::Is | BinaryOp::IsNot => {
+                    return Err(format!("Operator {:?} not yet implemented", op));
+                }
             };
             Ok(result.into())
         }
@@ -555,7 +644,7 @@ impl<'ctx> CodeGen<'ctx> {
         op: &UnaryOp,
         operand: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let val = self.visit_expression(operand)?;
+        let val = self.evaluate_expression(operand)?;
 
         match op {
             UnaryOp::Neg => {
@@ -576,6 +665,14 @@ impl<'ctx> CodeGen<'ctx> {
             UnaryOp::Not => {
                 let int_val = val.into_int_value();
                 Ok(self.builder.build_not(int_val, "not").unwrap().into())
+            }
+            UnaryOp::Pos => {
+                // Unary plus is a no-op
+                Ok(val)
+            }
+            UnaryOp::BitNot => {
+                let int_val = val.into_int_value();
+                Ok(self.builder.build_not(int_val, "bitnot").unwrap().into())
             }
         }
     }
@@ -616,7 +713,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {
-            arg_values.push(self.visit_expression(arg)?.into());
+            arg_values.push(self.evaluate_expression(arg)?.into());
         }
 
         let call_site = self
@@ -659,7 +756,7 @@ impl<'ctx> CodeGen<'ctx> {
         let print_newline = self.get_or_declare_builtin_function("tpy_print_newline");
 
         for (i, arg) in args.iter().enumerate() {
-            let val = self.visit_expression(arg)?;
+            let val = self.evaluate_expression(arg)?;
 
             if val.is_int_value() {
                 let int_val = val.into_int_value();
@@ -715,6 +812,12 @@ impl<'ctx> CodeGen<'ctx> {
                 .ptr_type(inkwell::AddressSpace::default())
                 .into(),
             Type::None => self.context.i32_type().into(),
+            Type::List(_) | Type::Dict(_, _) | Type::Set(_) | Type::Tuple(_) | Type::Custom(_) => {
+                // For now, use generic pointer for complex types
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .into()
+            }
         }
     }
 

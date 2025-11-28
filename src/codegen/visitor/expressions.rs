@@ -50,28 +50,49 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(val)
     }
 
-    pub(crate) fn visit_binary_op_impl(
+    pub(crate) fn visit_binop_impl(
         &mut self,
         op: &BinaryOp,
         left: &Expression,
         right: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        self.generate_binary_op(op, left, right)
+    ) -> Result<(), String> {
+        self.generate_binary_op(op, left, right)?;
+        Ok(())
     }
 
-    pub(crate) fn visit_unary_op_impl(
+    pub(crate) fn visit_unaryop_impl(
         &mut self,
         op: &UnaryOp,
         operand: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        self.generate_unary_op(op, operand)
+    ) -> Result<(), String> {
+        self.generate_unary_op(op, operand)?;
+        Ok(())
     }
 
     pub(crate) fn visit_call_impl(
         &mut self,
-        name: &str,
+        func: &Expression,
         args: &[Expression],
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        self.generate_call(name, args)
+    ) -> Result<(), String> {
+        match func {
+            // Simple function call: function_name()
+            Expression::Var(name) => {
+                self.generate_call(name, args)?;
+                Ok(())
+            }
+            // Qualified call: module.function()
+            Expression::Attribute { object, attr } => {
+                if let Expression::Var(module_name) = object.as_ref() {
+                    let qualified_name = format!("{}.{}", module_name, attr);
+                    self.generate_call(&qualified_name, args)?;
+                    Ok(())
+                } else {
+                    Err("Only simple module.function() calls are supported".to_string())
+                }
+            }
+            _ => Err(
+                "Only simple function calls and module.function() calls are supported".to_string(),
+            ),
+        }
     }
 }

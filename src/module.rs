@@ -163,6 +163,7 @@ impl<'ctx> ModuleRegistry<'ctx> {
                 // Use empty program and symbol map as placeholders (will be compiled directly to .o)
                 let empty_program = Program {
                     imports: vec![],
+                    classes: vec![],
                     functions: vec![],
                     statements: vec![],
                 };
