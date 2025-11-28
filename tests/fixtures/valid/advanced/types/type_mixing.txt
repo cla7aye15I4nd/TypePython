@@ -1,0 +1,4 @@
+Work with all types: 25
+Boolean to numeric: 2
+Compare mixed: 3
+Complex type logic: 6.0

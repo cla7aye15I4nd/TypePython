@@ -2,19 +2,39 @@
 // Combines basic, advanced, and module tests
 
 use crate::integration::test_runner::compile_and_run_test;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+fn run_with_timeout(test_path: &str) {
+    let test_path = test_path.to_string();
+    let (tx, rx) = mpsc::channel();
+
+    let _handle = thread::spawn(move || {
+        let result = compile_and_run_test(&test_path);
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(Duration::from_secs(10)) {
+        Ok(result) => result.unwrap(),
+        Err(_) => {
+            panic!("Test timed out after 10 seconds");
+        }
+    }
+}
 
 macro_rules! test_case {
     ($name:ident, $path:expr) => {
         #[test]
         fn $name() {
-            compile_and_run_test($path).unwrap();
+            run_with_timeout($path);
         }
     };
     ($name:ident, $path:expr, ignore) => {
         #[test]
         #[ignore]
         fn $name() {
-            compile_and_run_test($path).unwrap();
+            run_with_timeout($path);
         }
     };
 }
@@ -64,7 +84,32 @@ test_case!(
 test_case!(test_all_types, "tests/fixtures/valid/basic/all_types.py");
 
 // ============================================================================
-// Advanced Tests
+// Advanced Tests - Arithmetic
+// ============================================================================
+
+test_case!(
+    test_complex_arithmetic,
+    "tests/fixtures/valid/advanced/arithmetic/complex_arithmetic.py"
+);
+test_case!(
+    test_division_operations,
+    "tests/fixtures/valid/advanced/arithmetic/division_operations.py"
+);
+test_case!(
+    test_negative_numbers,
+    "tests/fixtures/valid/advanced/arithmetic/negative_numbers.py"
+);
+test_case!(
+    test_large_numbers,
+    "tests/fixtures/valid/advanced/arithmetic/large_numbers.py"
+);
+test_case!(
+    test_bitwise_simulation,
+    "tests/fixtures/valid/advanced/arithmetic/bitwise_simulation.py"
+);
+
+// ============================================================================
+// Advanced Tests - Control Flow
 // ============================================================================
 
 test_case!(
@@ -76,6 +121,193 @@ test_case!(
     test_nested_functions,
     "tests/fixtures/valid/advanced/nested_functions.py",
     ignore
+);
+test_case!(
+    test_nested_conditionals,
+    "tests/fixtures/valid/advanced/control_flow_complex/nested_conditionals.py"
+);
+test_case!(
+    test_nested_loops,
+    "tests/fixtures/valid/advanced/control_flow_complex/nested_loops.py"
+);
+test_case!(
+    test_loop_with_conditionals,
+    "tests/fixtures/valid/advanced/control_flow_complex/loop_with_conditionals.py"
+);
+test_case!(
+    test_early_termination,
+    "tests/fixtures/valid/advanced/control_flow_complex/early_termination.py"
+);
+test_case!(
+    test_switch_simulation,
+    "tests/fixtures/valid/advanced/control_flow_complex/switch_simulation.py"
+);
+test_case!(
+    test_guard_clauses,
+    "tests/fixtures/valid/advanced/control_flow_complex/guard_clauses.py"
+);
+
+// ============================================================================
+// Advanced Tests - Functions
+// ============================================================================
+
+test_case!(
+    test_multiple_returns,
+    "tests/fixtures/valid/advanced/functions/multiple_returns.py"
+);
+test_case!(
+    test_function_chains,
+    "tests/fixtures/valid/advanced/functions/function_chains.py"
+);
+test_case!(
+    test_parameter_patterns,
+    "tests/fixtures/valid/advanced/functions/parameter_patterns.py"
+);
+test_case!(
+    test_void_functions,
+    "tests/fixtures/valid/advanced/functions/void_functions.py",
+    ignore
+);
+test_case!(
+    test_default_behavior,
+    "tests/fixtures/valid/advanced/functions/default_behavior.py"
+);
+test_case!(
+    test_callback_pattern,
+    "tests/fixtures/valid/advanced/functions/callback_pattern.py"
+);
+
+// ============================================================================
+// Advanced Tests - Type System
+// ============================================================================
+
+test_case!(
+    test_float_precision,
+    "tests/fixtures/valid/advanced/types/float_precision.py"
+);
+test_case!(
+    test_boolean_logic,
+    "tests/fixtures/valid/advanced/types/boolean_logic.py"
+);
+test_case!(
+    test_type_mixing,
+    "tests/fixtures/valid/advanced/types/type_mixing.py"
+);
+test_case!(
+    test_type_comparisons,
+    "tests/fixtures/valid/advanced/types/type_comparisons.py"
+);
+test_case!(
+    test_type_inference,
+    "tests/fixtures/valid/advanced/types/type_inference_test.py"
+);
+
+// ============================================================================
+// Advanced Tests - Strings
+// ============================================================================
+
+test_case!(
+    test_string_operations,
+    "tests/fixtures/valid/advanced/strings/string_operations.py"
+);
+test_case!(
+    test_string_conditionals,
+    "tests/fixtures/valid/advanced/strings/string_conditionals.py"
+);
+test_case!(
+    test_string_loops,
+    "tests/fixtures/valid/advanced/strings/string_loops.py"
+);
+test_case!(
+    test_mixed_output,
+    "tests/fixtures/valid/advanced/strings/mixed_output.py"
+);
+
+// ============================================================================
+// Advanced Tests - Recursion
+// ============================================================================
+
+test_case!(
+    test_deep_recursion,
+    "tests/fixtures/valid/advanced/recursion/deep_recursion.py"
+);
+test_case!(
+    test_mutual_recursion,
+    "tests/fixtures/valid/advanced/recursion/mutual_recursion.py"
+);
+test_case!(
+    test_gcd_lcm,
+    "tests/fixtures/valid/advanced/recursion/gcd_lcm.py"
+);
+test_case!(
+    test_ackermann,
+    "tests/fixtures/valid/advanced/recursion/ackermann.py"
+);
+test_case!(
+    test_tower_of_hanoi,
+    "tests/fixtures/valid/advanced/recursion/tower_of_hanoi.py"
+);
+test_case!(
+    test_recursive_fibonacci,
+    "tests/fixtures/valid/advanced/recursion/recursive_fibonacci.py"
+);
+
+// ============================================================================
+// Advanced Tests - Algorithms
+// ============================================================================
+
+test_case!(
+    test_sorting,
+    "tests/fixtures/valid/advanced/algorithms/sorting.py"
+);
+test_case!(
+    test_prime_sieve,
+    "tests/fixtures/valid/advanced/algorithms/prime_sieve.py"
+);
+test_case!(
+    test_binary_search,
+    "tests/fixtures/valid/advanced/algorithms/binary_search.py"
+);
+test_case!(
+    test_matrix_operations,
+    "tests/fixtures/valid/advanced/algorithms/matrix_operations.py"
+);
+test_case!(
+    test_dynamic_programming,
+    "tests/fixtures/valid/advanced/algorithms/dynamic_programming.py"
+);
+test_case!(
+    test_number_theory,
+    "tests/fixtures/valid/advanced/algorithms/number_theory.py"
+);
+test_case!(
+    test_combinatorics,
+    "tests/fixtures/valid/advanced/algorithms/combinatorics.py"
+);
+test_case!(
+    test_sequence_generation,
+    "tests/fixtures/valid/advanced/algorithms/sequence_generation.py"
+);
+
+// ============================================================================
+// Advanced Tests - Edge Cases
+// ============================================================================
+
+test_case!(
+    test_zero_handling,
+    "tests/fixtures/valid/advanced/edge_cases/zero_handling.py"
+);
+test_case!(
+    test_boundary_values,
+    "tests/fixtures/valid/advanced/edge_cases/boundary_values.py"
+);
+test_case!(
+    test_nested_expressions,
+    "tests/fixtures/valid/advanced/edge_cases/nested_expressions.py"
+);
+test_case!(
+    test_empty_functions,
+    "tests/fixtures/valid/advanced/edge_cases/empty_functions.py"
 );
 
 // ============================================================================
@@ -93,4 +325,16 @@ test_case!(
 test_case!(
     test_deep_import,
     "tests/fixtures/valid/modules/deep_import/main.py"
+);
+test_case!(
+    test_complex_imports,
+    "tests/fixtures/valid/modules/complex_imports/main.py"
+);
+test_case!(
+    test_chained_imports,
+    "tests/fixtures/valid/modules/chained_imports/main.py"
+);
+test_case!(
+    test_namespace_test,
+    "tests/fixtures/valid/modules/namespace_test/main.py"
 );

@@ -1,0 +1,4 @@
+Process twice: 20
+Process thrice: 30
+Map double: 12
+Map triple: 18

@@ -1,0 +1,3 @@
+Integer division: 1408
+Division by powers: 960
+Remainder patterns: 57

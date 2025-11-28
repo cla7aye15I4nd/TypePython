@@ -1,0 +1,4 @@
+Geometric sum: 242
+Arithmetic sum: 185
+Pell(7): 169
+Lucas(7): 29

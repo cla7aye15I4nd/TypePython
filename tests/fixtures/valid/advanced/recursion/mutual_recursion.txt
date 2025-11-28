@@ -1,0 +1,5 @@
+Even/Odd count result: 605
+Is 0 even: True
+Is 1 even: False
+Is 10 even: True
+Is 15 even: False

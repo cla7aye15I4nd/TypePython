@@ -1,0 +1,3 @@
+Multiplication table sum: 225
+Triangle pattern sum: 220
+Three level nesting count: 27

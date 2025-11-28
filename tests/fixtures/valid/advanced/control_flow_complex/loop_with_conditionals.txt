@@ -1,0 +1,3 @@
+Count multiples: 2846
+Sum conditional: 310
+FizzBuzz sum: 314

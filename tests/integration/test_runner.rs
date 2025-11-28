@@ -14,9 +14,6 @@ pub fn compile_and_run_test(test_path: &str) -> Result<()> {
 
     // Clean up previous artifacts
     let _ = fs::remove_file(&exe_path);
-    if let Some(parent) = path.parent() {
-        let _ = fs::remove_dir_all(parent.join("__tpycache__"));
-    }
 
     // Compile the program
     compile(path, &exe_path, &CompileOptions::default())

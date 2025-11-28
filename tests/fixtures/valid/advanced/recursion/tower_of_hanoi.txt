@@ -1,0 +1,4 @@
+Hanoi moves sum: 57
+Hanoi(1): 1
+Hanoi(3): 7
+Hanoi(5): 31

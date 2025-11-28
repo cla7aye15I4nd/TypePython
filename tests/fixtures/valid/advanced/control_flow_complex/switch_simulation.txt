@@ -1,0 +1,2 @@
+Sum of day codes: 2800
+Sum of month days: 181

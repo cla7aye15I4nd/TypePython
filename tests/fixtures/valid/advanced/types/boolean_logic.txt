@@ -1,0 +1,4 @@
+AND operations: 1
+OR operations: 3
+NOT operations: 1
+Complex boolean: 4

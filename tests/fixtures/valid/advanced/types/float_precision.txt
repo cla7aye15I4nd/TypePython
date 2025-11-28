@@ -1,0 +1,3 @@
+Float arithmetic: 54.6
+Float comparisons: 4
+Mixed int float: 9.0

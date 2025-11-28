@@ -1,0 +1,12 @@
+negative
+zero
+small positive
+medium positive
+large positive
+Category: below
+Category: equal
+Category: above
+Success
+Warning
+Error
+Unknown

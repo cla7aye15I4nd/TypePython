@@ -1,0 +1,6 @@
+Validate 50: 100
+Validate -10: -1
+Validate 150: 100
+Safe divide 10/2: 5
+Safe divide 10/0: -1
+Categorize age 25: 3

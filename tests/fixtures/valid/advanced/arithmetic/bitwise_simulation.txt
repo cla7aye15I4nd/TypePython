@@ -1,0 +1,4 @@
+16 is power of 2: True
+15 is power of 2: False
+Set bits in 15: 4
+Reverse bits of 12: 3

@@ -1,0 +1,4 @@
+Precedence test: 23
+Nested operations: 325
+Modulo operations: 17
+Total: 365

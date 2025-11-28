@@ -1,0 +1,3 @@
+Binary search result: 28
+Log2(16): 4
+Log2(256): 8

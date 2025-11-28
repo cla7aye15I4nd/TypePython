@@ -1,0 +1,3 @@
+Matrix determinant: 7
+Matrix scalar multiply: 50
+Matrix transpose sum: 83

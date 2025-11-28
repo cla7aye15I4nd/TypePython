@@ -1,0 +1,3 @@
+Nested arithmetic: 275
+Nested boolean: 3
+Compute nested: 702

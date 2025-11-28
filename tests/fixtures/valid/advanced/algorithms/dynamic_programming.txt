@@ -1,0 +1,3 @@
+Fibonacci(20): 6765
+Climbing stairs(10): 89
+Tribonacci(10): 149

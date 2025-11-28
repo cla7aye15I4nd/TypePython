@@ -1,0 +1,6 @@
+Good day, Alice
+Hey, Bob
+Member discount: 90
+Regular discount: 95
+Hex mode: 255
+Decimal: 255

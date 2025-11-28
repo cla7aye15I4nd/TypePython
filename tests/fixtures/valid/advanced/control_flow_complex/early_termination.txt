@@ -1,0 +1,3 @@
+First divisor of 100: 2
+Square root search: 12
+Collatz steps for 27: 111

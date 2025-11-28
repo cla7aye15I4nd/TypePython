@@ -1,0 +1,9 @@
+Hello
+World
+TypePython
+Compiler
+Number:  42
+Value:  3.14
+Result:  100
+Hello Alice
+Goodbye Alice

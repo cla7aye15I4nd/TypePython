@@ -1,0 +1,3 @@
+Negative arithmetic: 2
+Negative combinations: 97
+Mixed signs: 19

@@ -1,0 +1,4 @@
+Return immediately: 42
+Pass through: 100
+Minimal conditional positive: 1
+Minimal conditional negative: 0

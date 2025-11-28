@@ -1,0 +1,4 @@
+Compare integers: 6
+Compare floats: 4
+Compare booleans: 3
+Chained comparisons: 2

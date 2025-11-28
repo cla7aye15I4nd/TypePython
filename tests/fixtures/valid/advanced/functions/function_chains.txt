@@ -1,0 +1,3 @@
+Apply operations on 5: 1600
+Nested calls on 5: 1600
+Complex chain on 3: 198

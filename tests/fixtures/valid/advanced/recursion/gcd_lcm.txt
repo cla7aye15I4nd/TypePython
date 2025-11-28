@@ -1,0 +1,4 @@
+GCD tests sum: 17
+LCM tests sum: 69
+GCD(48, 18): 6
+LCM(12, 18): 36

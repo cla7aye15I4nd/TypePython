@@ -5,6 +5,7 @@ use inkwell::context::Context;
 use log::debug;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 /// Options for the compilation pipeline
 #[derive(Debug, Default)]
@@ -87,21 +88,21 @@ pub fn compile(
     // ============================================================================
     // Step 2: Compile all modules to LLVM IR and .o files
     // ============================================================================
+
+    // Create a temporary directory for compilation artifacts
+    // This directory will be automatically cleaned up when it goes out of scope
+    let temp_dir =
+        TempDir::new().map_err(|e| format!("Failed to create temporary directory: {}", e))?;
+    let cache_dir = temp_dir.path();
+
     let mut object_files = Vec::new();
 
     // Compile each module
     for (module_path, (module_name, program, imported_symbols)) in &module_registry.module_data {
         // Check if it's a C file
         if module_path.extension().and_then(|s| s.to_str()) == Some("c") {
-            // Compile C file to .o
-            let source_dir = module_path
-                .parent()
-                .ok_or_else(|| format!("Invalid source path: {}", module_path.display()))?;
-            let cache_dir = source_dir.join("__tpycache__");
-            std::fs::create_dir_all(&cache_dir)
-                .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
-
-            let obj_path = module_registry.compile_c_module(module_path, &cache_dir)?;
+            // Compile C file to .o in the unique cache directory
+            let obj_path = module_registry.compile_c_module(module_path, cache_dir)?;
             object_files.push(obj_path);
             continue;
         }
@@ -141,14 +142,7 @@ pub fn compile(
             .verify()
             .map_err(|e| format!("Module '{}' verification failed: {}", module_name, e))?;
 
-        // Write directly to .o file (bitcode format)
-        let source_dir = module_path
-            .parent()
-            .ok_or_else(|| format!("Invalid source path: {}", module_path.display()))?;
-        let cache_dir = source_dir.join("__tpycache__");
-        std::fs::create_dir_all(&cache_dir)
-            .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
-
+        // Write to .o file in the unique cache directory
         let obj_filename = format!("{}.o", module_name);
         let obj_path = cache_dir.join(obj_filename);
 
@@ -167,7 +161,6 @@ pub fn compile(
         "Compilation complete! Executable: {}",
         output_path.display()
     );
-    debug!("Object files cached in __tpycache__ directories");
 
     Ok(())
 }

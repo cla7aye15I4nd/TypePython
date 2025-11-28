@@ -336,6 +336,10 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
         Rule::term_expr => build_term_expr(pair),
         Rule::factor_expr => build_factor_expr(pair),
         Rule::unary_expr => build_unary_expr(pair),
+        Rule::primary => {
+            let inner = pair.into_inner().next().unwrap();
+            build_expression(inner)
+        }
         Rule::call_expr => build_call_expr(pair),
         Rule::atom => build_atom(pair),
         _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
@@ -454,28 +458,34 @@ fn build_binop_chain(items: Vec<(Option<BinaryOp>, Expression)>) -> Expression {
 fn build_unary_expr(pair: Pair<Rule>) -> Expression {
     let mut inner = pair.into_inner();
 
-    let op_pair = inner.next().unwrap();
-    let op = match op_pair.as_rule() {
-        Rule::MINUS => UnaryOp::Neg,
-        Rule::NOT => UnaryOp::Not,
-        _ => panic!("Unexpected unary operator: {:?}", op_pair.as_rule()),
-    };
+    let first_pair = inner.next().unwrap();
 
-    let operand_pair = inner.next().unwrap();
-    let operand = match operand_pair.as_rule() {
-        Rule::expression => build_expression(operand_pair),
-        Rule::call_expr => build_call_expr(operand_pair),
-        _ => panic!(
-            "Unexpected rule in unary expr: {:?}",
-            operand_pair.as_rule()
-        ),
-    };
+    // Check if this is a unary operator or just a primary
+    match first_pair.as_rule() {
+        Rule::MINUS | Rule::NOT => {
+            // This is a unary operation
+            let op = match first_pair.as_rule() {
+                Rule::MINUS => UnaryOp::Neg,
+                Rule::NOT => UnaryOp::Not,
+                _ => unreachable!(),
+            };
 
-    assert_eq!(inner.next(), None);
+            let operand_pair = inner.next().unwrap();
+            let operand = build_expression(operand_pair);
 
-    Expression::UnaryOp {
-        op,
-        operand: Box::new(operand),
+            assert_eq!(inner.next(), None);
+
+            Expression::UnaryOp {
+                op,
+                operand: Box::new(operand),
+            }
+        }
+        Rule::primary => {
+            // This is just a primary expression
+            assert_eq!(inner.next(), None);
+            build_expression(first_pair)
+        }
+        _ => panic!("Unexpected rule in unary expr: {:?}", first_pair.as_rule()),
     }
 }
 

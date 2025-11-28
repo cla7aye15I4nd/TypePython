@@ -11,7 +11,12 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         // External functions are now lazily declared when called
 
-        // Visit all function declarations first
+        // First pass: Declare all functions (for mutual recursion support)
+        for function in &program.functions {
+            self.declare_function(function)?;
+        }
+
+        // Second pass: Visit all function declarations to generate bodies
         for function in &program.functions {
             self.visit_function(function)?;
         }
@@ -33,8 +38,14 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn enter_function_impl(&mut self, func: &Function) -> Result<(), String> {
-        // Declare the function
-        let function = self.declare_function(func)?;
+        // Get the already-declared function
+        let mangled_name = self.mangle_function_name(&self.module_name, &func.name);
+        let function = self.module.get_function(&mangled_name).ok_or_else(|| {
+            format!(
+                "Function {} not found (should have been declared in first pass)",
+                func.name
+            )
+        })?;
         self.current_function = Some(function);
 
         let entry_bb = self.context.append_basic_block(function, "entry");
