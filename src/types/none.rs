@@ -7,6 +7,7 @@ use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
 
 /// None type (null pointer)
+#[derive(Clone, Debug, PartialEq)]
 pub struct NoneType;
 
 impl<'ctx> TypeInfo<'ctx> for NoneType {

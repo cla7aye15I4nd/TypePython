@@ -7,6 +7,7 @@ use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
 
 /// Float type (f64)
+#[derive(Clone, Debug, PartialEq)]
 pub struct FloatType;
 
 impl<'ctx> TypeInfo<'ctx> for FloatType {

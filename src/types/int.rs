@@ -7,6 +7,7 @@ use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
 
 /// Integer type (i64)
+#[derive(Clone, Debug, PartialEq)]
 pub struct IntType;
 
 impl<'ctx> TypeInfo<'ctx> for IntType {

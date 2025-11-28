@@ -3,7 +3,7 @@ mod visitor;
 
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::{infer_type_from_value, TypeCodeGen};
+use crate::types::{PyType, PyValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -23,7 +23,8 @@ pub struct CodeGen<'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: Builder<'ctx>,
-    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
+    /// Variables: name -> (pointer, LLVM type for load, Python type)
+    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, PyType)>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
     pub(crate) module_name: String,
@@ -125,12 +126,12 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    /// Evaluate an expression and return its LLVM value
+    /// Evaluate an expression and return its Python value (IR value + type)
     /// This is separate from visit_expression which is part of the Visitor trait
     pub(crate) fn evaluate_expression(
         &mut self,
         expr: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         match expr {
             Expression::IntLit(val) => self.visit_int_lit_impl(*val),
             Expression::FloatLit(val) => self.visit_float_lit_impl(*val),
@@ -336,7 +337,7 @@ impl<'ctx> CodeGen<'ctx> {
         else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         let cond_val = self.evaluate_expression(condition)?;
-        let cond_int = cond_val.into_int_value();
+        let cond_bool = self.value_to_bool(&cond_val)?;
 
         let function = self.current_function.unwrap();
         let then_bb = self.context.append_basic_block(function, "then");
@@ -350,7 +351,7 @@ impl<'ctx> CodeGen<'ctx> {
         };
 
         self.builder
-            .build_conditional_branch(cond_int, then_bb, else_bb)
+            .build_conditional_branch(cond_bool, then_bb, else_bb)
             .unwrap();
 
         // Generate then block
@@ -369,13 +370,13 @@ impl<'ctx> CodeGen<'ctx> {
             // Process elif clauses
             for (elif_cond, elif_body) in elif_clauses {
                 let elif_cond_val = self.evaluate_expression(elif_cond)?;
-                let elif_cond_int = elif_cond_val.into_int_value();
+                let elif_cond_bool = self.value_to_bool(&elif_cond_val)?;
 
                 let elif_then_bb = self.context.append_basic_block(function, "elif_then");
                 let next_bb = self.context.append_basic_block(function, "elif_next");
 
                 self.builder
-                    .build_conditional_branch(elif_cond_int, elif_then_bb, next_bb)
+                    .build_conditional_branch(elif_cond_bool, elif_then_bb, next_bb)
                     .unwrap();
 
                 self.builder.position_at_end(elif_then_bb);
@@ -420,9 +421,9 @@ impl<'ctx> CodeGen<'ctx> {
         // Condition block
         self.builder.position_at_end(cond_bb);
         let cond_val = self.evaluate_expression(condition)?;
-        let cond_int = cond_val.into_int_value();
+        let cond_bool = self.value_to_bool(&cond_val)?;
         self.builder
-            .build_conditional_branch(cond_int, body_bb, after_bb)
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
             .unwrap();
 
         // Body block
@@ -455,7 +456,7 @@ impl<'ctx> CodeGen<'ctx> {
         op: &BinaryOp,
         left: &Expression,
         right: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         // Handle short-circuit evaluation for logical operators
         if matches!(op, BinaryOp::And | BinaryOp::Or) {
             return self.generate_short_circuit_op(op, left, right);
@@ -464,23 +465,23 @@ impl<'ctx> CodeGen<'ctx> {
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
-        // Infer types from values
-        let lhs_type = infer_type_from_value(&lhs)?;
-        let rhs_type = infer_type_from_value(&rhs)?;
-
-        // Determine the common type for the operation
+        // Use the type information from PyValue (no inference needed!)
         let (op_type, lhs_coerced, rhs_coerced) =
-            self.coerce_operands_for_binary_op(&lhs_type, &rhs_type, lhs, rhs)?;
+            self.coerce_operands_for_binary_op(&lhs.ty, &rhs.ty, lhs.value, rhs.value)?;
 
         // Delegate to the type-specific implementation
-        op_type.binary_op(
+        let result = op_type.binary_op(
             self.context,
             &self.builder,
             &self.module,
             op,
             lhs_coerced,
             rhs_coerced,
-        )
+        )?;
+
+        // Determine result type based on operation
+        let result_ty = self.binary_op_result_type(op, &op_type);
+        Ok(PyValue::new(result, result_ty))
     }
 
     /// Generate short-circuit evaluation for `and` and `or` operators
@@ -489,14 +490,14 @@ impl<'ctx> CodeGen<'ctx> {
         op: &BinaryOp,
         left: &Expression,
         right: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         let current_fn = self.current_function.ok_or("No current function")?;
 
         // Evaluate left side
         let lhs = self.evaluate_expression(left)?;
 
         // Convert to boolean for the condition (i1 type)
-        let lhs_bool = self.value_to_bool(lhs)?;
+        let lhs_bool = self.value_to_bool(&lhs)?;
 
         // Create basic blocks for short-circuit
         let eval_rhs_bb = self.context.append_basic_block(current_fn, "eval_rhs");
@@ -526,7 +527,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Evaluate right side
         self.builder.position_at_end(eval_rhs_bb);
         let rhs = self.evaluate_expression(right)?;
-        let rhs_bool = self.value_to_bool(rhs)?;
+        let rhs_bool = self.value_to_bool(&rhs)?;
         let rhs_bb = self.builder.get_insert_block().unwrap();
         self.builder.build_unconditional_branch(merge_bb).unwrap();
 
@@ -557,52 +558,53 @@ impl<'ctx> CodeGen<'ctx> {
             _ => unreachable!(),
         }
 
-        Ok(phi.as_basic_value())
+        Ok(PyValue::bool(phi.as_basic_value()))
     }
 
-    /// Convert a value to a boolean (i1)
+    /// Convert a PyValue to a boolean (i1)
     fn value_to_bool(
         &self,
-        val: BasicValueEnum<'ctx>,
+        val: &PyValue<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        if val.is_int_value() {
-            let int_val = val.into_int_value();
-            if int_val.get_type().get_bit_width() == 1 {
+        match &val.ty {
+            PyType::Bool(_) => {
                 // Already a bool
-                Ok(int_val)
-            } else {
+                Ok(val.value.into_int_value())
+            }
+            PyType::Int(_) => {
                 // Non-zero is true
+                let int_val = val.value.into_int_value();
                 let zero = int_val.get_type().const_zero();
                 Ok(self
                     .builder
                     .build_int_compare(inkwell::IntPredicate::NE, int_val, zero, "to_bool")
                     .unwrap())
             }
-        } else if val.is_float_value() {
-            let float_val = val.into_float_value();
-            let zero = self.context.f64_type().const_zero();
-            Ok(self
-                .builder
-                .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
-                .unwrap())
-        } else if val.is_pointer_value() {
-            let ptr_val = val.into_pointer_value();
-            let null = ptr_val.get_type().const_null();
-            Ok(self
-                .builder
-                .build_int_compare(
-                    inkwell::IntPredicate::NE,
-                    self.builder
-                        .build_ptr_to_int(ptr_val, self.context.i64_type(), "ptr")
-                        .unwrap(),
-                    self.builder
-                        .build_ptr_to_int(null, self.context.i64_type(), "null")
-                        .unwrap(),
-                    "to_bool",
-                )
-                .unwrap())
-        } else {
-            Err("Cannot convert value to bool".to_string())
+            PyType::Float(_) => {
+                let float_val = val.value.into_float_value();
+                let zero = self.context.f64_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Bytes(_) | PyType::None(_) => {
+                let ptr_val = val.value.into_pointer_value();
+                let null = ptr_val.get_type().const_null();
+                Ok(self
+                    .builder
+                    .build_int_compare(
+                        inkwell::IntPredicate::NE,
+                        self.builder
+                            .build_ptr_to_int(ptr_val, self.context.i64_type(), "ptr")
+                            .unwrap(),
+                        self.builder
+                            .build_ptr_to_int(null, self.context.i64_type(), "null")
+                            .unwrap(),
+                        "to_bool",
+                    )
+                    .unwrap())
+            }
         }
     }
 
@@ -664,28 +666,22 @@ impl<'ctx> CodeGen<'ctx> {
     /// Coerce operands to a common type for binary operations
     fn coerce_operands_for_binary_op(
         &self,
-        lhs_type: &TypeCodeGen,
-        rhs_type: &TypeCodeGen,
+        lhs_type: &PyType,
+        rhs_type: &PyType,
         lhs: BasicValueEnum<'ctx>,
         rhs: BasicValueEnum<'ctx>,
-    ) -> Result<(TypeCodeGen, BasicValueEnum<'ctx>, BasicValueEnum<'ctx>), String> {
-        use crate::types::{BoolType, BytesType, FloatType, IntType};
+    ) -> Result<(PyType, BasicValueEnum<'ctx>, BasicValueEnum<'ctx>), String> {
+        use crate::types::{BoolType, BytesType, FloatType, IntType, NoneType};
 
         match (lhs_type, rhs_type) {
             // Same types - no coercion needed
-            (TypeCodeGen::Int(_), TypeCodeGen::Int(_)) => Ok((TypeCodeGen::Int(IntType), lhs, rhs)),
-            (TypeCodeGen::Float(_), TypeCodeGen::Float(_)) => {
-                Ok((TypeCodeGen::Float(FloatType), lhs, rhs))
-            }
-            (TypeCodeGen::Bool(_), TypeCodeGen::Bool(_)) => {
-                Ok((TypeCodeGen::Bool(BoolType), lhs, rhs))
-            }
-            (TypeCodeGen::Bytes(_), TypeCodeGen::Bytes(_)) => {
-                Ok((TypeCodeGen::Bytes(BytesType), lhs, rhs))
-            }
+            (PyType::Int(_), PyType::Int(_)) => Ok((PyType::Int(IntType), lhs, rhs)),
+            (PyType::Float(_), PyType::Float(_)) => Ok((PyType::Float(FloatType), lhs, rhs)),
+            (PyType::Bool(_), PyType::Bool(_)) => Ok((PyType::Bool(BoolType), lhs, rhs)),
+            (PyType::Bytes(_), PyType::Bytes(_)) => Ok((PyType::Bytes(BytesType), lhs, rhs)),
 
             // Int/Float coercion - promote to Float
-            (TypeCodeGen::Int(_), TypeCodeGen::Float(_)) => {
+            (PyType::Int(_), PyType::Float(_)) => {
                 let lhs_float = self
                     .builder
                     .build_signed_int_to_float(
@@ -694,9 +690,9 @@ impl<'ctx> CodeGen<'ctx> {
                         "itof",
                     )
                     .unwrap();
-                Ok((TypeCodeGen::Float(FloatType), lhs_float.into(), rhs))
+                Ok((PyType::Float(FloatType), lhs_float.into(), rhs))
             }
-            (TypeCodeGen::Float(_), TypeCodeGen::Int(_)) => {
+            (PyType::Float(_), PyType::Int(_)) => {
                 let rhs_float = self
                     .builder
                     .build_signed_int_to_float(
@@ -705,27 +701,27 @@ impl<'ctx> CodeGen<'ctx> {
                         "itof",
                     )
                     .unwrap();
-                Ok((TypeCodeGen::Float(FloatType), lhs, rhs_float.into()))
+                Ok((PyType::Float(FloatType), lhs, rhs_float.into()))
             }
 
             // Bool/Int coercion - promote Bool to Int
-            (TypeCodeGen::Bool(_), TypeCodeGen::Int(_)) => {
+            (PyType::Bool(_), PyType::Int(_)) => {
                 let lhs_int = self
                     .builder
                     .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
                     .unwrap();
-                Ok((TypeCodeGen::Int(IntType), lhs_int.into(), rhs))
+                Ok((PyType::Int(IntType), lhs_int.into(), rhs))
             }
-            (TypeCodeGen::Int(_), TypeCodeGen::Bool(_)) => {
+            (PyType::Int(_), PyType::Bool(_)) => {
                 let rhs_int = self
                     .builder
                     .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
                     .unwrap();
-                Ok((TypeCodeGen::Int(IntType), lhs, rhs_int.into()))
+                Ok((PyType::Int(IntType), lhs, rhs_int.into()))
             }
 
             // Bool/Float coercion - promote Bool to Float
-            (TypeCodeGen::Bool(_), TypeCodeGen::Float(_)) => {
+            (PyType::Bool(_), PyType::Float(_)) => {
                 let lhs_int = self
                     .builder
                     .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
@@ -734,9 +730,9 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_signed_int_to_float(lhs_int, self.context.f64_type(), "itof")
                     .unwrap();
-                Ok((TypeCodeGen::Float(FloatType), lhs_float.into(), rhs))
+                Ok((PyType::Float(FloatType), lhs_float.into(), rhs))
             }
-            (TypeCodeGen::Float(_), TypeCodeGen::Bool(_)) => {
+            (PyType::Float(_), PyType::Bool(_)) => {
                 let rhs_int = self
                     .builder
                     .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
@@ -745,13 +741,11 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_signed_int_to_float(rhs_int, self.context.f64_type(), "itof")
                     .unwrap();
-                Ok((TypeCodeGen::Float(FloatType), lhs, rhs_float.into()))
+                Ok((PyType::Float(FloatType), lhs, rhs_float.into()))
             }
 
             // None type
-            (TypeCodeGen::None(_), TypeCodeGen::None(_)) => {
-                Ok((TypeCodeGen::None(crate::types::NoneType), lhs, rhs))
-            }
+            (PyType::None(_), PyType::None(_)) => Ok((PyType::None(NoneType), lhs, rhs)),
 
             _ => Err(format!(
                 "Incompatible types for binary operation: {:?} and {:?}",
@@ -761,23 +755,57 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Determine the result type of a binary operation
+    fn binary_op_result_type(&self, op: &BinaryOp, operand_type: &PyType) -> PyType {
+        use crate::types::BoolType;
+        // Comparison and logical operators return bool
+        match op {
+            BinaryOp::Eq
+            | BinaryOp::Ne
+            | BinaryOp::Lt
+            | BinaryOp::Le
+            | BinaryOp::Gt
+            | BinaryOp::Ge
+            | BinaryOp::Is
+            | BinaryOp::IsNot
+            | BinaryOp::In
+            | BinaryOp::NotIn => PyType::Bool(BoolType),
+            // All other operators return the operand type
+            _ => operand_type.clone(),
+        }
+    }
+
     pub(crate) fn generate_unary_op(
         &mut self,
         op: &UnaryOp,
         operand: &Expression,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         let val = self.evaluate_expression(operand)?;
 
-        // Infer type from value and delegate to type-specific implementation
-        let val_type = infer_type_from_value(&val)?;
-        val_type.unary_op(self.context, &self.builder, op, val)
+        // Use the type from PyValue - no inference needed!
+        let result = val
+            .ty
+            .unary_op(self.context, &self.builder, op, val.value)?;
+
+        // Determine result type
+        let result_ty = self.unary_op_result_type(op, &val.ty);
+        Ok(PyValue::new(result, result_ty))
+    }
+
+    /// Determine the result type of a unary operation
+    fn unary_op_result_type(&self, op: &UnaryOp, operand_type: &PyType) -> PyType {
+        use crate::types::BoolType;
+        match op {
+            UnaryOp::Not => PyType::Bool(BoolType),
+            _ => operand_type.clone(),
+        }
     }
 
     pub(crate) fn generate_call(
         &mut self,
         name: &str,
         args: &[Expression],
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         // Handle print() specially - convert to printf calls
         if name == "print" {
             return self.generate_print_call(args);
@@ -809,7 +837,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {
-            arg_values.push(self.evaluate_expression(arg)?.into());
+            arg_values.push(self.evaluate_expression(arg)?.value.into());
         }
 
         let call_site = self
@@ -820,40 +848,55 @@ impl<'ctx> CodeGen<'ctx> {
         // Check if the called function has a non-void return type
         let returns_value = function.get_type().get_return_type().is_some();
 
+        // TODO: We should get the actual return type from function metadata
+        // For now, we infer from the LLVM return value (not ideal but maintains compatibility)
         if returns_value {
-            // The call returns a value - convert through AnyValue
             use inkwell::values::AnyValue;
             let any_val = call_site.as_any_value_enum();
             match any_val {
-                inkwell::values::AnyValueEnum::IntValue(iv) => Ok(iv.into()),
-                inkwell::values::AnyValueEnum::FloatValue(fv) => Ok(fv.into()),
-                inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(pv.into()),
-                inkwell::values::AnyValueEnum::ArrayValue(av) => Ok(av.into()),
-                inkwell::values::AnyValueEnum::StructValue(sv) => Ok(sv.into()),
-                inkwell::values::AnyValueEnum::VectorValue(vv) => Ok(vv.into()),
-                _ => Ok(self.context.i32_type().const_zero().into()),
+                inkwell::values::AnyValueEnum::IntValue(iv) => {
+                    let ir_val: BasicValueEnum = iv.into();
+                    // Check if it's a bool (i1) or int (i64)
+                    if iv.get_type().get_bit_width() == 1 {
+                        Ok(PyValue::bool(ir_val))
+                    } else {
+                        Ok(PyValue::int(ir_val))
+                    }
+                }
+                inkwell::values::AnyValueEnum::FloatValue(fv) => Ok(PyValue::float(fv.into())),
+                inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(PyValue::bytes(pv.into())),
+                _ => Ok(PyValue::none(
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null()
+                        .into(),
+                )),
             }
         } else {
-            // Function returns void
-            Ok(self.context.i32_type().const_zero().into())
+            // Function returns void - return None
+            Ok(PyValue::none(
+                self.context
+                    .ptr_type(inkwell::AddressSpace::default())
+                    .const_null()
+                    .into(),
+            ))
         }
     }
 
     pub(crate) fn generate_print_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         let print_space = self.get_or_declare_builtin_function("print_space");
         let print_newline = self.get_or_declare_builtin_function("print_newline");
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.evaluate_expression(arg)?;
 
-            // Infer type and delegate to type-specific print
-            let val_type = infer_type_from_value(&val)?;
-            let print_fn_name = val_type.print_function_name();
+            // Use the type from PyValue - no inference needed!
+            let print_fn_name = val.ty.print_function_name();
             let print_fn = self.get_or_declare_builtin_function(print_fn_name);
-            val_type.print(&self.builder, print_fn, val)?;
+            val.ty.print(&self.builder, print_fn, val.value)?;
 
             // Print space between arguments (but not after the last one)
             if i < args.len() - 1 {
@@ -868,7 +911,13 @@ impl<'ctx> CodeGen<'ctx> {
             .build_call(print_newline, &[], "print_newline")
             .unwrap();
 
-        Ok(self.context.i32_type().const_zero().into())
+        // print() returns None
+        Ok(PyValue::none(
+            self.context
+                .ptr_type(inkwell::AddressSpace::default())
+                .const_null()
+                .into(),
+        ))
     }
     pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
         match ty {

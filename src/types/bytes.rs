@@ -7,6 +7,7 @@ use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
 
 /// Bytes type (pointer to null-terminated byte sequence)
+#[derive(Clone, Debug, PartialEq)]
 pub struct BytesType;
 
 impl<'ctx> TypeInfo<'ctx> for BytesType {

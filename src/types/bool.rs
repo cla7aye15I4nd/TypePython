@@ -7,6 +7,7 @@ use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
 
 /// Boolean type (i1)
+#[derive(Clone, Debug, PartialEq)]
 pub struct BoolType;
 
 impl<'ctx> TypeInfo<'ctx> for BoolType {

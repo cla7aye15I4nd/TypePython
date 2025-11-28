@@ -741,12 +741,16 @@ fn extract_ptr_result<'ctx>(
 }
 
 // ============================================================================
-// Type Dispatch
+// PyType - Python semantic type for codegen
 // ============================================================================
 
-/// Dispatch enum that wraps type-specific CodeGenOps implementations.
-/// This allows us to return a concrete type from get_codegen_ops().
-pub enum TypeCodeGen {
+/// Python semantic type for codegen.
+///
+/// This represents the Python-level type, not the LLVM IR type.
+/// Different PyTypes may map to the same IR type (e.g., List, Dict, bytes, None
+/// all map to pointer in LLVM IR).
+#[derive(Clone, Debug, PartialEq)]
+pub enum PyType {
     Int(IntType),
     Float(FloatType),
     Bool(BoolType),
@@ -754,15 +758,15 @@ pub enum TypeCodeGen {
     None(NoneType),
 }
 
-impl TypeCodeGen {
-    /// Get the CodeGenOps implementation for a given AST Type
+impl PyType {
+    /// Get the PyType for a given AST Type
     pub fn from_ast_type(ty: &Type) -> Result<Self, String> {
         match ty {
-            Type::Int => Ok(TypeCodeGen::Int(IntType)),
-            Type::Float => Ok(TypeCodeGen::Float(FloatType)),
-            Type::Bool => Ok(TypeCodeGen::Bool(BoolType)),
-            Type::Bytes => Ok(TypeCodeGen::Bytes(BytesType)),
-            Type::None => Ok(TypeCodeGen::None(NoneType)),
+            Type::Int => Ok(PyType::Int(IntType)),
+            Type::Float => Ok(PyType::Float(FloatType)),
+            Type::Bool => Ok(PyType::Bool(BoolType)),
+            Type::Bytes => Ok(PyType::Bytes(BytesType)),
+            Type::None => Ok(PyType::None(NoneType)),
             Type::Str => Err("Str type not yet implemented (use Bytes)".to_string()),
             Type::List(_) => Err("List type not yet implemented".to_string()),
             Type::Dict(_, _) => Err("Dict type not yet implemented".to_string()),
@@ -783,11 +787,11 @@ impl TypeCodeGen {
         rhs: BasicValueEnum<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, String> {
         match self {
-            TypeCodeGen::Int(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
-            TypeCodeGen::Float(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
-            TypeCodeGen::Bool(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
-            TypeCodeGen::Bytes(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
-            TypeCodeGen::None(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
+            PyType::Int(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
+            PyType::Float(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
+            PyType::Bool(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
+            PyType::Bytes(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
+            PyType::None(t) => t.binary_op(ctx, builder, module, op, lhs, rhs),
         }
     }
 
@@ -800,11 +804,11 @@ impl TypeCodeGen {
         val: BasicValueEnum<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, String> {
         match self {
-            TypeCodeGen::Int(t) => t.unary_op(ctx, builder, op, val),
-            TypeCodeGen::Float(t) => t.unary_op(ctx, builder, op, val),
-            TypeCodeGen::Bool(t) => t.unary_op(ctx, builder, op, val),
-            TypeCodeGen::Bytes(t) => t.unary_op(ctx, builder, op, val),
-            TypeCodeGen::None(t) => t.unary_op(ctx, builder, op, val),
+            PyType::Int(t) => t.unary_op(ctx, builder, op, val),
+            PyType::Float(t) => t.unary_op(ctx, builder, op, val),
+            PyType::Bool(t) => t.unary_op(ctx, builder, op, val),
+            PyType::Bytes(t) => t.unary_op(ctx, builder, op, val),
+            PyType::None(t) => t.unary_op(ctx, builder, op, val),
         }
     }
 
@@ -816,11 +820,11 @@ impl TypeCodeGen {
         val: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
         match self {
-            TypeCodeGen::Int(t) => t.print(builder, print_fn, val),
-            TypeCodeGen::Float(t) => t.print(builder, print_fn, val),
-            TypeCodeGen::Bool(t) => t.print(builder, print_fn, val),
-            TypeCodeGen::Bytes(t) => t.print(builder, print_fn, val),
-            TypeCodeGen::None(t) => t.print(builder, print_fn, val),
+            PyType::Int(t) => t.print(builder, print_fn, val),
+            PyType::Float(t) => t.print(builder, print_fn, val),
+            PyType::Bool(t) => t.print(builder, print_fn, val),
+            PyType::Bytes(t) => t.print(builder, print_fn, val),
+            PyType::None(t) => t.print(builder, print_fn, val),
         }
     }
 
@@ -833,42 +837,107 @@ impl TypeCodeGen {
         target: &Type,
     ) -> Result<BasicValueEnum<'ctx>, String> {
         match self {
-            TypeCodeGen::Int(t) => t.coerce_to(ctx, builder, val, target),
-            TypeCodeGen::Float(t) => t.coerce_to(ctx, builder, val, target),
-            TypeCodeGen::Bool(t) => t.coerce_to(ctx, builder, val, target),
-            TypeCodeGen::Bytes(t) => t.coerce_to(ctx, builder, val, target),
-            TypeCodeGen::None(t) => t.coerce_to(ctx, builder, val, target),
+            PyType::Int(t) => t.coerce_to(ctx, builder, val, target),
+            PyType::Float(t) => t.coerce_to(ctx, builder, val, target),
+            PyType::Bool(t) => t.coerce_to(ctx, builder, val, target),
+            PyType::Bytes(t) => t.coerce_to(ctx, builder, val, target),
+            PyType::None(t) => t.coerce_to(ctx, builder, val, target),
         }
     }
 
     /// Get the print function name for this type
     pub fn print_function_name(&self) -> &'static str {
         match self {
-            TypeCodeGen::Int(_) => "print_int",
-            TypeCodeGen::Float(_) => "print_float",
-            TypeCodeGen::Bool(_) => "print_bool",
-            TypeCodeGen::Bytes(_) => "print_str",
-            TypeCodeGen::None(_) => "print_none",
+            PyType::Int(_) => "print_int",
+            PyType::Float(_) => "print_float",
+            PyType::Bool(_) => "print_bool",
+            PyType::Bytes(_) => "print_str",
+            PyType::None(_) => "print_none",
+        }
+    }
+
+    /// Convert to AST Type
+    pub fn to_ast_type(&self) -> Type {
+        match self {
+            PyType::Int(_) => Type::Int,
+            PyType::Float(_) => Type::Float,
+            PyType::Bool(_) => Type::Bool,
+            PyType::Bytes(_) => Type::Bytes,
+            PyType::None(_) => Type::None,
         }
     }
 }
 
-/// Infer the type from an LLVM value at runtime.
-/// This is used when we don't have static type information.
-pub fn infer_type_from_value(val: &BasicValueEnum) -> Result<TypeCodeGen, String> {
-    if val.is_int_value() {
-        let int_val = val.into_int_value();
-        if int_val.get_type().get_bit_width() == 1 {
-            Ok(TypeCodeGen::Bool(BoolType))
-        } else {
-            Ok(TypeCodeGen::Int(IntType))
-        }
-    } else if val.is_float_value() {
-        Ok(TypeCodeGen::Float(FloatType))
-    } else if val.is_pointer_value() {
-        // Could be Bytes or None - default to Bytes for now
-        Ok(TypeCodeGen::Bytes(BytesType))
-    } else {
-        Err("Cannot infer type from value".to_string())
+// ============================================================================
+// PyValue - Python value with its type information
+// ============================================================================
+
+/// A Python value paired with its type information.
+/// This eliminates the need to infer types from LLVM IR values.
+#[derive(Clone)]
+pub struct PyValue<'ctx> {
+    pub value: BasicValueEnum<'ctx>,
+    pub ty: PyType,
+}
+
+impl<'ctx> PyValue<'ctx> {
+    /// Create a new Python value
+    pub fn new(value: BasicValueEnum<'ctx>, ty: PyType) -> Self {
+        Self { value, ty }
+    }
+
+    /// Create a Python int value
+    pub fn int(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::Int(IntType))
+    }
+
+    /// Create a Python float value
+    pub fn float(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::Float(FloatType))
+    }
+
+    /// Create a Python bool value
+    pub fn bool(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::Bool(BoolType))
+    }
+
+    /// Create a Python bytes value
+    pub fn bytes(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::Bytes(BytesType))
+    }
+
+    /// Create a Python none value
+    pub fn none(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::None(NoneType))
+    }
+
+    /// Check if this is an int type
+    pub fn is_int(&self) -> bool {
+        matches!(self.ty, PyType::Int(_))
+    }
+
+    /// Check if this is a float type
+    pub fn is_float(&self) -> bool {
+        matches!(self.ty, PyType::Float(_))
+    }
+
+    /// Check if this is a bool type
+    pub fn is_bool(&self) -> bool {
+        matches!(self.ty, PyType::Bool(_))
+    }
+
+    /// Check if this is a bytes type
+    pub fn is_bytes(&self) -> bool {
+        matches!(self.ty, PyType::Bytes(_))
+    }
+
+    /// Check if this is a none type
+    pub fn is_none(&self) -> bool {
+        matches!(self.ty, PyType::None(_))
+    }
+
+    /// Get the AST type for this value
+    pub fn ast_type(&self) -> Type {
+        self.ty.to_ast_type()
     }
 }

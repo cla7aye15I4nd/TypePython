@@ -16,7 +16,7 @@ mod none;
 
 pub use self::bool::BoolType;
 pub use bytes::BytesType;
-pub use codegen::{infer_type_from_value, CodeGenOps, TypeCodeGen};
+pub use codegen::{CodeGenOps, PyType, PyValue};
 pub use float::FloatType;
 pub use int::IntType;
 pub use none::NoneType;

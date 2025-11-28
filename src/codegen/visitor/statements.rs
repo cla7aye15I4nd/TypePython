@@ -1,6 +1,7 @@
 /// Statement visitor implementation for code generation
 use super::super::CodeGen;
 use crate::ast::*;
+use crate::types::{PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_decl_impl(
@@ -19,11 +20,13 @@ impl<'ctx> CodeGen<'ctx> {
         let val = self.evaluate_expression(value)?;
 
         // Coerce the value to match the declared type if needed
-        let coerced_val = self.coerce_value_to_type(val, var_type)?;
+        let coerced_val = self.coerce_value_to_type(val.value, var_type)?;
 
         self.builder.build_store(alloca, coerced_val).unwrap();
         let llvm_type = self.type_to_llvm(var_type);
-        self.variables.insert(name.to_string(), (alloca, llvm_type));
+        let py_type = PyType::from_ast_type(var_type)?;
+        self.variables
+            .insert(name.to_string(), (alloca, llvm_type, py_type));
         Ok(())
     }
 
@@ -34,12 +37,13 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<(), String> {
         match target {
             AssignTarget::Var(name) => {
-                let (var, _) = *self
+                let (var, _, _) = self
                     .variables
                     .get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
+                    .ok_or_else(|| format!("Variable {} not found", name))?
+                    .clone();
                 let val = self.evaluate_expression(value)?;
-                self.builder.build_store(var, val).unwrap();
+                self.builder.build_store(var, val.value).unwrap();
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
@@ -57,16 +61,17 @@ impl<'ctx> CodeGen<'ctx> {
         op: &AugAssignOp,
         value: &Expression,
     ) -> Result<(), String> {
-        // For now, only support simple variable targets
         match target {
             AssignTarget::Var(name) => {
-                let (var, load_type) = *self
+                let (var, load_type, py_type) = self
                     .variables
                     .get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?;
+                    .ok_or_else(|| format!("Variable {} not found", name))?
+                    .clone();
 
-                // Load current value
-                let current = self.builder.build_load(load_type, var, name).unwrap();
+                // Load current value with its known type
+                let current_ir = self.builder.build_load(load_type, var, name).unwrap();
+                let current = PyValue::new(current_ir, py_type.clone());
 
                 // Evaluate RHS
                 let rhs = self.evaluate_expression(value)?;
@@ -87,196 +92,23 @@ impl<'ctx> CodeGen<'ctx> {
                     AugAssignOp::RShift => BinaryOp::RShift,
                 };
 
-                // Generate binary operation
-                // We already have the loaded values, so we need to do the operation directly
-                use inkwell::values::BasicValueEnum;
-                let result: BasicValueEnum = if current.is_int_value() && rhs.is_int_value() {
-                    let lhs_int = current.into_int_value();
-                    let rhs_int = rhs.into_int_value();
+                // Use the type-aware coercion and dispatch
+                let (op_type, lhs_coerced, rhs_coerced) = self.coerce_operands_for_binary_op(
+                    &current.ty,
+                    &rhs.ty,
+                    current.value,
+                    rhs.value,
+                )?;
 
-                    let int_result = match bin_op {
-                        BinaryOp::Add => self
-                            .builder
-                            .build_int_add(lhs_int, rhs_int, "addtmp")
-                            .unwrap(),
-                        BinaryOp::Sub => self
-                            .builder
-                            .build_int_sub(lhs_int, rhs_int, "subtmp")
-                            .unwrap(),
-                        BinaryOp::Mul => self
-                            .builder
-                            .build_int_mul(lhs_int, rhs_int, "multmp")
-                            .unwrap(),
-                        BinaryOp::Div => self
-                            .builder
-                            .build_int_signed_div(lhs_int, rhs_int, "divtmp")
-                            .unwrap(),
-                        BinaryOp::FloorDiv => {
-                            // Call floordiv_int for Python-style floor division
-                            use inkwell::values::AnyValue;
-                            let floordiv_fn = self.get_or_declare_builtin_function("floordiv_int");
-                            let call_site = self
-                                .builder
-                                .build_call(
-                                    floordiv_fn,
-                                    &[lhs_int.into(), rhs_int.into()],
-                                    "floordivtmp",
-                                )
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                                iv
-                            } else {
-                                return Err("floordiv_int did not return an int value".to_string());
-                            }
-                        }
-                        BinaryOp::Mod => {
-                            // Call mod_int for Python-style modulo
-                            use inkwell::values::AnyValue;
-                            let mod_fn = self.get_or_declare_builtin_function("mod_int");
-                            let call_site = self
-                                .builder
-                                .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "modtmp")
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                                iv
-                            } else {
-                                return Err("mod_int did not return an int value".to_string());
-                            }
-                        }
-                        BinaryOp::Pow => {
-                            // Call pow_int builtin
-                            use inkwell::values::AnyValue;
-                            let pow_fn = self.get_or_declare_builtin_function("pow_int");
-                            let call_site = self
-                                .builder
-                                .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "powtmp")
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-                                iv
-                            } else {
-                                return Err("pow_int did not return an int value".to_string());
-                            }
-                        }
-                        BinaryOp::BitOr => {
-                            self.builder.build_or(lhs_int, rhs_int, "ortmp").unwrap()
-                        }
-                        BinaryOp::BitXor => {
-                            self.builder.build_xor(lhs_int, rhs_int, "xortmp").unwrap()
-                        }
-                        BinaryOp::BitAnd => {
-                            self.builder.build_and(lhs_int, rhs_int, "andtmp").unwrap()
-                        }
-                        BinaryOp::LShift => self
-                            .builder
-                            .build_left_shift(lhs_int, rhs_int, "lshifttmp")
-                            .unwrap(),
-                        BinaryOp::RShift => self
-                            .builder
-                            .build_right_shift(lhs_int, rhs_int, true, "rshifttmp")
-                            .unwrap(),
-                        _ => {
-                            return Err(format!(
-                                "Unsupported augmented assignment operator for int: {:?}",
-                                op
-                            ))
-                        }
-                    };
-                    int_result.into()
-                } else if current.is_float_value() && rhs.is_float_value() {
-                    let lhs_float = current.into_float_value();
-                    let rhs_float = rhs.into_float_value();
-
-                    let float_result = match bin_op {
-                        BinaryOp::Add => self
-                            .builder
-                            .build_float_add(lhs_float, rhs_float, "faddtmp")
-                            .unwrap(),
-                        BinaryOp::Sub => self
-                            .builder
-                            .build_float_sub(lhs_float, rhs_float, "fsubtmp")
-                            .unwrap(),
-                        BinaryOp::Mul => self
-                            .builder
-                            .build_float_mul(lhs_float, rhs_float, "fmultmp")
-                            .unwrap(),
-                        BinaryOp::Div => self
-                            .builder
-                            .build_float_div(lhs_float, rhs_float, "fdivtmp")
-                            .unwrap(),
-                        BinaryOp::FloorDiv => {
-                            // Float floor division: divide then floor
-                            use inkwell::values::AnyValue;
-                            let div_result = self
-                                .builder
-                                .build_float_div(lhs_float, rhs_float, "fdivtmp")
-                                .unwrap();
-                            let floor_fn = self.get_or_declare_builtin_function("floor_float");
-                            let call_site = self
-                                .builder
-                                .build_call(floor_fn, &[div_result.into()], "floortmp")
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-                                fv
-                            } else {
-                                return Err("floor_float did not return a float value".to_string());
-                            }
-                        }
-                        BinaryOp::Mod => {
-                            // Call mod_float for Python-style float modulo
-                            use inkwell::values::AnyValue;
-                            let fmod_fn = self.get_or_declare_builtin_function("mod_float");
-                            let call_site = self
-                                .builder
-                                .build_call(
-                                    fmod_fn,
-                                    &[lhs_float.into(), rhs_float.into()],
-                                    "fmodtmp",
-                                )
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-                                fv
-                            } else {
-                                return Err("mod_float did not return a float value".to_string());
-                            }
-                        }
-                        BinaryOp::Pow => {
-                            // Call pow_float builtin for floats
-                            use inkwell::values::AnyValue;
-                            let pow_fn = self.get_or_declare_builtin_function("pow_float");
-                            let call_site = self
-                                .builder
-                                .build_call(
-                                    pow_fn,
-                                    &[lhs_float.into(), rhs_float.into()],
-                                    "fpowtmp",
-                                )
-                                .unwrap();
-                            let any_val = call_site.as_any_value_enum();
-                            if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-                                fv
-                            } else {
-                                return Err("pow_float did not return a float value".to_string());
-                            }
-                        }
-                        _ => {
-                            return Err(format!(
-                                "Unsupported augmented assignment operator for float: {:?}",
-                                op
-                            ))
-                        }
-                    };
-                    float_result.into()
-                } else {
-                    return Err(
-                        "Augmented assignment requires matching types (both int or both float)"
-                            .to_string(),
-                    );
-                };
+                // Delegate to type-specific implementation
+                let result = op_type.binary_op(
+                    self.context,
+                    &self.builder,
+                    &self.module,
+                    &bin_op,
+                    lhs_coerced,
+                    rhs_coerced,
+                )?;
 
                 // Store result
                 self.builder.build_store(var, result).unwrap();
@@ -343,7 +175,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_return_impl(&mut self, expr: Option<&Expression>) -> Result<(), String> {
         if let Some(expr) = expr {
             let val = self.evaluate_expression(expr)?;
-            self.builder.build_return(Some(&val)).unwrap();
+            self.builder.build_return(Some(&val.value)).unwrap();
         } else {
             self.builder.build_return(None).unwrap();
         }
