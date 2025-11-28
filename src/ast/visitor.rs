@@ -170,26 +170,40 @@ pub trait Visitor {
         }
     }
 
-    /// Visit integer literal
-    fn visit_int_lit(&mut self, val: i64) -> Result<(), Self::Error>;
+    /// Visit integer literal (default: no-op, used only when visit_expression is called)
+    fn visit_int_lit(&mut self, _val: i64) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit float literal
-    fn visit_float_lit(&mut self, val: f64) -> Result<(), Self::Error>;
+    /// Visit float literal (default: no-op, used only when visit_expression is called)
+    fn visit_float_lit(&mut self, _val: f64) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit string literal
-    fn visit_str_lit(&mut self, val: &str) -> Result<(), Self::Error>;
+    /// Visit string literal (default: no-op, used only when visit_expression is called)
+    fn visit_str_lit(&mut self, _val: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit bytes literal
-    fn visit_bytes_lit(&mut self, val: &str) -> Result<(), Self::Error>;
+    /// Visit bytes literal (default: no-op, used only when visit_expression is called)
+    fn visit_bytes_lit(&mut self, _val: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit boolean literal
-    fn visit_bool_lit(&mut self, val: bool) -> Result<(), Self::Error>;
+    /// Visit boolean literal (default: no-op, used only when visit_expression is called)
+    fn visit_bool_lit(&mut self, _val: bool) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit None literal
-    fn visit_none_lit(&mut self) -> Result<(), Self::Error>;
+    /// Visit None literal (default: no-op, used only when visit_expression is called)
+    fn visit_none_lit(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
-    /// Visit variable reference
-    fn visit_var(&mut self, name: &str) -> Result<(), Self::Error>;
+    /// Visit variable reference (default: no-op, used only when visit_expression is called)
+    fn visit_var(&mut self, _name: &str) -> Result<(), Self::Error> {
+        Ok(())
+    }
 
     /// Visit list literal
     fn visit_list(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;

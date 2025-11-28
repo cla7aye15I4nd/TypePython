@@ -119,41 +119,8 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_expr_statement_impl(expr)
     }
 
-    // Expression methods
-    fn visit_int_lit(&mut self, val: i64) -> Result<(), Self::Error> {
-        self.visit_int_lit_impl(val)?;
-        Ok(())
-    }
-
-    fn visit_float_lit(&mut self, val: f64) -> Result<(), Self::Error> {
-        self.visit_float_lit_impl(val)?;
-        Ok(())
-    }
-
-    fn visit_str_lit(&mut self, val: &str) -> Result<(), Self::Error> {
-        self.visit_str_lit_impl(val)?;
-        Ok(())
-    }
-
-    fn visit_bytes_lit(&mut self, val: &str) -> Result<(), Self::Error> {
-        self.visit_bytes_lit_impl(val)?;
-        Ok(())
-    }
-
-    fn visit_bool_lit(&mut self, val: bool) -> Result<(), Self::Error> {
-        self.visit_bool_lit_impl(val)?;
-        Ok(())
-    }
-
-    fn visit_none_lit(&mut self) -> Result<(), Self::Error> {
-        self.visit_none_lit_impl()?;
-        Ok(())
-    }
-
-    fn visit_var(&mut self, name: &str) -> Result<(), Self::Error> {
-        self.visit_var_impl(name)?;
-        Ok(())
-    }
+    // Expression literal methods use default no-op implementations from the trait
+    // since CodeGen uses evaluate_expression() instead of visit_expression()
 
     fn visit_list(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
         todo!("List literals")
