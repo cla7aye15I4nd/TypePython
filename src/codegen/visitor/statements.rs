@@ -112,10 +112,9 @@ impl<'ctx> CodeGen<'ctx> {
                             .build_int_signed_div(lhs_int, rhs_int, "divtmp")
                             .unwrap(),
                         BinaryOp::FloorDiv => {
-                            // Call tpy_floordiv_int for Python-style floor division
+                            // Call floordiv_int for Python-style floor division
                             use inkwell::values::AnyValue;
-                            let floordiv_fn =
-                                self.get_or_declare_builtin_function("tpy_floordiv_int");
+                            let floordiv_fn = self.get_or_declare_builtin_function("floordiv_int");
                             let call_site = self
                                 .builder
                                 .build_call(
@@ -128,15 +127,13 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
                                 iv
                             } else {
-                                return Err(
-                                    "tpy_floordiv_int did not return an int value".to_string()
-                                );
+                                return Err("floordiv_int did not return an int value".to_string());
                             }
                         }
                         BinaryOp::Mod => {
-                            // Call tpy_mod_int for Python-style modulo
+                            // Call mod_int for Python-style modulo
                             use inkwell::values::AnyValue;
-                            let mod_fn = self.get_or_declare_builtin_function("tpy_mod_int");
+                            let mod_fn = self.get_or_declare_builtin_function("mod_int");
                             let call_site = self
                                 .builder
                                 .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "modtmp")
@@ -145,13 +142,13 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
                                 iv
                             } else {
-                                return Err("tpy_mod_int did not return an int value".to_string());
+                                return Err("mod_int did not return an int value".to_string());
                             }
                         }
                         BinaryOp::Pow => {
-                            // Call tpy_pow_int builtin
+                            // Call pow_int builtin
                             use inkwell::values::AnyValue;
-                            let pow_fn = self.get_or_declare_builtin_function("tpy_pow_int");
+                            let pow_fn = self.get_or_declare_builtin_function("pow_int");
                             let call_site = self
                                 .builder
                                 .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "powtmp")
@@ -160,7 +157,7 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
                                 iv
                             } else {
-                                return Err("tpy_pow_int did not return an int value".to_string());
+                                return Err("pow_int did not return an int value".to_string());
                             }
                         }
                         BinaryOp::BitOr => {
@@ -216,7 +213,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 .builder
                                 .build_float_div(lhs_float, rhs_float, "fdivtmp")
                                 .unwrap();
-                            let floor_fn = self.get_or_declare_builtin_function("tpy_floor");
+                            let floor_fn = self.get_or_declare_builtin_function("floor_float");
                             let call_site = self
                                 .builder
                                 .build_call(floor_fn, &[div_result.into()], "floortmp")
@@ -225,13 +222,13 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
                                 fv
                             } else {
-                                return Err("tpy_floor did not return a float value".to_string());
+                                return Err("floor_float did not return a float value".to_string());
                             }
                         }
                         BinaryOp::Mod => {
-                            // Call tpy_fmod for Python-style float modulo
+                            // Call mod_float for Python-style float modulo
                             use inkwell::values::AnyValue;
-                            let fmod_fn = self.get_or_declare_builtin_function("tpy_fmod");
+                            let fmod_fn = self.get_or_declare_builtin_function("mod_float");
                             let call_site = self
                                 .builder
                                 .build_call(
@@ -244,13 +241,13 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
                                 fv
                             } else {
-                                return Err("tpy_fmod did not return a float value".to_string());
+                                return Err("mod_float did not return a float value".to_string());
                             }
                         }
                         BinaryOp::Pow => {
-                            // Call tpy_pow builtin for floats
+                            // Call pow_float builtin for floats
                             use inkwell::values::AnyValue;
-                            let pow_fn = self.get_or_declare_builtin_function("tpy_pow");
+                            let pow_fn = self.get_or_declare_builtin_function("pow_float");
                             let call_site = self
                                 .builder
                                 .build_call(
@@ -263,7 +260,7 @@ impl<'ctx> CodeGen<'ctx> {
                             if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
                                 fv
                             } else {
-                                return Err("tpy_pow did not return a float value".to_string());
+                                return Err("pow_float did not return a float value".to_string());
                             }
                         }
                         _ => {

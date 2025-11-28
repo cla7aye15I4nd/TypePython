@@ -81,7 +81,7 @@ impl<'ctx> TypeInfo<'ctx> for FloatType {
     }
 
     fn print_function_name(&self) -> &'static str {
-        "tpy_print_float"
+        "print_float"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {

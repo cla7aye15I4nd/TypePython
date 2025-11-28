@@ -1,9 +1,10 @@
 /// Compilation pipeline module - shared logic for compiling TypePython programs
+use crate::codegen::builtins::get_builtin_object_path;
 use crate::codegen::CodeGen;
 use crate::module::ModuleRegistry;
 use inkwell::context::Context;
 use log::debug;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -63,8 +64,8 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 /// This function:
 /// 1. Compiles current file to AST and recursively resolves imports to collect all files
 /// 2. Creates a function map and compiles each AST to corresponding .o file
-/// 3. Handles .c files specially (compiled directly to .o without AST)
-/// 4. Links all .o files into a single executable
+/// 3. Collects used builtin modules from all compiled code
+/// 4. Links all .o files (including only required builtin modules) into a single executable
 pub fn compile(
     source_path: &Path,
     output_path: &Path,
@@ -100,16 +101,11 @@ pub fn compile(
 
     let mut object_files = Vec::new();
 
-    // Compile each module
-    for (module_path, (module_name, program, imported_symbols)) in &module_registry.module_data {
-        // Check if it's a C file
-        if module_path.extension().and_then(|s| s.to_str()) == Some("c") {
-            // Compile C file to .o in the unique cache directory
-            let obj_path = module_registry.compile_c_module(module_path, cache_dir)?;
-            object_files.push(obj_path);
-            continue;
-        }
+    // Track all used builtin modules across all compiled code
+    let mut all_used_builtins: HashSet<String> = HashSet::new();
 
+    // Compile each module
+    for (module_name, program, imported_symbols) in module_registry.module_data.values() {
         // For Python modules, compile to LLVM IR
         debug!("Compiling module '{}' to LLVM IR", module_name);
 
@@ -139,6 +135,9 @@ pub fn compile(
         codegen.set_module_data(module_data_map);
         codegen.generate(program)?;
 
+        // Collect used builtin modules from this codegen
+        all_used_builtins.extend(codegen.used_builtin_modules.iter().cloned());
+
         // Verify LLVM module
         codegen
             .get_module()
@@ -152,12 +151,50 @@ pub fn compile(
         // LLVM bitcode can be directly written to .o files for LTO
         codegen.get_module().write_bitcode_to_path(&obj_path);
         object_files.push(obj_path);
+
+        // Log what we've done
+        debug!(
+            "Module '{}' uses builtin modules: {:?}",
+            module_name, codegen.used_builtin_modules
+        );
     }
 
     // ============================================================================
-    // Step 3: Link all .o files into executable
+    // Step 3: Add only the builtin modules that are actually used
     // ============================================================================
-    debug!("Linking {} object files", object_files.len());
+
+    debug!(
+        "Total used builtin modules across all code: {:?}",
+        all_used_builtins
+    );
+
+    for builtin_module in &all_used_builtins {
+        let builtin_obj_path = get_builtin_object_path(builtin_module);
+        if builtin_obj_path.exists() {
+            debug!(
+                "Adding builtin module '{}' from {}",
+                builtin_module,
+                builtin_obj_path.display()
+            );
+            object_files.push(builtin_obj_path);
+        } else {
+            return Err(format!(
+                "Builtin module '{}' object file not found at {}",
+                builtin_module,
+                builtin_obj_path.display()
+            ));
+        }
+    }
+
+    // ============================================================================
+    // Step 4: Link all .o files into executable
+    // ============================================================================
+    debug!(
+        "Linking {} object files ({} user modules, {} builtin modules)",
+        object_files.len(),
+        object_files.len() - all_used_builtins.len(),
+        all_used_builtins.len()
+    );
     link_object_files(&object_files, output_path)?;
 
     debug!(

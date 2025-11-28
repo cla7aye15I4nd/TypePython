@@ -48,7 +48,7 @@ impl<'ctx> TypeInfo<'ctx> for NoneType {
     }
 
     fn print_function_name(&self) -> &'static str {
-        "tpy_print_none"
+        "print_none"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {

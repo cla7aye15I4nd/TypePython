@@ -594,6 +594,7 @@ dependencies = [
  "either",
  "env_logger",
  "inkwell",
+ "lazy_static",
  "log",
  "pest",
  "pest_derive",

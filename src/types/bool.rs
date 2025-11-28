@@ -127,7 +127,7 @@ impl<'ctx> TypeInfo<'ctx> for BoolType {
     }
 
     fn print_function_name(&self) -> &'static str {
-        "tpy_print_bool"
+        "print_bool"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {

@@ -24,11 +24,10 @@ pub fn get_clang_path() -> String {
     format!("{}/bin/clang", llvm_prefix)
 }
 
-/// Get the builtin library directory path
-pub fn get_builtin_library_dir() -> PathBuf {
-    std::env::var("TYPEPYTHON_RUNTIME")
-        .map(PathBuf::from)
-        .expect("TYPEPYTHON_RUNTIME environment variable not set")
+/// Get the builtin library directory path (for user-provided Python builtins)
+/// Note: C builtin modules are now compiled at build time and linked selectively
+pub fn get_builtin_library_dir() -> Option<PathBuf> {
+    std::env::var("TYPEPYTHON_RUNTIME").map(PathBuf::from).ok()
 }
 
 /// Type alias for preprocessed module data: (module_name, program, imported_symbols)
@@ -77,15 +76,15 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// - /path/to/project/math/helpers.py -> "math.helpers"
     /// - /usr/lib/typepython/builtins/list.py -> "<builtin>.builtins.list"
     fn generate_module_name(&self, path: &Path) -> Result<String, String> {
-        let builtin_dir = get_builtin_library_dir();
-
-        // Check if it's a builtin module
-        if let Ok(rel_path) = path.strip_prefix(&builtin_dir) {
-            let module_path = rel_path
-                .with_extension("")
-                .to_string_lossy()
-                .replace("/", ".");
-            return Ok(format!("<builtin>.{}", module_path));
+        // Check if it's a builtin module (if TYPEPYTHON_RUNTIME is set)
+        if let Some(builtin_dir) = get_builtin_library_dir() {
+            if let Ok(rel_path) = path.strip_prefix(&builtin_dir) {
+                let module_path = rel_path
+                    .with_extension("")
+                    .to_string_lossy()
+                    .replace("/", ".");
+                return Ok(format!("<builtin>.{}", module_path));
+            }
         }
 
         // Otherwise, it's a user module relative to root
@@ -108,6 +107,9 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// Preprocess all modules using BFS starting from entry file
     /// Discovers all imported modules, generates module names, and builds symbol maps
     /// Returns a map of file paths to their (module_name, program, imported_symbols)
+    ///
+    /// Note: C builtin modules are no longer automatically loaded here.
+    /// They are compiled at build time and linked selectively based on usage.
     pub fn preprocess_modules(
         &self,
         entry_path: &Path,
@@ -121,18 +123,20 @@ impl<'ctx> ModuleRegistry<'ctx> {
         // Add entry module to queue
         queue.push_back(entry_path.to_path_buf());
 
-        // Automatically add all builtin modules from TYPEPYTHON_RUNTIME
-        let builtin_dir = get_builtin_library_dir();
-        if builtin_dir.exists() {
-            if let Ok(entries) = std::fs::read_dir(&builtin_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        // Add all .c, .py files from builtin directory
-                        if let Some(ext) = path.extension() {
-                            if ext == "c" || ext == "py" {
-                                debug!("Auto-adding builtin module: {}", path.display());
-                                queue.push_back(path);
+        // Optionally add Python builtin modules from TYPEPYTHON_RUNTIME if set
+        // Note: C builtin modules are now compiled at build time and linked selectively
+        if let Some(builtin_dir) = get_builtin_library_dir() {
+            if builtin_dir.exists() {
+                if let Ok(entries) = std::fs::read_dir(&builtin_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_file() {
+                            // Only add .py files from builtin directory (not .c)
+                            if let Some(ext) = path.extension() {
+                                if ext == "py" {
+                                    debug!("Auto-adding builtin Python module: {}", path.display());
+                                    queue.push_back(path);
+                                }
                             }
                         }
                     }
@@ -235,47 +239,50 @@ impl<'ctx> ModuleRegistry<'ctx> {
 
     /// Resolve a module path to a file path
     /// For example: ["math", "helpers"] -> "math/helpers.py" or "./math/helpers.py"
-    /// Supports .py, .tpy, and .c files
+    /// Supports .py files (C builtins are linked at build time, not imported)
     pub fn resolve_module(
         &self,
         module_path: &[String],
         current_path: &Path,
     ) -> Result<PathBuf, String> {
-        // Try different file extensions
-        let extensions = ["py", "c"];
+        // Try different file extensions (only .py, C builtins are linked separately)
+        let extensions = ["py"];
         let module_base = module_path.join("/");
 
-        // Search in the builtin library directory and current directory
-        let search_paths = [
-            (
-                "<builtin>",
-                get_builtin_library_dir(),
-                get_builtin_library_dir(),
-            ),
-            ("", current_path.to_path_buf(), self.root.clone()),
-        ];
+        // Build search paths list dynamically
+        let mut search_paths: Vec<(&str, PathBuf, PathBuf)> = Vec::new();
+
+        // Add builtin directory if TYPEPYTHON_RUNTIME is set
+        if let Some(builtin_dir) = get_builtin_library_dir() {
+            search_paths.push(("<builtin>", builtin_dir.clone(), builtin_dir));
+        }
+
+        // Add current directory
+        search_paths.push(("", current_path.to_path_buf(), self.root.clone()));
+
         for (name, dir, root) in search_paths {
             for ext in &extensions {
                 let candidate = dir.join(format!("{}.{}", module_base, ext));
 
                 // compare the relative module name for
-                let rel_path = candidate.strip_prefix(&root).unwrap();
-                let module_name = format!(
-                    "{}.{}",
-                    name,
-                    &rel_path
-                        .with_extension("")
-                        .to_string_lossy()
-                        .replace("/", ".")
-                );
-                if candidate.exists() {
-                    debug!(
-                        "Resolved module '{}' to {}",
-                        module_name,
-                        candidate.display()
+                if let Ok(rel_path) = candidate.strip_prefix(&root) {
+                    let module_name = format!(
+                        "{}.{}",
+                        name,
+                        &rel_path
+                            .with_extension("")
+                            .to_string_lossy()
+                            .replace("/", ".")
                     );
+                    if candidate.exists() {
+                        debug!(
+                            "Resolved module '{}' to {}",
+                            module_name,
+                            candidate.display()
+                        );
 
-                    return Ok(candidate);
+                        return Ok(candidate);
+                    }
                 }
             }
         }

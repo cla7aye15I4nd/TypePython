@@ -1,3 +1,4 @@
+pub mod builtins;
 mod visitor;
 
 use crate::ast::visitor::Visitor;
@@ -10,7 +11,7 @@ use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Context for tracking loop control flow (break/continue)
 pub(crate) struct LoopContext<'ctx> {
@@ -32,6 +33,8 @@ pub struct CodeGen<'ctx> {
     pub(crate) module_data: HashMap<String, Program>,
     /// Stack of loop contexts for break/continue statements
     pub(crate) loop_stack: Vec<LoopContext<'ctx>>,
+    /// Set of builtin modules that have been used (for selective linking)
+    pub used_builtin_modules: HashSet<String>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -73,6 +76,7 @@ impl<'ctx> CodeGen<'ctx> {
             imported_symbols: HashMap::new(),
             module_data: HashMap::new(),
             loop_stack: Vec::new(),
+            used_builtin_modules: HashSet::new(),
         }
     }
 
@@ -102,7 +106,23 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn generate(&mut self, program: &Program) -> Result<(), String> {
         // Use the visitor pattern to generate code
         self.visit_program(program)?;
+
+        // Scan the module for builtin function usages and update used_builtin_modules
+        // This captures usages from type operations that don't go through get_or_declare_builtin_function
+        self.scan_for_builtin_usages();
+
         Ok(())
+    }
+
+    /// Scan the module for declared builtin functions and update used_builtin_modules
+    fn scan_for_builtin_usages(&mut self) {
+        for (_, builtin_fn) in builtins::BUILTIN_TABLE.iter() {
+            // Check if this builtin function is declared in the module
+            if self.module.get_function(builtin_fn.symbol).is_some() {
+                self.used_builtin_modules
+                    .insert(builtin_fn.module.to_string());
+            }
+        }
     }
 
     /// Evaluate an expression and return its LLVM value
@@ -164,82 +184,26 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    /// Get or declare a builtin function from builtin.c
-    /// These functions are always available and linked from the builtin C module
+    /// Get or declare a builtin function from the builtin modules
+    /// Uses the auto-generated builtin table to look up function signatures
+    /// and tracks which builtin modules are used for selective linking
     pub(crate) fn get_or_declare_builtin_function(&mut self, name: &str) -> FunctionValue<'ctx> {
-        // Check if already declared
-        if let Some(func) = self.module.get_function(name) {
+        // Look up the builtin function in the generated table
+        let builtin = builtins::BUILTIN_TABLE
+            .get(name)
+            .unwrap_or_else(|| panic!("Unknown builtin function: {}", name));
+
+        // Track which builtin module this function belongs to
+        self.used_builtin_modules.insert(builtin.module.to_string());
+
+        // Check if already declared (use the symbol name, which is the actual C function name)
+        if let Some(func) = self.module.get_function(builtin.symbol) {
             return func;
         }
 
-        // Declare the builtin function based on its name
-        let i64_type = self.context.i64_type();
-        let f64_type = self.context.f64_type();
-        let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
-        let void_type = self.context.void_type();
-        let bool_type = self.context.bool_type();
-
-        match name {
-            "tpy_print_int" => {
-                let fn_type = void_type.fn_type(&[i64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_print_float" => {
-                let fn_type = void_type.fn_type(&[f64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_print_bool" => {
-                let fn_type = void_type.fn_type(&[bool_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_print_str" => {
-                let fn_type = void_type.fn_type(&[str_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_print_space" => {
-                let fn_type = void_type.fn_type(&[], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_print_newline" => {
-                let fn_type = void_type.fn_type(&[], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_pow" => {
-                let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_pow_int" => {
-                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_floor" => {
-                let fn_type = f64_type.fn_type(&[f64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_floordiv_int" => {
-                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_mod_int" => {
-                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_fmod" => {
-                let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_strcat" => {
-                let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
-                let fn_type = str_type.fn_type(&[str_type.into(), str_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            "tpy_strcmp" => {
-                let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
-                let fn_type = i64_type.fn_type(&[str_type.into(), str_type.into()], false);
-                self.module.add_function(name, fn_type, None)
-            }
-            _ => panic!("Unknown builtin function: {}", name),
-        }
+        // Declare the function using the signature from the table
+        let fn_type = builtin.to_llvm_fn_type(self.context);
+        self.module.add_function(builtin.symbol, fn_type, None)
     }
 
     /// Lazily declare an external function when needed
@@ -879,8 +843,8 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         args: &[Expression],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let print_space = self.get_or_declare_builtin_function("tpy_print_space");
-        let print_newline = self.get_or_declare_builtin_function("tpy_print_newline");
+        let print_space = self.get_or_declare_builtin_function("print_space");
+        let print_newline = self.get_or_declare_builtin_function("print_newline");
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.evaluate_expression(arg)?;

@@ -2,6 +2,7 @@
 name = "tpy"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -12,6 +13,7 @@ either = "1.9"
 log = "0.4"
 env_logger = "0.11"
 tempfile = "3"
+lazy_static = "1.4"
 
 [dev-dependencies]
 anyhow = "1.0"

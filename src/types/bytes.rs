@@ -70,7 +70,7 @@ impl<'ctx> TypeInfo<'ctx> for BytesType {
     }
 
     fn print_function_name(&self) -> &'static str {
-        "tpy_print_str"
+        "print_str"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {
@@ -81,16 +81,16 @@ impl<'ctx> TypeInfo<'ctx> for BytesType {
 impl BytesType {
     /// Get the builtin function name for bytes concatenation
     pub fn concat_function_name() -> &'static str {
-        "tpy_strcat"
+        "strcat_bytes"
     }
 
     /// Get the builtin function name for bytes comparison
     pub fn compare_function_name() -> &'static str {
-        "tpy_strcmp"
+        "strcmp_bytes"
     }
 
     /// Get the builtin function name for bytes repetition
     pub fn repeat_function_name() -> &'static str {
-        "tpy_strrepeat"
+        "strrepeat_bytes"
     }
 }

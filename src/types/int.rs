@@ -106,7 +106,7 @@ impl<'ctx> TypeInfo<'ctx> for IntType {
     }
 
     fn print_function_name(&self) -> &'static str {
-        "tpy_print_int"
+        "print_int"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {

@@ -4,6 +4,7 @@
 //! to generate LLVM instructions for operations.
 
 use crate::ast::{BinaryOp, Type, UnaryOp};
+use crate::codegen::builtins::BUILTIN_TABLE;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -84,28 +85,28 @@ impl<'ctx> CodeGenOps<'ctx> for super::IntType {
                     .into())
             }
             BinaryOp::FloorDiv => {
-                // Call tpy_floordiv_int for Python-style floor division
-                let floordiv_fn = get_or_declare_builtin(module, ctx, "tpy_floordiv_int");
+                // Call floordiv_int for Python-style floor division
+                let floordiv_fn = get_or_declare_builtin(module, ctx, "floordiv_int");
                 let call_site = builder
                     .build_call(floordiv_fn, &[lhs_int.into(), rhs_int.into()], "floordiv")
                     .unwrap();
-                return extract_int_result(call_site, "tpy_floordiv_int");
+                return extract_int_result(call_site, "floordiv_int");
             }
             BinaryOp::Mod => {
-                // Call tpy_mod_int for Python-style modulo
-                let mod_fn = get_or_declare_builtin(module, ctx, "tpy_mod_int");
+                // Call mod_int for Python-style modulo
+                let mod_fn = get_or_declare_builtin(module, ctx, "mod_int");
                 let call_site = builder
                     .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "mod")
                     .unwrap();
-                return extract_int_result(call_site, "tpy_mod_int");
+                return extract_int_result(call_site, "mod_int");
             }
             BinaryOp::Pow => {
-                // Call tpy_pow_int builtin
-                let pow_fn = get_or_declare_builtin(module, ctx, "tpy_pow_int");
+                // Call pow_int builtin
+                let pow_fn = get_or_declare_builtin(module, ctx, "pow_int");
                 let call_site = builder
                     .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "ipow")
                     .unwrap();
-                return extract_int_result(call_site, "tpy_pow_int");
+                return extract_int_result(call_site, "pow_int");
             }
             BinaryOp::Eq => {
                 return Ok(builder
@@ -257,29 +258,29 @@ impl<'ctx> CodeGenOps<'ctx> for super::FloatType {
                 .build_float_div(lhs_float, rhs_float, "fdiv")
                 .unwrap(),
             BinaryOp::Mod => {
-                // Call tpy_fmod for Python-style float modulo
-                let fmod_fn = get_or_declare_builtin(module, ctx, "tpy_fmod");
+                // Call mod_float for Python-style float modulo
+                let fmod_fn = get_or_declare_builtin(module, ctx, "mod_float");
                 let call_site = builder
                     .build_call(fmod_fn, &[lhs_float.into(), rhs_float.into()], "fmod")
                     .unwrap();
-                return extract_float_result(call_site, "tpy_fmod");
+                return extract_float_result(call_site, "mod_float");
             }
             BinaryOp::Pow => {
-                let pow_fn = get_or_declare_builtin(module, ctx, "tpy_pow");
+                let pow_fn = get_or_declare_builtin(module, ctx, "pow_float");
                 let call_site = builder
                     .build_call(pow_fn, &[lhs_float.into(), rhs_float.into()], "fpow")
                     .unwrap();
-                return extract_float_result(call_site, "tpy_pow");
+                return extract_float_result(call_site, "pow_float");
             }
             BinaryOp::FloorDiv => {
                 let div_result = builder
                     .build_float_div(lhs_float, rhs_float, "fdiv")
                     .unwrap();
-                let floor_fn = get_or_declare_builtin(module, ctx, "tpy_floor");
+                let floor_fn = get_or_declare_builtin(module, ctx, "floor_float");
                 let call_site = builder
                     .build_call(floor_fn, &[div_result.into()], "floor")
                     .unwrap();
-                return extract_float_result(call_site, "tpy_floor");
+                return extract_float_result(call_site, "floor_float");
             }
             BinaryOp::Eq => {
                 return Ok(builder
@@ -524,18 +525,18 @@ impl<'ctx> CodeGenOps<'ctx> for super::BytesType {
         match op {
             BinaryOp::Add => {
                 // Bytes concatenation
-                let strcat_fn = get_or_declare_builtin(module, ctx, "tpy_strcat");
+                let strcat_fn = get_or_declare_builtin(module, ctx, "strcat_bytes");
                 let call_site = builder
                     .build_call(strcat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescat")
                     .unwrap();
-                extract_ptr_result(call_site, "tpy_strcat")
+                extract_ptr_result(call_site, "strcat_bytes")
             }
             BinaryOp::Eq => {
-                let strcmp_fn = get_or_declare_builtin(module, ctx, "tpy_strcmp");
+                let strcmp_fn = get_or_declare_builtin(module, ctx, "strcmp_bytes");
                 let call_site = builder
                     .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
                     .unwrap();
-                let result = extract_int_result(call_site, "tpy_strcmp")?;
+                let result = extract_int_result(call_site, "strcmp_bytes")?;
                 // Convert i64 to i1 (boolean) by truncating
                 let bool_val = builder
                     .build_int_truncate(result.into_int_value(), ctx.bool_type(), "to_bool")
@@ -543,11 +544,11 @@ impl<'ctx> CodeGenOps<'ctx> for super::BytesType {
                 Ok(bool_val.into())
             }
             BinaryOp::Ne => {
-                let strcmp_fn = get_or_declare_builtin(module, ctx, "tpy_strcmp");
+                let strcmp_fn = get_or_declare_builtin(module, ctx, "strcmp_bytes");
                 let call_site = builder
                     .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
                     .unwrap();
-                let result = extract_int_result(call_site, "tpy_strcmp")?;
+                let result = extract_int_result(call_site, "strcmp_bytes")?;
                 let bool_val = builder
                     .build_int_truncate(result.into_int_value(), ctx.bool_type(), "to_bool")
                     .unwrap();
@@ -672,55 +673,29 @@ impl<'ctx> CodeGenOps<'ctx> for super::NoneType {
 // Helper Functions
 // ============================================================================
 
-/// Get or declare a builtin function
+/// Get or declare a builtin function using the auto-generated table
+///
+/// Note: This function does NOT track builtin module usage. For proper tracking,
+/// use CodeGen::get_or_declare_builtin_function() instead when possible.
+/// This function exists for type operations that don't have direct access to CodeGen.
 fn get_or_declare_builtin<'ctx>(
     module: &Module<'ctx>,
     ctx: &'ctx Context,
     name: &str,
 ) -> FunctionValue<'ctx> {
-    if let Some(func) = module.get_function(name) {
+    // Look up the builtin function in the generated table
+    let builtin = BUILTIN_TABLE
+        .get(name)
+        .unwrap_or_else(|| panic!("Unknown builtin function: {}", name));
+
+    // Check if already declared (use the symbol name, which is the actual C function name)
+    if let Some(func) = module.get_function(builtin.symbol) {
         return func;
     }
 
-    let i64_type = ctx.i64_type();
-    let f64_type = ctx.f64_type();
-    let str_type = ctx.ptr_type(inkwell::AddressSpace::default());
-
-    match name {
-        "tpy_pow" => {
-            let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_pow_int" => {
-            let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_floor" => {
-            let fn_type = f64_type.fn_type(&[f64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_floordiv_int" => {
-            let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_mod_int" => {
-            let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_fmod" => {
-            let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_strcat" => {
-            let fn_type = str_type.fn_type(&[str_type.into(), str_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        "tpy_strcmp" => {
-            let fn_type = i64_type.fn_type(&[str_type.into(), str_type.into()], false);
-            module.add_function(name, fn_type, None)
-        }
-        _ => panic!("Unknown builtin function: {}", name),
-    }
+    // Declare the function using the signature from the table
+    let fn_type = builtin.to_llvm_fn_type(ctx);
+    module.add_function(builtin.symbol, fn_type, None)
 }
 
 /// Extract int result from a call site
@@ -869,11 +844,11 @@ impl TypeCodeGen {
     /// Get the print function name for this type
     pub fn print_function_name(&self) -> &'static str {
         match self {
-            TypeCodeGen::Int(_) => "tpy_print_int",
-            TypeCodeGen::Float(_) => "tpy_print_float",
-            TypeCodeGen::Bool(_) => "tpy_print_bool",
-            TypeCodeGen::Bytes(_) => "tpy_print_str",
-            TypeCodeGen::None(_) => "tpy_print_none",
+            TypeCodeGen::Int(_) => "print_int",
+            TypeCodeGen::Float(_) => "print_float",
+            TypeCodeGen::Bool(_) => "print_bool",
+            TypeCodeGen::Bytes(_) => "print_str",
+            TypeCodeGen::None(_) => "print_none",
         }
     }
 }
