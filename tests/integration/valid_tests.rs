@@ -142,6 +142,12 @@ test_case!(
     test_int_unary_not,
     "tests/fixtures/valid/basic/int_unary_not.py"
 );
+test_case!(test_print_none, "tests/fixtures/valid/basic/print_none.py");
+test_case!(test_elif_test, "tests/fixtures/valid/basic/elif_test.py");
+test_case!(
+    test_numeric_literals,
+    "tests/fixtures/valid/basic/numeric_literals.py"
+);
 
 // ============================================================================
 // Advanced Tests - Arithmetic

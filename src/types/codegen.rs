@@ -1022,17 +1022,6 @@ impl PyType {
             PyType::None(_) => "print_none",
         }
     }
-
-    /// Convert to AST Type
-    pub fn to_ast_type(&self) -> Type {
-        match self {
-            PyType::Int(_) => Type::Int,
-            PyType::Float(_) => Type::Float,
-            PyType::Bool(_) => Type::Bool,
-            PyType::Bytes(_) => Type::Bytes,
-            PyType::None(_) => Type::None,
-        }
-    }
 }
 
 // ============================================================================

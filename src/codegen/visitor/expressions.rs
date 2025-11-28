@@ -1,6 +1,5 @@
 /// Expression visitor implementation for code generation
 use super::super::CodeGen;
-use crate::ast::*;
 use crate::types::PyValue;
 
 impl<'ctx> CodeGen<'ctx> {
@@ -54,51 +53,5 @@ impl<'ctx> CodeGen<'ctx> {
             .clone();
         let ir_val = self.builder.build_load(load_type, var, name).unwrap();
         Ok(PyValue::new(ir_val, py_type))
-    }
-
-    pub(crate) fn visit_binop_impl(
-        &mut self,
-        op: &BinaryOp,
-        left: &Expression,
-        right: &Expression,
-    ) -> Result<(), String> {
-        self.generate_binary_op(op, left, right)?;
-        Ok(())
-    }
-
-    pub(crate) fn visit_unaryop_impl(
-        &mut self,
-        op: &UnaryOp,
-        operand: &Expression,
-    ) -> Result<(), String> {
-        self.generate_unary_op(op, operand)?;
-        Ok(())
-    }
-
-    pub(crate) fn visit_call_impl(
-        &mut self,
-        func: &Expression,
-        args: &[Expression],
-    ) -> Result<(), String> {
-        match func {
-            // Simple function call: function_name()
-            Expression::Var(name) => {
-                self.generate_call(name, args)?;
-                Ok(())
-            }
-            // Qualified call: module.function()
-            Expression::Attribute { object, attr } => {
-                if let Expression::Var(module_name) = object.as_ref() {
-                    let qualified_name = format!("{}.{}", module_name, attr);
-                    self.generate_call(&qualified_name, args)?;
-                    Ok(())
-                } else {
-                    Err("Only simple module.function() calls are supported".to_string())
-                }
-            }
-            _ => Err(
-                "Only simple function calls and module.function() calls are supported".to_string(),
-            ),
-        }
     }
 }

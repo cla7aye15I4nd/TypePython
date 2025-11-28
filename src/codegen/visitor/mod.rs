@@ -177,15 +177,34 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         left: &Expression,
         right: &Expression,
     ) -> Result<(), Self::Error> {
-        self.visit_binop_impl(op, left, right)
+        self.generate_binary_op(op, left, right)?;
+        Ok(())
     }
 
     fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error> {
-        self.visit_unaryop_impl(op, operand)
+        self.generate_unary_op(op, operand)?;
+        Ok(())
     }
 
     fn visit_call(&mut self, func: &Expression, args: &[Expression]) -> Result<(), Self::Error> {
-        self.visit_call_impl(func, args)
+        match func {
+            Expression::Var(name) => {
+                self.generate_call(name, args)?;
+                Ok(())
+            }
+            Expression::Attribute { object, attr } => {
+                if let Expression::Var(module_name) = object.as_ref() {
+                    let qualified_name = format!("{}.{}", module_name, attr);
+                    self.generate_call(&qualified_name, args)?;
+                    Ok(())
+                } else {
+                    Err("Only simple module.function() calls are supported".to_string())
+                }
+            }
+            _ => Err(
+                "Only simple function calls and module.function() calls are supported".to_string(),
+            ),
+        }
     }
 
     fn visit_attribute(&mut self, _object: &Expression, _attr: &str) -> Result<(), Self::Error> {
