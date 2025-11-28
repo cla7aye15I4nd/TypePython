@@ -547,7 +547,9 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
             Rule::STR_LIT => {
                 assert_eq!(inner.next(), None);
                 let s = first.as_str();
-                Expression::StrLit(s[1..s.len() - 1].to_string())
+                // Strip quotes and process escape sequences
+                let content = &s[1..s.len() - 1];
+                Expression::StrLit(process_escape_sequences(content))
             }
             Rule::TRUE => {
                 assert_eq!(inner.next(), None);
@@ -577,4 +579,38 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
         },
         None => Expression::NoneLit(),
     }
+}
+
+/// Process escape sequences in a string literal
+fn process_escape_sequences(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            // Process escape sequence
+            if let Some(next_ch) = chars.next() {
+                match next_ch {
+                    'n' => result.push('\n'),
+                    't' => result.push('\t'),
+                    'r' => result.push('\r'),
+                    '\\' => result.push('\\'),
+                    '"' => result.push('"'),
+                    '\'' => result.push('\''),
+                    _ => {
+                        // Unknown escape sequence, keep as-is
+                        result.push('\\');
+                        result.push(next_ch);
+                    }
+                }
+            } else {
+                // Backslash at end of string
+                result.push('\\');
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
 }
