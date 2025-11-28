@@ -63,8 +63,10 @@ OCT_LIT = @{ "0" ~ ("o" | "O") ~ ('0'..'7')+ }
 HEX_LIT = @{ "0" ~ ("x" | "X") ~ (ASCII_HEX_DIGIT)+ }
 INT_LIT = @{ ASCII_DIGIT+ }
 FLOAT_LIT = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
-BYTES_LIT = @{ "b" ~ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-STR_LIT = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+// String/bytes literals with escape sequence support
+STR_CHAR = { ("\\" ~ ANY) | (!"\"" ~ !"\\" ~ ANY) }
+BYTES_LIT = @{ "b" ~ "\"" ~ STR_CHAR* ~ "\"" }
+STR_LIT = @{ "\"" ~ STR_CHAR* ~ "\"" }
 
 // Operators (order matters for proper matching!)
 // Augmented assignment operators

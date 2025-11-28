@@ -16,12 +16,12 @@ mod none;
 
 pub use self::bool::BoolType;
 pub use bytes::BytesType;
-pub use codegen::{CodeGenOps, PyType, PyValue};
+pub use codegen::{CgCtx, PyType, PyValue};
 pub use float::FloatType;
 pub use int::IntType;
 pub use none::NoneType;
 
-use crate::ast::{BinaryOp, Type, UnaryOp};
+use crate::ast::{BinaryOp, Type};
 use inkwell::context::Context;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
@@ -36,18 +36,6 @@ pub trait TypeInfo<'ctx> {
 
     /// Get the default/zero value for this type
     fn default_value(&self, ctx: &'ctx Context) -> BasicValueEnum<'ctx>;
-
-    /// Check if a binary operation is supported between this type and another
-    fn supports_binary_op(&self, op: &BinaryOp, other: &Type) -> bool;
-
-    /// Check if a unary operation is supported for this type
-    fn supports_unary_op(&self, op: &UnaryOp) -> bool;
-
-    /// Get the result type of a binary operation (for type checking)
-    fn binary_op_result_type(&self, op: &BinaryOp, other: &Type) -> Option<Type>;
-
-    /// Get the result type of a unary operation (for type checking)
-    fn unary_op_result_type(&self, op: &UnaryOp) -> Option<Type>;
 
     /// Get the builtin function name for printing this type
     fn print_function_name(&self) -> &'static str;

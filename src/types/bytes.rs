@@ -1,7 +1,7 @@
 //! Bytes type implementation (C-style null-terminated strings)
 
 use super::TypeInfo;
-use crate::ast::{BinaryOp, Type, UnaryOp};
+use crate::ast::Type;
 use inkwell::context::Context;
 use inkwell::types::BasicTypeEnum;
 use inkwell::values::BasicValueEnum;
@@ -21,57 +21,8 @@ impl<'ctx> TypeInfo<'ctx> for BytesType {
             .into()
     }
 
-    fn supports_binary_op(&self, op: &BinaryOp, other: &Type) -> bool {
-        match other {
-            Type::Bytes => matches!(
-                op,
-                BinaryOp::Add | // concatenation
-                BinaryOp::Eq |
-                BinaryOp::Ne |
-                BinaryOp::Lt |
-                BinaryOp::Le |
-                BinaryOp::Gt |
-                BinaryOp::Ge |
-                BinaryOp::Is |
-                BinaryOp::IsNot
-            ),
-            Type::Int => matches!(op, BinaryOp::Mul), // repeat: b"x" * 3
-            _ => false,
-        }
-    }
-
-    fn supports_unary_op(&self, _op: &UnaryOp) -> bool {
-        false // No unary operations on bytes
-    }
-
-    fn binary_op_result_type(&self, op: &BinaryOp, other: &Type) -> Option<Type> {
-        match other {
-            Type::Bytes => match op {
-                BinaryOp::Add => Some(Type::Bytes), // concatenation
-                BinaryOp::Eq
-                | BinaryOp::Ne
-                | BinaryOp::Lt
-                | BinaryOp::Le
-                | BinaryOp::Gt
-                | BinaryOp::Ge
-                | BinaryOp::Is
-                | BinaryOp::IsNot => Some(Type::Bool),
-                _ => None,
-            },
-            Type::Int => match op {
-                BinaryOp::Mul => Some(Type::Bytes), // repeat
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-
-    fn unary_op_result_type(&self, _op: &UnaryOp) -> Option<Type> {
-        None
-    }
-
     fn print_function_name(&self) -> &'static str {
-        "print_str"
+        "print_bytes"
     }
 
     fn can_coerce_to(&self, target: &Type) -> bool {

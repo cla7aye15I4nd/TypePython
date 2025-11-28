@@ -1,76 +1,126 @@
-# TypePython Tests
+# TypePython Built-in Functions Test Coverage
 
-This directory contains the test suite for the TypePython compiler.
+## Legend
 
-## Directory Structure
+- ✅ Tested
+- ⚠️ Implemented (no tests)
+- ❌ Not implemented
 
-```
-tests/
-├── README.md                 # This file
-├── integration_tests.rs      # Entry point for integration tests
-├── integration/              # Integration test modules
-│   ├── mod.rs                # Module declaration
-│   └── parser_valid_tests.rs # Parser tests for valid fixtures
-└── fixtures/                 # Test fixture files
-    └── valid/                # Valid TypePython programs that should parse
-        ├── simple.py
-        ├── all_types.py
-        ├── control_flow.py
-        ├── expressions.py
-        ├── factorial.py
-        ├── fibonacci.py
-        └── nested_functions.py
-```
+---
 
-## Running Tests
+## Built-in Functions
 
-### Run all tests
-```bash
-cargo test
-```
+### Tested
 
-### Run only integration tests
-```bash
-cargo test --test integration_tests
-```
+| Function | Notes |
+|----------|-------|
+| `print()` | Supports `int`, `float`, `bool`, `bytes`, `None` |
+| `abs()` | Integer and float support |
+| `round()` | Basic rounding and `ndigits` parameter |
+| `min()` | Two-argument form (int, float, mixed) |
+| `max()` | Two-argument form (int, float, mixed) |
+| `pow()` | Two and three argument forms (modular) |
+| `len()` | For `bytes` type |
 
-### Run a specific test
-```bash
-cargo test test_simple
-```
+### Not Tested
 
-### Run tests with output
-```bash
-cargo test -- --nocapture
-```
+| Function | Status | Notes |
+|----------|--------|-------|
+| `divmod()` | ⚠️ | Runtime exists but no tests |
+| `input()` | ❌ | User input |
+| `int()` | ❌ | Type conversion |
+| `float()` | ❌ | Type conversion |
+| `str()` | ❌ | N/A - TypePython uses `bytes` |
+| `bool()` | ❌ | Type conversion |
+| `type()` | ❌ | Type introspection |
+| `isinstance()` | ❌ | Type checking |
+| `range()` | ❌ | No list/iterator support yet |
+| `enumerate()` | ❌ | Iteration |
+| `zip()` | ❌ | Iteration |
+| `map()` | ❌ | Functional |
+| `filter()` | ❌ | Functional |
+| `sorted()` | ❌ | Requires list support |
+| `reversed()` | ❌ | Requires sequence support |
+| `sum()` | ❌ | Requires iterable support |
+| `any()` | ❌ | Requires iterable support |
+| `all()` | ❌ | Requires iterable support |
+| `hex()` | ❌ | Number formatting |
+| `oct()` | ❌ | Number formatting |
+| `bin()` | ❌ | Number formatting |
+| `ord()` | ❌ | Character to int |
+| `chr()` | ❌ | Int to character |
+| `open()` | ❌ | File I/O |
+| `id()` | ❌ | Object identity |
+| `hash()` | ❌ | Hash value |
+| `callable()` | ❌ | Callable check |
+| `repr()` | ❌ | String representation |
+| `format()` | ❌ | String formatting |
 
-## Test Structure
+---
 
-### Parser Valid Tests
-Located in `integration/parser_valid_tests.rs`, these tests:
+## Bytes Operations
 
-1. **`test_all_valid_fixtures()`** - Automatically discovers and tests all `.py` files in `fixtures/valid/`
-2. **Individual tests** - Each fixture file has its own dedicated test for granular failure reporting:
-   - `test_simple()`
-   - `test_all_types()`
-   - `test_control_flow()`
-   - `test_expressions()`
-   - `test_factorial()`
-   - `test_fibonacci()`
-   - `test_nested_functions()`
+### Tested
 
-## Adding New Tests
+| Operation | Notes |
+|-----------|-------|
+| Creation (`b"..."`) | Literal syntax |
+| Concatenation (`+`) | Multiple operands |
+| Repetition (`*`) | Including zero/one |
+| Equality (`==`) | |
+| Inequality (`!=`) | |
+| Less than (`<`) | Lexicographic |
+| Less than or equal (`<=`) | |
+| Greater than (`>`) | |
+| Greater than or equal (`>=`) | |
+| Length (`len()`) | |
+| Contains (`in`) | |
+| Not contains (`not in`) | |
+| Escape sequences | `\n`, `\t`, `\"`, `\\`, `\a`, `\x##` |
+| Indexing (`[]`) | Positive indices |
+| Negative indexing | |
+| Slicing (`[:]`) | Start, end, negative |
 
-### Adding a new valid fixture
-1. Create a new `.py` file in `fixtures/valid/`
-2. Add a new individual test in `integration/parser_valid_tests.rs`:
-   ```rust
-   #[test]
-   fn test_my_new_feature() {
-       parse_and_validate("tests/fixtures/valid/my_new_feature.py");
-   }
-   ```
-3. The file will automatically be picked up by `test_all_valid_fixtures()`
+### Not Tested (Implemented in Runtime)
 
-### Adding invalid fixtures (future)
-Create a `fixtures/invalid/` directory and corresponding test module to verify parse errors are caught correctly.
+| Operation | Runtime Function |
+|-----------|------------------|
+| `find()` | `bytes_find` |
+| `startswith()` | `bytes_startswith` |
+| `endswith()` | `bytes_endswith` |
+| `upper()` | `bytes_upper` |
+| `lower()` | `bytes_lower` |
+| `strip()` | `bytes_strip` |
+| `lstrip()` | `bytes_lstrip` |
+| `rstrip()` | `bytes_rstrip` |
+| `replace()` | `bytes_replace` |
+| `count()` | `bytes_count` |
+| `join()` | `bytes_join` |
+| `isalnum()` | `bytes_isalnum` |
+| `isalpha()` | `bytes_isalpha` |
+| `isdigit()` | `bytes_isdigit` |
+| `isspace()` | `bytes_isspace` |
+| `islower()` | `bytes_islower` |
+| `isupper()` | `bytes_isupper` |
+| `reverse()` | `bytes_reverse` |
+| `center()` | `bytes_center` |
+| `ljust()` | `bytes_ljust` |
+| `rjust()` | `bytes_rjust` |
+| `zfill()` | `bytes_zfill` |
+
+---
+
+## Math Operators
+
+### Tested
+
+| Operator | Notes |
+|----------|-------|
+| `+` | Addition |
+| `-` | Subtraction |
+| `*` | Multiplication |
+| `/` | Division (returns float) |
+| `//` | Floor division (Python-style) |
+| `%` | Modulo (Python-style) |
+| `**` | Power |
+| `-` (unary) | Negation |

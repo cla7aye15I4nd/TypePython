@@ -442,3 +442,11 @@ test_case!(
     test_math_builtins,
     "tests/fixtures/valid/builtins/math_builtins.py"
 );
+test_case!(
+    test_bytes_operations,
+    "tests/fixtures/valid/builtins/bytes_operations.py"
+);
+test_case!(
+    test_math_operations,
+    "tests/fixtures/valid/builtins/math_operations.py"
+);

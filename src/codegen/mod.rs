@@ -3,7 +3,7 @@ mod visitor;
 
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::{PyType, PyValue};
+use crate::types::{CgCtx, PyType, PyValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -176,11 +176,137 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::Attribute { .. } => {
                 todo!("Attribute access")
             }
-            Expression::Subscript { .. } => {
-                todo!("Subscript operation")
+            Expression::Subscript { object, index } => {
+                let obj = self.evaluate_expression(object)?;
+
+                // Check if index is a slice expression
+                if let Expression::Slice { start, stop, step } = index.as_ref() {
+                    match &obj.ty {
+                        PyType::Bytes(_) => {
+                            // bytes[start:stop:step] returns bytes
+                            let len_fn = self.get_or_declare_builtin_function("bytes_len");
+                            let len_call = self
+                                .builder
+                                .build_call(len_fn, &[obj.value.into()], "len")
+                                .unwrap();
+                            let len = self.extract_int_call_result(len_call)?;
+
+                            if let Some(step_expr) = step {
+                                // With step: use bytes_slice_step
+                                let step_val = self.evaluate_expression(step_expr)?;
+
+                                // For negative step, default start is len-1, default end is -len-1
+                                // For positive step, default start is 0, default end is len
+                                // We'll pass special sentinel values and let the C function handle defaults
+                                // Actually, let's compute defaults based on step sign at runtime
+
+                                // Get start value (default depends on step sign)
+                                let start_val = if let Some(s) = start {
+                                    self.evaluate_expression(s)?
+                                } else {
+                                    // Use a large positive value as sentinel for "use default"
+                                    // The C code will interpret based on step sign
+                                    // Actually, for simplicity: if step > 0, start=0; if step < 0, start=len-1
+                                    // We need runtime branching for this, so let's use INT64_MAX as sentinel
+                                    PyValue::int(
+                                        self.context
+                                            .i64_type()
+                                            .const_int(i64::MAX as u64, false)
+                                            .into(),
+                                    )
+                                };
+
+                                // Get stop value (default depends on step sign)
+                                let stop_val = if let Some(e) = stop {
+                                    self.evaluate_expression(e)?
+                                } else {
+                                    // Use INT64_MAX as sentinel for "use default"
+                                    PyValue::int(
+                                        self.context
+                                            .i64_type()
+                                            .const_int(i64::MAX as u64, false)
+                                            .into(),
+                                    )
+                                };
+
+                                let slice_fn =
+                                    self.get_or_declare_builtin_function("bytes_slice_step");
+                                let call = self
+                                    .builder
+                                    .build_call(
+                                        slice_fn,
+                                        &[
+                                            obj.value.into(),
+                                            start_val.value.into(),
+                                            stop_val.value.into(),
+                                            step_val.value.into(),
+                                        ],
+                                        "bytes_slice_step",
+                                    )
+                                    .unwrap();
+                                self.extract_bytes_call_result(call)
+                            } else {
+                                // No step: use simpler bytes_slice
+                                // Get start value (default 0)
+                                let start_val = if let Some(s) = start {
+                                    self.evaluate_expression(s)?
+                                } else {
+                                    PyValue::int(self.context.i64_type().const_zero().into())
+                                };
+
+                                // Get stop value (default len)
+                                let stop_val = if let Some(e) = stop {
+                                    self.evaluate_expression(e)?
+                                } else {
+                                    len
+                                };
+
+                                let slice_fn = self.get_or_declare_builtin_function("bytes_slice");
+                                let call = self
+                                    .builder
+                                    .build_call(
+                                        slice_fn,
+                                        &[
+                                            obj.value.into(),
+                                            start_val.value.into(),
+                                            stop_val.value.into(),
+                                        ],
+                                        "bytes_slice",
+                                    )
+                                    .unwrap();
+                                self.extract_bytes_call_result(call)
+                            }
+                        }
+                        _ => Err(format!(
+                            "Slice operation not supported for type {:?}",
+                            obj.ty
+                        )),
+                    }
+                } else {
+                    let idx = self.evaluate_expression(index)?;
+                    match &obj.ty {
+                        PyType::Bytes(_) => {
+                            // bytes[index] returns an int (the byte value at that index)
+                            let getitem_fn = self.get_or_declare_builtin_function("bytes_getitem");
+                            let call = self
+                                .builder
+                                .build_call(
+                                    getitem_fn,
+                                    &[obj.value.into(), idx.value.into()],
+                                    "bytes_getitem",
+                                )
+                                .unwrap();
+                            self.extract_int_call_result(call)
+                        }
+                        _ => Err(format!(
+                            "Subscript operation not supported for type {:?}",
+                            obj.ty
+                        )),
+                    }
+                }
             }
             Expression::Slice { .. } => {
-                todo!("Slice operation")
+                Err("Slice expression must be used inside subscript".to_string())
             }
         }
     }
@@ -465,23 +591,10 @@ impl<'ctx> CodeGen<'ctx> {
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
-        // Use the type information from PyValue (no inference needed!)
-        let (op_type, lhs_coerced, rhs_coerced) =
-            self.coerce_operands_for_binary_op(&lhs.ty, &rhs.ty, lhs.value, rhs.value)?;
-
-        // Delegate to the type-specific implementation
-        let result = op_type.binary_op(
-            self.context,
-            &self.builder,
-            &self.module,
-            op,
-            lhs_coerced,
-            rhs_coerced,
-        )?;
-
-        // Determine result type based on operation
-        let result_ty = self.binary_op_result_type(op, &op_type);
-        Ok(PyValue::new(result, result_ty))
+        // Delegate to the left type's implementation
+        // The type handles coercion internally and returns a PyValue with correct type
+        let cg = CgCtx::new(self.context, &self.builder, &self.module);
+        lhs.binary_op(&cg, op, &rhs)
     }
 
     /// Generate short-circuit evaluation for `and` and `or` operators
@@ -663,118 +776,6 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(val)
     }
 
-    /// Coerce operands to a common type for binary operations
-    fn coerce_operands_for_binary_op(
-        &self,
-        lhs_type: &PyType,
-        rhs_type: &PyType,
-        lhs: BasicValueEnum<'ctx>,
-        rhs: BasicValueEnum<'ctx>,
-    ) -> Result<(PyType, BasicValueEnum<'ctx>, BasicValueEnum<'ctx>), String> {
-        use crate::types::{BoolType, BytesType, FloatType, IntType, NoneType};
-
-        match (lhs_type, rhs_type) {
-            // Same types - no coercion needed
-            (PyType::Int(_), PyType::Int(_)) => Ok((PyType::Int(IntType), lhs, rhs)),
-            (PyType::Float(_), PyType::Float(_)) => Ok((PyType::Float(FloatType), lhs, rhs)),
-            (PyType::Bool(_), PyType::Bool(_)) => Ok((PyType::Bool(BoolType), lhs, rhs)),
-            (PyType::Bytes(_), PyType::Bytes(_)) => Ok((PyType::Bytes(BytesType), lhs, rhs)),
-
-            // Int/Float coercion - promote to Float
-            (PyType::Int(_), PyType::Float(_)) => {
-                let lhs_float = self
-                    .builder
-                    .build_signed_int_to_float(
-                        lhs.into_int_value(),
-                        self.context.f64_type(),
-                        "itof",
-                    )
-                    .unwrap();
-                Ok((PyType::Float(FloatType), lhs_float.into(), rhs))
-            }
-            (PyType::Float(_), PyType::Int(_)) => {
-                let rhs_float = self
-                    .builder
-                    .build_signed_int_to_float(
-                        rhs.into_int_value(),
-                        self.context.f64_type(),
-                        "itof",
-                    )
-                    .unwrap();
-                Ok((PyType::Float(FloatType), lhs, rhs_float.into()))
-            }
-
-            // Bool/Int coercion - promote Bool to Int
-            (PyType::Bool(_), PyType::Int(_)) => {
-                let lhs_int = self
-                    .builder
-                    .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
-                    .unwrap();
-                Ok((PyType::Int(IntType), lhs_int.into(), rhs))
-            }
-            (PyType::Int(_), PyType::Bool(_)) => {
-                let rhs_int = self
-                    .builder
-                    .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
-                    .unwrap();
-                Ok((PyType::Int(IntType), lhs, rhs_int.into()))
-            }
-
-            // Bool/Float coercion - promote Bool to Float
-            (PyType::Bool(_), PyType::Float(_)) => {
-                let lhs_int = self
-                    .builder
-                    .build_int_z_extend(lhs.into_int_value(), self.context.i64_type(), "btoi")
-                    .unwrap();
-                let lhs_float = self
-                    .builder
-                    .build_signed_int_to_float(lhs_int, self.context.f64_type(), "itof")
-                    .unwrap();
-                Ok((PyType::Float(FloatType), lhs_float.into(), rhs))
-            }
-            (PyType::Float(_), PyType::Bool(_)) => {
-                let rhs_int = self
-                    .builder
-                    .build_int_z_extend(rhs.into_int_value(), self.context.i64_type(), "btoi")
-                    .unwrap();
-                let rhs_float = self
-                    .builder
-                    .build_signed_int_to_float(rhs_int, self.context.f64_type(), "itof")
-                    .unwrap();
-                Ok((PyType::Float(FloatType), lhs, rhs_float.into()))
-            }
-
-            // None type
-            (PyType::None(_), PyType::None(_)) => Ok((PyType::None(NoneType), lhs, rhs)),
-
-            _ => Err(format!(
-                "Incompatible types for binary operation: {:?} and {:?}",
-                std::mem::discriminant(lhs_type),
-                std::mem::discriminant(rhs_type)
-            )),
-        }
-    }
-
-    /// Determine the result type of a binary operation
-    fn binary_op_result_type(&self, op: &BinaryOp, operand_type: &PyType) -> PyType {
-        use crate::types::BoolType;
-        // Comparison and logical operators return bool
-        match op {
-            BinaryOp::Eq
-            | BinaryOp::Ne
-            | BinaryOp::Lt
-            | BinaryOp::Le
-            | BinaryOp::Gt
-            | BinaryOp::Ge
-            | BinaryOp::Is
-            | BinaryOp::IsNot
-            | BinaryOp::In
-            | BinaryOp::NotIn => PyType::Bool(BoolType),
-            // All other operators return the operand type
-            _ => operand_type.clone(),
-        }
-    }
-
     pub(crate) fn generate_unary_op(
         &mut self,
         op: &UnaryOp,
@@ -783,9 +784,8 @@ impl<'ctx> CodeGen<'ctx> {
         let val = self.evaluate_expression(operand)?;
 
         // Use the type from PyValue - no inference needed!
-        let result = val
-            .ty
-            .unary_op(self.context, &self.builder, op, val.value)?;
+        let cg = CgCtx::new(self.context, &self.builder, &self.module);
+        let result = val.ty.unary_op(&cg, op, val.value)?;
 
         // Determine result type
         let result_ty = self.unary_op_result_type(op, &val.ty);
@@ -949,6 +949,173 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Helper to extract bytes (pointer) result from a call site
+    fn extract_bytes_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+        match call_site.as_any_value_enum() {
+            inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(PyValue::bytes(pv.into())),
+            _ => Err("Expected bytes return value".to_string()),
+        }
+    }
+
+    /// Generate min/max selection that preserves original value types
+    /// Python's min()/max() returns the actual original object, not a coerced value.
+    /// For example: max(5, 3.0) returns 5 (int), not 5.0 (float)
+    /// is_min: true for min(), false for max()
+    fn generate_minmax_select(
+        &mut self,
+        a: &PyValue<'ctx>,
+        b: &PyValue<'ctx>,
+        is_min: bool,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::FloatPredicate;
+        use inkwell::IntPredicate;
+
+        // Check if both operands have the same type (use phi approach)
+        // or different types (coerce to float)
+        let same_type = std::mem::discriminant(&a.ty) == std::mem::discriminant(&b.ty);
+
+        if same_type {
+            // Same type: use select instruction directly on original values
+            let condition = match &a.ty {
+                PyType::Int(_) => {
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    self.builder
+                        .build_int_compare(
+                            pred,
+                            a.value.into_int_value(),
+                            b.value.into_int_value(),
+                            "cmp",
+                        )
+                        .unwrap()
+                }
+                PyType::Float(_) => {
+                    let pred = if is_min {
+                        FloatPredicate::OLT
+                    } else {
+                        FloatPredicate::OGT
+                    };
+                    self.builder
+                        .build_float_compare(
+                            pred,
+                            a.value.into_float_value(),
+                            b.value.into_float_value(),
+                            "cmp",
+                        )
+                        .unwrap()
+                }
+                PyType::Bool(_) => {
+                    // Bools are compared as ints (False=0, True=1)
+                    let a_int = self
+                        .builder
+                        .build_int_z_extend(
+                            a.value.into_int_value(),
+                            self.context.i64_type(),
+                            "btoi",
+                        )
+                        .unwrap();
+                    let b_int = self
+                        .builder
+                        .build_int_z_extend(
+                            b.value.into_int_value(),
+                            self.context.i64_type(),
+                            "btoi",
+                        )
+                        .unwrap();
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    self.builder
+                        .build_int_compare(pred, a_int, b_int, "cmp")
+                        .unwrap()
+                }
+                _ => return Err("min()/max() arguments must be numbers".to_string()),
+            };
+
+            let select_result = self
+                .builder
+                .build_select(condition, a.value, b.value, "minmax_select")
+                .unwrap();
+
+            Ok(PyValue::new(select_result, a.ty.clone()))
+        } else {
+            // Different types: coerce to float for comparison and result
+            // This is necessary because we can't have a single LLVM value with
+            // runtime-dependent type. The result will always be float.
+            let float_type = self.context.f64_type();
+
+            let a_float = match &a.ty {
+                PyType::Float(_) => a.value.into_float_value(),
+                PyType::Int(_) => self
+                    .builder
+                    .build_signed_int_to_float(a.value.into_int_value(), float_type, "itof")
+                    .unwrap(),
+                PyType::Bool(_) => {
+                    let int_val = self
+                        .builder
+                        .build_int_z_extend(
+                            a.value.into_int_value(),
+                            self.context.i64_type(),
+                            "btoi",
+                        )
+                        .unwrap();
+                    self.builder
+                        .build_signed_int_to_float(int_val, float_type, "itof")
+                        .unwrap()
+                }
+                _ => return Err("min()/max() arguments must be numbers".to_string()),
+            };
+
+            let b_float = match &b.ty {
+                PyType::Float(_) => b.value.into_float_value(),
+                PyType::Int(_) => self
+                    .builder
+                    .build_signed_int_to_float(b.value.into_int_value(), float_type, "itof")
+                    .unwrap(),
+                PyType::Bool(_) => {
+                    let int_val = self
+                        .builder
+                        .build_int_z_extend(
+                            b.value.into_int_value(),
+                            self.context.i64_type(),
+                            "btoi",
+                        )
+                        .unwrap();
+                    self.builder
+                        .build_signed_int_to_float(int_val, float_type, "itof")
+                        .unwrap()
+                }
+                _ => return Err("min()/max() arguments must be numbers".to_string()),
+            };
+
+            let pred = if is_min {
+                FloatPredicate::OLT
+            } else {
+                FloatPredicate::OGT
+            };
+            let condition = self
+                .builder
+                .build_float_compare(pred, a_float, b_float, "cmp")
+                .unwrap();
+
+            let select_result = self
+                .builder
+                .build_select(condition, a_float, b_float, "minmax_select")
+                .unwrap();
+
+            Ok(PyValue::float(select_result))
+        }
+    }
+
     /// Try to generate code for Python built-in math functions
     /// Returns Some(result) if the function is a builtin, None if it should be handled as a regular call
     fn try_generate_builtin_math_call(
@@ -1089,53 +1256,9 @@ impl<'ctx> CodeGen<'ctx> {
                 let a = self.evaluate_expression(&args[0])?;
                 let b = self.evaluate_expression(&args[1])?;
 
-                // Coerce to common type
-                let (op_type, a_coerced, b_coerced) =
-                    self.coerce_operands_for_binary_op(&a.ty, &b.ty, a.value, b.value)?;
-
-                let result = match &op_type {
-                    PyType::Int(_) | PyType::Bool(_) => {
-                        let a_int = if matches!(&op_type, PyType::Bool(_)) {
-                            self.builder
-                                .build_int_z_extend(
-                                    a_coerced.into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap()
-                                .into()
-                        } else {
-                            a_coerced
-                        };
-                        let b_int = if matches!(&op_type, PyType::Bool(_)) {
-                            self.builder
-                                .build_int_z_extend(
-                                    b_coerced.into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap()
-                                .into()
-                        } else {
-                            b_coerced
-                        };
-                        let min_fn = self.get_or_declare_builtin_function("min_int");
-                        let call = self
-                            .builder
-                            .build_call(min_fn, &[a_int.into(), b_int.into()], "min")
-                            .unwrap();
-                        self.extract_int_call_result(call)?
-                    }
-                    PyType::Float(_) => {
-                        let min_fn = self.get_or_declare_builtin_function("min_float");
-                        let call = self
-                            .builder
-                            .build_call(min_fn, &[a_coerced.into(), b_coerced.into()], "min")
-                            .unwrap();
-                        self.extract_float_call_result(call)?
-                    }
-                    _ => return Err("min() arguments must be numbers".to_string()),
-                };
+                // Python's min() returns the actual original object, not a coerced value
+                // We need to compare values but return the original typed value
+                let result = self.generate_minmax_select(&a, &b, true)?;
                 Ok(Some(result))
             }
 
@@ -1146,53 +1269,9 @@ impl<'ctx> CodeGen<'ctx> {
                 let a = self.evaluate_expression(&args[0])?;
                 let b = self.evaluate_expression(&args[1])?;
 
-                // Coerce to common type
-                let (op_type, a_coerced, b_coerced) =
-                    self.coerce_operands_for_binary_op(&a.ty, &b.ty, a.value, b.value)?;
-
-                let result = match &op_type {
-                    PyType::Int(_) | PyType::Bool(_) => {
-                        let a_int = if matches!(&op_type, PyType::Bool(_)) {
-                            self.builder
-                                .build_int_z_extend(
-                                    a_coerced.into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap()
-                                .into()
-                        } else {
-                            a_coerced
-                        };
-                        let b_int = if matches!(&op_type, PyType::Bool(_)) {
-                            self.builder
-                                .build_int_z_extend(
-                                    b_coerced.into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap()
-                                .into()
-                        } else {
-                            b_coerced
-                        };
-                        let max_fn = self.get_or_declare_builtin_function("max_int");
-                        let call = self
-                            .builder
-                            .build_call(max_fn, &[a_int.into(), b_int.into()], "max")
-                            .unwrap();
-                        self.extract_int_call_result(call)?
-                    }
-                    PyType::Float(_) => {
-                        let max_fn = self.get_or_declare_builtin_function("max_float");
-                        let call = self
-                            .builder
-                            .build_call(max_fn, &[a_coerced.into(), b_coerced.into()], "max")
-                            .unwrap();
-                        self.extract_float_call_result(call)?
-                    }
-                    _ => return Err("max() arguments must be numbers".to_string()),
-                };
+                // Python's max() returns the actual original object, not a coerced value
+                // We need to compare values but return the original typed value
+                let result = self.generate_minmax_select(&a, &b, false)?;
                 Ok(Some(result))
             }
 
@@ -1259,63 +1338,33 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(Some(self.extract_int_call_result(call)?))
                 } else {
-                    // pow(base, exp) - same as ** operator
-                    // Coerce to common type
-                    let (op_type, base_coerced, exp_coerced) = self
-                        .coerce_operands_for_binary_op(&base.ty, &exp.ty, base.value, exp.value)?;
-
-                    let result = match &op_type {
-                        PyType::Int(_) | PyType::Bool(_) => {
-                            let base_int = if matches!(&op_type, PyType::Bool(_)) {
-                                self.builder
-                                    .build_int_z_extend(
-                                        base_coerced.into_int_value(),
-                                        self.context.i64_type(),
-                                        "btoi",
-                                    )
-                                    .unwrap()
-                                    .into()
-                            } else {
-                                base_coerced
-                            };
-                            let exp_int = if matches!(&op_type, PyType::Bool(_)) {
-                                self.builder
-                                    .build_int_z_extend(
-                                        exp_coerced.into_int_value(),
-                                        self.context.i64_type(),
-                                        "btoi",
-                                    )
-                                    .unwrap()
-                                    .into()
-                            } else {
-                                exp_coerced
-                            };
-                            let pow_fn = self.get_or_declare_builtin_function("pow_int");
-                            let call = self
-                                .builder
-                                .build_call(pow_fn, &[base_int.into(), exp_int.into()], "pow")
-                                .unwrap();
-                            self.extract_int_call_result(call)?
-                        }
-                        PyType::Float(_) => {
-                            let pow_fn = self.get_or_declare_builtin_function("pow_float");
-                            let call = self
-                                .builder
-                                .build_call(
-                                    pow_fn,
-                                    &[base_coerced.into(), exp_coerced.into()],
-                                    "pow",
-                                )
-                                .unwrap();
-                            self.extract_float_call_result(call)?
-                        }
-                        _ => return Err("pow() arguments must be numbers".to_string()),
-                    };
+                    // pow(base, exp) - use the ** operator through the type system
+                    let cg = CgCtx::new(self.context, &self.builder, &self.module);
+                    let result = base.binary_op(&cg, &BinaryOp::Pow, &exp)?;
                     Ok(Some(result))
                 }
             }
 
-            _ => Ok(None), // Not a builtin math function
+            "len" => {
+                if args.len() != 1 {
+                    return Err("len() takes exactly one argument".to_string());
+                }
+                let val = self.evaluate_expression(&args[0])?;
+                let result = match &val.ty {
+                    PyType::Bytes(_) => {
+                        let len_fn = self.get_or_declare_builtin_function("bytes_len");
+                        let call = self
+                            .builder
+                            .build_call(len_fn, &[val.value.into()], "len")
+                            .unwrap();
+                        self.extract_int_call_result(call)?
+                    }
+                    _ => return Err("len() argument must be bytes".to_string()),
+                };
+                Ok(Some(result))
+            }
+
+            _ => Ok(None), // Not a builtin function
         }
     }
 

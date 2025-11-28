@@ -22,9 +22,27 @@ void print_bool(_Bool value) {
     printf("%s", value ? "True" : "False");
 }
 
-void print_str(const char* value) {
-    // Print bytes in Python-style format: b'...'
-    printf("b'%s'", value);
+void print_bytes(const char* value) {
+    // Print bytes in Python-style format: b'...' with escaped special chars
+    printf("b'");
+    for (const char* p = value; *p != '\0'; p++) {
+        unsigned char c = (unsigned char)*p;
+        switch (c) {
+            case '\n': printf("\\n"); break;
+            case '\t': printf("\\t"); break;
+            case '\r': printf("\\r"); break;
+            case '\\': printf("\\\\"); break;
+            case '\'': printf("\\'"); break;
+            default:
+                if (c >= 32 && c < 127) {
+                    putchar(c);
+                } else {
+                    printf("\\x%02x", c);
+                }
+                break;
+        }
+    }
+    printf("'");
 }
 
 void print_space(void) {

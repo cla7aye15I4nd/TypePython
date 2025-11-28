@@ -1,7 +1,7 @@
 /// Statement visitor implementation for code generation
 use super::super::CodeGen;
 use crate::ast::*;
-use crate::types::{PyType, PyValue};
+use crate::types::{CgCtx, PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_decl_impl(
@@ -92,26 +92,12 @@ impl<'ctx> CodeGen<'ctx> {
                     AugAssignOp::RShift => BinaryOp::RShift,
                 };
 
-                // Use the type-aware coercion and dispatch
-                let (op_type, lhs_coerced, rhs_coerced) = self.coerce_operands_for_binary_op(
-                    &current.ty,
-                    &rhs.ty,
-                    current.value,
-                    rhs.value,
-                )?;
-
-                // Delegate to type-specific implementation
-                let result = op_type.binary_op(
-                    self.context,
-                    &self.builder,
-                    &self.module,
-                    &bin_op,
-                    lhs_coerced,
-                    rhs_coerced,
-                )?;
+                // Delegate to the left type's implementation
+                let cg = CgCtx::new(self.context, &self.builder, &self.module);
+                let result = current.binary_op(&cg, &bin_op, &rhs)?;
 
                 // Store result
-                self.builder.build_store(var, result).unwrap();
+                self.builder.build_store(var, result.value).unwrap();
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
