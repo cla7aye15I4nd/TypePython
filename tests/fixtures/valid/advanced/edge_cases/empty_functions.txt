@@ -1,4 +1,4 @@
-Return immediately: 42
-Pass through: 100
-Minimal conditional positive: 1
-Minimal conditional negative: 0
+b'Return immediately:' 42
+b'Pass through:' 100
+b'Minimal conditional positive:' 1
+b'Minimal conditional negative:' 0

@@ -1,6 +1,6 @@
-Sum two: 15
-Sum three: 6
-Sum four: 100
-Sum five: 5
-Compute: 26
-Mixed types: 110
+b'Sum two:' 15
+b'Sum three:' 6
+b'Sum four:' 100
+b'Sum five:' 5
+b'Compute:' 26
+b'Mixed types:' 110

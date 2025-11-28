@@ -11,17 +11,18 @@ pub fn preprocess(source: &str) -> Result<String, String> {
     let lines: Vec<&str> = source.lines().collect();
 
     for (line_num, line) in lines.iter().enumerate() {
+        // Strip inline comments (but not inside strings)
+        let line = strip_inline_comment(line);
         let trimmed = line.trim();
 
-        // Handle empty lines and comment-only lines
+        // Handle empty lines and comment-only lines (after stripping comments)
+        // Skip them entirely - the grammar handles statement sequences without blank line markers
         if trimmed.is_empty() {
-            result.push_str(line);
-            result.push('\n');
             continue;
         }
 
-        // Calculate current line's indentation
-        let current_indent = count_leading_spaces(line);
+        // Calculate current line's indentation (from the original line, not comment-stripped)
+        let current_indent = count_leading_spaces(&line);
         let prev_indent = *indent_stack.last().unwrap();
 
         // Check if this line starts with a continuation keyword (elif, else)
@@ -91,4 +92,37 @@ fn count_leading_spaces(line: &str) -> usize {
         }
     }
     count
+}
+
+/// Strip inline comments from a line, being careful not to strip # inside strings
+fn strip_inline_comment(line: &str) -> String {
+    let mut result = String::new();
+    let mut in_string = false;
+    let mut string_char = '"';
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if in_string {
+            result.push(ch);
+            if ch == '\\' {
+                // Skip escaped character
+                if let Some(next) = chars.next() {
+                    result.push(next);
+                }
+            } else if ch == string_char {
+                in_string = false;
+            }
+        } else if ch == '"' || ch == '\'' {
+            in_string = true;
+            string_char = ch;
+            result.push(ch);
+        } else if ch == '#' {
+            // Found a comment - stop here
+            break;
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
 }

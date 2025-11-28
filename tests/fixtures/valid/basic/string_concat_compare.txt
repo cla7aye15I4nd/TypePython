@@ -1,6 +1,6 @@
-Hello World
-TypePython Compiler
-test == test: True
-test == other: False
-test != other: True
-test != test: False
+b'Hello World'
+b'TypePython Compiler'
+b'test == test:' True
+b'test == other:' False
+b'test != other:' True
+b'test != test:' False

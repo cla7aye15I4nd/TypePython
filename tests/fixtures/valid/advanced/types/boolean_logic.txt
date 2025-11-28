@@ -1,4 +1,4 @@
-AND operations: 1
-OR operations: 3
-NOT operations: 1
-Complex boolean: 4
+b'AND operations:' 1
+b'OR operations:' 3
+b'NOT operations:' 1
+b'Complex boolean:' 4

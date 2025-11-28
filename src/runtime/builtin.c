@@ -25,7 +25,8 @@ void tpy_print_bool(_Bool value) {
 }
 
 void tpy_print_str(const char* value) {
-    printf("%s", value);
+    // Print bytes in Python-style format: b'...'
+    printf("b'%s'", value);
 }
 
 // Print separator functions
@@ -88,4 +89,37 @@ int64_t tpy_pow_int(int64_t base, int64_t exponent) {
     }
 
     return result;
+}
+
+// Python-style floor division for integers
+// Rounds towards negative infinity (unlike C which truncates towards zero)
+int64_t tpy_floordiv_int(int64_t a, int64_t b) {
+    int64_t q = a / b;
+    int64_t r = a % b;
+    // If remainder is non-zero and signs differ, adjust quotient
+    if ((r != 0) && ((r < 0) != (b < 0))) {
+        q -= 1;
+    }
+    return q;
+}
+
+// Python-style modulo for integers
+// Result has the same sign as the divisor (unlike C where it matches the dividend)
+int64_t tpy_mod_int(int64_t a, int64_t b) {
+    int64_t r = a % b;
+    // If remainder is non-zero and signs differ, adjust remainder
+    if ((r != 0) && ((r < 0) != (b < 0))) {
+        r += b;
+    }
+    return r;
+}
+
+// Python-style modulo for floats
+double tpy_fmod(double a, double b) {
+    double r = fmod(a, b);
+    // If remainder is non-zero and signs differ, adjust remainder
+    if ((r != 0.0) && ((r < 0.0) != (b < 0.0))) {
+        r += b;
+    }
+    return r;
 }

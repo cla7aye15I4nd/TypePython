@@ -1,5 +1,5 @@
-Test one: 201
-Small numbers: 1
-Single iteration: 1
-Factorial(1): 1
-Factorial(2): 2
+b'Test one:' 201
+b'Small numbers:' 1
+b'Single iteration:' 1
+b'Factorial(1):' 1
+b'Factorial(2):' 2

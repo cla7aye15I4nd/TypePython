@@ -1,12 +1,12 @@
-negative
-zero
-small positive
-medium positive
-large positive
-Category: below
-Category: equal
-Category: above
-Success
-Warning
-Error
-Unknown
+b'negative'
+b'zero'
+b'small positive'
+b'medium positive'
+b'large positive'
+b'Category:' b'below'
+b'Category:' b'equal'
+b'Category:' b'above'
+b'Success'
+b'Warning'
+b'Error'
+b'Unknown'

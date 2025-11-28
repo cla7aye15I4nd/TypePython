@@ -1,5 +1,5 @@
-Int: 42
-Float: 3.14
-Bool: True
-Bytes: Hello
-Literal arithmetic: 60
+b'Int:' 42
+b'Float:' 3.14
+b'Bool:' True
+b'Bytes:' b'Hello'
+b'Literal arithmetic:' 60

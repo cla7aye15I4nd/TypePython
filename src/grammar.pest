@@ -57,6 +57,10 @@ keyword = {
 ID = @{ !(keyword ~ !(ASCII_ALPHANUMERIC | "_")) ~ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // Literals
+// Integer literals: decimal, binary (0b), octal (0o), hexadecimal (0x)
+BIN_LIT = @{ "0" ~ ("b" | "B") ~ ('0'..'1')+ }
+OCT_LIT = @{ "0" ~ ("o" | "O") ~ ('0'..'7')+ }
+HEX_LIT = @{ "0" ~ ("x" | "X") ~ (ASCII_HEX_DIGIT)+ }
 INT_LIT = @{ ASCII_DIGIT+ }
 FLOAT_LIT = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 BYTES_LIT = @{ "b" ~ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
@@ -320,6 +324,9 @@ atom = {
     | TRUE
     | FALSE
     | FLOAT_LIT
+    | BIN_LIT
+    | OCT_LIT
+    | HEX_LIT
     | INT_LIT
     | BYTES_LIT
     | STR_LIT

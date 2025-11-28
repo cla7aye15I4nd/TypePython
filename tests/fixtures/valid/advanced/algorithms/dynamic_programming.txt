@@ -1,3 +1,3 @@
-Fibonacci(20): 6765
-Climbing stairs(10): 89
-Tribonacci(10): 149
+b'Fibonacci(20):' 6765
+b'Climbing stairs(10):' 89
+b'Tribonacci(10):' 149

@@ -1,5 +1,5 @@
-Counter: 1
-Counter: 2
-Counter: 4
-Counter: 5
-Done!
+b'Counter:' 1
+b'Counter:' 2
+b'Counter:' 4
+b'Counter:' 5
+b'Done!'

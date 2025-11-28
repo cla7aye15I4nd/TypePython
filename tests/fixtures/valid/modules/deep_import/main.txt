@@ -1,4 +1,4 @@
-Testing deep import chain with cyclic dependencies...
-module_t.test() = 20
-module_a.test() = 325565
-Deep import test completed successfully!
+b'Testing deep import chain with cyclic dependencies...'
+b'module_t.test() =' 20
+b'module_a.test() =' 325565
+b'Deep import test completed successfully!'

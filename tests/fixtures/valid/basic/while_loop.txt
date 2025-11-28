@@ -1,6 +1,6 @@
-Counter: 0
-Counter: 1
-Counter: 2
-Counter: 3
-Counter: 4
-Done!
+b'Counter:' 0
+b'Counter:' 1
+b'Counter:' 2
+b'Counter:' 3
+b'Counter:' 4
+b'Done!'

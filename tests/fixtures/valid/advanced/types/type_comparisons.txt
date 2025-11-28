@@ -1,4 +1,4 @@
-Compare integers: 6
-Compare floats: 4
-Compare booleans: 3
-Chained comparisons: 2
+b'Compare integers:' 6
+b'Compare floats:' 4
+b'Compare booleans:' 3
+b'Chained comparisons:' 2

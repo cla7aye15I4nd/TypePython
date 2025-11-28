@@ -1,23 +1,23 @@
-=== Test 1: Variable Shadowing Across Functions ===
-func_a x: 10
-func_b x: 20
-func_c x: 30
-func_c y: 60
-Results: 10 20 60
+b'=== Test 1: Variable Shadowing Across Functions ==='
+b'func_a x:' 10
+b'func_b x:' 20
+b'func_c x:' 30
+b'func_c y:' 60
+b'Results:' 10 20 60
 
-=== Test 2: Parameter Shadowing ===
-process_a value: 5
-process_b value: 5
-Process results: 105 205
+b'=== Test 2: Parameter Shadowing ==='
+b'process_a value:' 5
+b'process_b value:' 5
+b'Process results:' 105 205
 
-=== Test 3: Local Variable Shadowing ===
-calculate_a temp: 5
-calculate_a result: 10
-calculate_b temp: 10
-calculate_b result: 30
-Calculate results: 10 30
+b'=== Test 3: Local Variable Shadowing ==='
+b'calculate_a temp:' 5
+b'calculate_a result:' 10
+b'calculate_b temp:' 10
+b'calculate_b result:' 30
+b'Calculate results:' 10 30
 
-=== Test 4: Variable Reassignment ===
-z initially: 1
-z after first reassign: 2
-z after second reassign: 3
+b'=== Test 4: Variable Reassignment ==='
+b'z initially:' 1
+b'z after first reassign:' 2
+b'z after second reassign:' 3

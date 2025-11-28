@@ -1,0 +1,29 @@
+b'=== AND short-circuit ==='
+b'Testing: False and check_true()'
+b'Result:' False
+b'Testing: True and check_true()'
+b'check_true called'
+b'Result:' True
+b'=== OR short-circuit ==='
+b'Testing: True or check_false()'
+b'Result:' True
+b'Testing: False or check_false()'
+b'check_false called'
+b'Result:' False
+b'=== Chained logical ==='
+b'True and False and True:' False
+b'True or False or True:' True
+b'True and False or True:' True
+b'True or False and True:' True
+b'=== NOT combinations ==='
+b'not True:' False
+b'not False:' True
+b'not not True:' True
+b'not (True and False):' True
+b'not (True or False):' False
+b'=== Practical examples ==='
+b'5 in [0,10]:' True
+b'15 in [0,10]:' False
+b'5 out of [0,10]:' False
+b'15 out of [0,10]:' True
+b'(5<10 and 10<15) or (5>15):' True

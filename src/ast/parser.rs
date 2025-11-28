@@ -957,6 +957,24 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
                 assert_eq!(inner.next(), None);
                 Expression::IntLit(first.as_str().parse().unwrap_or(0))
             }
+            Rule::BIN_LIT => {
+                assert_eq!(inner.next(), None);
+                // Parse binary literal like 0b1010 (skip "0b" prefix)
+                let s = first.as_str();
+                Expression::IntLit(i64::from_str_radix(&s[2..], 2).unwrap_or(0))
+            }
+            Rule::OCT_LIT => {
+                assert_eq!(inner.next(), None);
+                // Parse octal literal like 0o755 (skip "0o" prefix)
+                let s = first.as_str();
+                Expression::IntLit(i64::from_str_radix(&s[2..], 8).unwrap_or(0))
+            }
+            Rule::HEX_LIT => {
+                assert_eq!(inner.next(), None);
+                // Parse hex literal like 0xFF (skip "0x" prefix)
+                let s = first.as_str();
+                Expression::IntLit(i64::from_str_radix(&s[2..], 16).unwrap_or(0))
+            }
             Rule::FLOAT_LIT => {
                 assert_eq!(inner.next(), None);
                 Expression::FloatLit(first.as_str().parse().unwrap_or(0.0))

@@ -1,4 +1,4 @@
-16 is power of 2: True
-15 is power of 2: False
-Set bits in 15: 4
-Reverse bits of 12: 3
+b'16 is power of 2:' True
+b'15 is power of 2:' False
+b'Set bits in 15:' 4
+b'Reverse bits of 12:' 3

@@ -1,4 +1,4 @@
-Precedence test: 23
-Nested operations: 325
-Modulo operations: 17
-Total: 365
+b'Precedence test:' 23
+b'Nested operations:' 325
+b'Modulo operations:' 17
+b'Total:' 365

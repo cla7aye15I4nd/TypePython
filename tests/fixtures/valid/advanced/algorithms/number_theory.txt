@@ -1,4 +1,4 @@
-Sum divisors of 28: 56
-28 is perfect: True
-Divisor count of 24: 8
-Digital root of 9875: 2
+b'Sum divisors of 28:' 56
+b'28 is perfect:' True
+b'Divisor count of 24:' 8
+b'Digital root of 9875:' 2

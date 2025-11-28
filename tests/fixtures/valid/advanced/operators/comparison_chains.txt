@@ -1,0 +1,51 @@
+b'=== Equal values ==='
+b'Testing:' 5
+b'Against:' 5
+b'  == :' True
+b'  != :' False
+b'  <  :' False
+b'  <= :' True
+b'  >  :' False
+b'  >= :' True
+b'=== Different values ==='
+b'Testing:' 3
+b'Against:' 7
+b'  == :' False
+b'  != :' True
+b'  <  :' True
+b'  <= :' True
+b'  >  :' False
+b'  >= :' False
+b'=== Negative values ==='
+b'Testing:' -5
+b'Against:' 3
+b'  == :' False
+b'  != :' True
+b'  <  :' True
+b'  <= :' True
+b'  >  :' False
+b'  >= :' False
+b'=== Float equal ==='
+b'Float testing:' 3.14
+b'Float against:' 3.14
+b'  == :' True
+b'  != :' False
+b'  <  :' False
+b'  <= :' True
+b'  >  :' False
+b'  >= :' True
+b'=== Float different ==='
+b'Float testing:' 2.71
+b'Float against:' 3.14
+b'  == :' False
+b'  != :' True
+b'  <  :' True
+b'  <= :' True
+b'  >  :' False
+b'  >= :' False
+b'True == True:' True
+b'True != False:' True
+b'hello == hello:' True
+b'hello != world:' True
+b'100 is 100:' True
+b'100 is not 100:' False

@@ -1,1 +1,1 @@
-Sorted sum: 157
+b'Sorted sum:' 157

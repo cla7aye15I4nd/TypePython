@@ -1,2 +1,2 @@
-Ackermann test result: 26
-A(3, 2): 29
+b'Ackermann test result:' 26
+b'A(3, 2):' 29

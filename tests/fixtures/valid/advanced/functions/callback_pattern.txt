@@ -1,4 +1,4 @@
-Process twice: 20
-Process thrice: 30
-Map double: 12
-Map triple: 18
+b'Process twice:' 20
+b'Process thrice:' 30
+b'Map double:' 12
+b'Map triple:' 18

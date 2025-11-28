@@ -1,0 +1,15 @@
+b'True | True:' True
+b'True | False:' True
+b'False | True:' True
+b'False | False:' False
+b'True & True:' True
+b'True & False:' False
+b'False & True:' False
+b'False & False:' False
+b'True ^ True:' False
+b'True ^ False:' True
+b'False ^ True:' True
+b'False ^ False:' False
+b'(True & True) | False:' True
+b'True ^ True (toggle off):' False
+b'False ^ True (toggle on):' True

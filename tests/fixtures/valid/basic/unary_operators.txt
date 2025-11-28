@@ -1,0 +1,12 @@
+b'Negation of 42:' -42
+b'Double negation of 42:' 42
+b'Positive of 42:' 42
+b'Negation of -10:' 10
+b'Negation of 3.14:' -3.14
+b'Positive of 3.14:' 3.14
+b'not True:' False
+b'not False:' True
+b'not not True:' True
+b'~0 =' -1
+b'~(-1) =' 0
+b'-(-5) + (+5) =' 10

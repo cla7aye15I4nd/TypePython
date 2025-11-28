@@ -1,2 +1,2 @@
-Hello, World
-Hello, TypePython
+b'Hello,' b'World'
+b'Hello,' b'TypePython'

@@ -216,6 +216,18 @@ impl<'ctx> CodeGen<'ctx> {
                 let fn_type = f64_type.fn_type(&[f64_type.into()], false);
                 self.module.add_function(name, fn_type, None)
             }
+            "tpy_floordiv_int" => {
+                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_mod_int" => {
+                let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
+            "tpy_fmod" => {
+                let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
+                self.module.add_function(name, fn_type, None)
+            }
             "tpy_strcat" => {
                 let str_type = self.context.ptr_type(inkwell::AddressSpace::default());
                 let fn_type = str_type.fn_type(&[str_type.into(), str_type.into()], false);
@@ -480,6 +492,11 @@ impl<'ctx> CodeGen<'ctx> {
         left: &Expression,
         right: &Expression,
     ) -> Result<BasicValueEnum<'ctx>, String> {
+        // Handle short-circuit evaluation for logical operators
+        if matches!(op, BinaryOp::And | BinaryOp::Or) {
+            return self.generate_short_circuit_op(op, left, right);
+        }
+
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
@@ -500,6 +517,184 @@ impl<'ctx> CodeGen<'ctx> {
             lhs_coerced,
             rhs_coerced,
         )
+    }
+
+    /// Generate short-circuit evaluation for `and` and `or` operators
+    fn generate_short_circuit_op(
+        &mut self,
+        op: &BinaryOp,
+        left: &Expression,
+        right: &Expression,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        let current_fn = self.current_function.ok_or("No current function")?;
+
+        // Evaluate left side
+        let lhs = self.evaluate_expression(left)?;
+
+        // Convert to boolean for the condition (i1 type)
+        let lhs_bool = self.value_to_bool(lhs)?;
+
+        // Create basic blocks for short-circuit
+        let eval_rhs_bb = self.context.append_basic_block(current_fn, "eval_rhs");
+        let merge_bb = self.context.append_basic_block(current_fn, "sc_merge");
+
+        // Get current block for PHI
+        let entry_bb = self.builder.get_insert_block().unwrap();
+
+        // For `and`: if left is false, short-circuit to merge (result is false)
+        // For `or`: if left is true, short-circuit to merge (result is true)
+        match op {
+            BinaryOp::And => {
+                // If lhs is false, skip rhs and return false
+                self.builder
+                    .build_conditional_branch(lhs_bool, eval_rhs_bb, merge_bb)
+                    .unwrap();
+            }
+            BinaryOp::Or => {
+                // If lhs is true, skip rhs and return true
+                self.builder
+                    .build_conditional_branch(lhs_bool, merge_bb, eval_rhs_bb)
+                    .unwrap();
+            }
+            _ => unreachable!(),
+        }
+
+        // Evaluate right side
+        self.builder.position_at_end(eval_rhs_bb);
+        let rhs = self.evaluate_expression(right)?;
+        let rhs_bool = self.value_to_bool(rhs)?;
+        let rhs_bb = self.builder.get_insert_block().unwrap();
+        self.builder.build_unconditional_branch(merge_bb).unwrap();
+
+        // Merge block - use PHI to select the result
+        self.builder.position_at_end(merge_bb);
+        let phi = self
+            .builder
+            .build_phi(self.context.bool_type(), "sc_result")
+            .unwrap();
+
+        match op {
+            BinaryOp::And => {
+                // If we came from entry (short-circuit), result is false
+                // If we came from eval_rhs, result is rhs
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_int(0, false), entry_bb),
+                    (&rhs_bool, rhs_bb),
+                ]);
+            }
+            BinaryOp::Or => {
+                // If we came from entry (short-circuit), result is true
+                // If we came from eval_rhs, result is rhs
+                phi.add_incoming(&[
+                    (&self.context.bool_type().const_int(1, false), entry_bb),
+                    (&rhs_bool, rhs_bb),
+                ]);
+            }
+            _ => unreachable!(),
+        }
+
+        Ok(phi.as_basic_value())
+    }
+
+    /// Convert a value to a boolean (i1)
+    fn value_to_bool(
+        &self,
+        val: BasicValueEnum<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        if val.is_int_value() {
+            let int_val = val.into_int_value();
+            if int_val.get_type().get_bit_width() == 1 {
+                // Already a bool
+                Ok(int_val)
+            } else {
+                // Non-zero is true
+                let zero = int_val.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, int_val, zero, "to_bool")
+                    .unwrap())
+            }
+        } else if val.is_float_value() {
+            let float_val = val.into_float_value();
+            let zero = self.context.f64_type().const_zero();
+            Ok(self
+                .builder
+                .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
+                .unwrap())
+        } else if val.is_pointer_value() {
+            let ptr_val = val.into_pointer_value();
+            let null = ptr_val.get_type().const_null();
+            Ok(self
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    self.builder
+                        .build_ptr_to_int(ptr_val, self.context.i64_type(), "ptr")
+                        .unwrap(),
+                    self.builder
+                        .build_ptr_to_int(null, self.context.i64_type(), "null")
+                        .unwrap(),
+                    "to_bool",
+                )
+                .unwrap())
+        } else {
+            Err("Cannot convert value to bool".to_string())
+        }
+    }
+
+    /// Coerce a value to match the target type
+    pub(crate) fn coerce_value_to_type(
+        &self,
+        val: BasicValueEnum<'ctx>,
+        target_type: &Type,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        // Check if the value is already the correct type
+        match target_type {
+            Type::Int => {
+                if val.is_int_value() {
+                    let int_val = val.into_int_value();
+                    if int_val.get_type().get_bit_width() == 64 {
+                        return Ok(val);
+                    }
+                    // Extend bool (i1) to i64
+                    return Ok(self
+                        .builder
+                        .build_int_z_extend(int_val, self.context.i64_type(), "btoi")
+                        .unwrap()
+                        .into());
+                }
+                if val.is_float_value() {
+                    // Convert float to int (truncate towards zero)
+                    let float_val = val.into_float_value();
+                    return Ok(self
+                        .builder
+                        .build_float_to_signed_int(float_val, self.context.i64_type(), "ftoi")
+                        .unwrap()
+                        .into());
+                }
+            }
+            Type::Float => {
+                if val.is_float_value() {
+                    return Ok(val);
+                }
+                if val.is_int_value() {
+                    let int_val = val.into_int_value();
+                    return Ok(self
+                        .builder
+                        .build_signed_int_to_float(int_val, self.context.f64_type(), "itof")
+                        .unwrap()
+                        .into());
+                }
+            }
+            Type::Bool => {
+                if val.is_int_value() && val.into_int_value().get_type().get_bit_width() == 1 {
+                    return Ok(val);
+                }
+            }
+            _ => {}
+        }
+        // If no coercion needed or possible, return as-is
+        Ok(val)
     }
 
     /// Coerce operands to a common type for binary operations

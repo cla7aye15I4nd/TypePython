@@ -1,5 +1,5 @@
-Absolute value -42: 42
-Absolute value 37: 37
-Max of 10,25,15: 25
-Min of 10,25,15: 10
-Sign sum: 0
+b'Absolute value -42:' 42
+b'Absolute value 37:' 37
+b'Max of 10,25,15:' 25
+b'Min of 10,25,15:' 10
+b'Sign sum:' 0

@@ -83,12 +83,22 @@ impl<'ctx> CodeGenOps<'ctx> for super::IntType {
                     .unwrap()
                     .into())
             }
-            BinaryOp::FloorDiv => builder
-                .build_int_signed_div(lhs_int, rhs_int, "floordiv")
-                .unwrap(),
-            BinaryOp::Mod => builder
-                .build_int_signed_rem(lhs_int, rhs_int, "mod")
-                .unwrap(),
+            BinaryOp::FloorDiv => {
+                // Call tpy_floordiv_int for Python-style floor division
+                let floordiv_fn = get_or_declare_builtin(module, ctx, "tpy_floordiv_int");
+                let call_site = builder
+                    .build_call(floordiv_fn, &[lhs_int.into(), rhs_int.into()], "floordiv")
+                    .unwrap();
+                return extract_int_result(call_site, "tpy_floordiv_int");
+            }
+            BinaryOp::Mod => {
+                // Call tpy_mod_int for Python-style modulo
+                let mod_fn = get_or_declare_builtin(module, ctx, "tpy_mod_int");
+                let call_site = builder
+                    .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "mod")
+                    .unwrap();
+                return extract_int_result(call_site, "tpy_mod_int");
+            }
             BinaryOp::Pow => {
                 // Call tpy_pow_int builtin
                 let pow_fn = get_or_declare_builtin(module, ctx, "tpy_pow_int");
@@ -246,9 +256,14 @@ impl<'ctx> CodeGenOps<'ctx> for super::FloatType {
             BinaryOp::Div => builder
                 .build_float_div(lhs_float, rhs_float, "fdiv")
                 .unwrap(),
-            BinaryOp::Mod => builder
-                .build_float_rem(lhs_float, rhs_float, "frem")
-                .unwrap(),
+            BinaryOp::Mod => {
+                // Call tpy_fmod for Python-style float modulo
+                let fmod_fn = get_or_declare_builtin(module, ctx, "tpy_fmod");
+                let call_site = builder
+                    .build_call(fmod_fn, &[lhs_float.into(), rhs_float.into()], "fmod")
+                    .unwrap();
+                return extract_float_result(call_site, "tpy_fmod");
+            }
             BinaryOp::Pow => {
                 let pow_fn = get_or_declare_builtin(module, ctx, "tpy_pow");
                 let call_site = builder
@@ -682,6 +697,18 @@ fn get_or_declare_builtin<'ctx>(
         }
         "tpy_floor" => {
             let fn_type = f64_type.fn_type(&[f64_type.into()], false);
+            module.add_function(name, fn_type, None)
+        }
+        "tpy_floordiv_int" => {
+            let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+            module.add_function(name, fn_type, None)
+        }
+        "tpy_mod_int" => {
+            let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into()], false);
+            module.add_function(name, fn_type, None)
+        }
+        "tpy_fmod" => {
+            let fn_type = f64_type.fn_type(&[f64_type.into(), f64_type.into()], false);
             module.add_function(name, fn_type, None)
         }
         "tpy_strcat" => {

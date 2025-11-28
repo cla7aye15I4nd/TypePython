@@ -1,10 +1,10 @@
-Testing
-Age: 25
-Count: 100
-Temperature: 98.6
-Price: 19.99
-Is valid: True
-Is complete: False
-Name: TypePython
-Message: Hello, World!
-Result: 1.0
+b'Testing'
+b'Age:' 25
+b'Count:' 100
+b'Temperature:' 98.6
+b'Price:' 19.99
+b'Is valid:' True
+b'Is complete:' False
+b'Name:' b'TypePython'
+b'Message:' b'Hello, World!'
+b'Result:' 1.0

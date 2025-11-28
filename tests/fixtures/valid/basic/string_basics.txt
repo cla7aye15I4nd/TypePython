@@ -1,4 +1,4 @@
-Hello
-World
-TypePython
-Compiler
+b'Hello'
+b'World'
+b'TypePython'
+b'Compiler'

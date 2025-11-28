@@ -1,4 +1,4 @@
-Sum recursive 1-10: 55
-Product recursive 1-5: 120
-Power 2^10: 1024
-Sum range 1-20: 210
+b'Sum recursive 1-10:' 55
+b'Product recursive 1-5:' 120
+b'Power 2^10:' 1024
+b'Sum range 1-20:' 210

@@ -1,2 +1,2 @@
-Sum: 8
-Product: 28
+b'Sum:' 8
+b'Product:' 28

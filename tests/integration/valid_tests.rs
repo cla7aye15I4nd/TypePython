@@ -106,6 +106,43 @@ test_case!(
     "tests/fixtures/valid/basic/expressions.py"
 );
 test_case!(test_all_types, "tests/fixtures/valid/basic/all_types.py");
+test_case!(
+    test_bitwise_operators,
+    "tests/fixtures/valid/basic/bitwise_operators.py"
+);
+test_case!(
+    test_modulo_operator,
+    "tests/fixtures/valid/basic/modulo_operator.py"
+);
+test_case!(
+    test_unary_operators,
+    "tests/fixtures/valid/basic/unary_operators.py"
+);
+test_case!(
+    test_augmented_assignment,
+    "tests/fixtures/valid/basic/augmented_assignment.py"
+);
+test_case!(
+    test_division_types,
+    "tests/fixtures/valid/basic/division_types.py"
+);
+test_case!(
+    test_float_comparisons,
+    "tests/fixtures/valid/basic/float_comparisons.py"
+);
+test_case!(
+    test_boolean_bitwise,
+    "tests/fixtures/valid/basic/boolean_bitwise.py"
+);
+test_case!(
+    test_none_operations,
+    "tests/fixtures/valid/basic/none_operations.py",
+    ignore
+);
+test_case!(
+    test_type_coercion,
+    "tests/fixtures/valid/basic/type_coercion.py"
+);
 
 // ============================================================================
 // Advanced Tests - Arithmetic
@@ -350,6 +387,22 @@ test_case!(
 test_case!(
     test_precedence_complex,
     "tests/fixtures/valid/advanced/operators/precedence_complex.py"
+);
+test_case!(
+    test_bitwise_complex,
+    "tests/fixtures/valid/advanced/operators/bitwise_complex.py"
+);
+test_case!(
+    test_comparison_chains,
+    "tests/fixtures/valid/advanced/operators/comparison_chains.py"
+);
+test_case!(
+    test_arithmetic_edge_cases,
+    "tests/fixtures/valid/advanced/operators/arithmetic_edge_cases.py"
+);
+test_case!(
+    test_logical_short_circuit,
+    "tests/fixtures/valid/advanced/operators/logical_short_circuit.py"
 );
 
 // ============================================================================

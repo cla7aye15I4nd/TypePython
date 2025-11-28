@@ -1,1 +1,1 @@
-Factorial of 5: 120
+b'Factorial of 5:' 120

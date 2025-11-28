@@ -1,5 +1,5 @@
-Zero arithmetic: 15
-Zero comparisons: 4
-Zero in loops: 0
-Factorial(0): 1
-Factorial(5): 120
+b'Zero arithmetic:' 15
+b'Zero comparisons:' 4
+b'Zero in loops:' 0
+b'Factorial(0):' 1
+b'Factorial(5):' 120
