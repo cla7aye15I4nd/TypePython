@@ -676,7 +676,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     /// Convert a PyValue to a boolean (i1)
     fn value_to_bool(
-        &self,
+        &mut self,
         val: &PyValue<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
         match &val.ty {
@@ -701,21 +701,26 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
                     .unwrap())
             }
-            PyType::Bytes(_) | PyType::None(_) => {
+            PyType::None(_) => {
+                // None is always falsy
+                Ok(self.context.bool_type().const_zero())
+            }
+            PyType::Bytes(_) => {
+                // Bytes is truthy if non-empty (check length > 0)
                 let ptr_val = val.value.into_pointer_value();
-                let null = ptr_val.get_type().const_null();
+                let len_fn = self.get_or_declare_builtin_function("bytes_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "bytes_len")
+                    .unwrap();
+                let len = self
+                    .extract_int_call_result(len_call)?
+                    .value
+                    .into_int_value();
+                let zero = len.get_type().const_zero();
                 Ok(self
                     .builder
-                    .build_int_compare(
-                        inkwell::IntPredicate::NE,
-                        self.builder
-                            .build_ptr_to_int(ptr_val, self.context.i64_type(), "ptr")
-                            .unwrap(),
-                        self.builder
-                            .build_ptr_to_int(null, self.context.i64_type(), "null")
-                            .unwrap(),
-                        "to_bool",
-                    )
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap())
             }
         }

@@ -438,3 +438,18 @@ print(rv1)
 print(rv2)
 print(rv3)
 print(rv4)
+
+# ============================================================================
+# 36. Bytes in boolean context
+# ============================================================================
+print(b"36. Boolean context:")
+non_empty: bytes = b"hello"
+empty: bytes = b""
+if non_empty:
+    print(b"non_empty is truthy")
+else:
+    print(b"non_empty is falsy")
+if empty:
+    print(b"empty is truthy")
+else:
+    print(b"empty is falsy")

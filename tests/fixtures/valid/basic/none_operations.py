@@ -19,3 +19,10 @@ print(b"None == None:", eq_none)
 # Not equal with None variables
 ne_none: bool = x != y
 print(b"None != None:", ne_none)
+
+# None in boolean context (always falsy)
+print(b"None in if:")
+if x:
+    print(b"None is truthy")
+else:
+    print(b"None is falsy")
