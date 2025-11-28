@@ -177,7 +177,6 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
     debug!("Linking object files with LTO: {:?}", object_files);
 
     let mut cmd = std::process::Command::new(clang);
-    cmd.arg("-Wno-override-module");
 
     // Enable LTO (Link-Time Optimization)
     cmd.arg("-flto");
@@ -309,13 +308,7 @@ pub fn compile(
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
 
-        let obj_filename = format!(
-            "{}.o",
-            module_name
-                .replace(".", "_")
-                .replace("<", "")
-                .replace(">", "")
-        );
+        let obj_filename = format!("{}.o", module_name);
         let obj_path = cache_dir.join(obj_filename);
 
         // LLVM bitcode can be directly written to .o files for LTO
