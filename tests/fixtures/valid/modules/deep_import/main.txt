@@ -1,0 +1,4 @@
+Testing deep import chain with cyclic dependencies...
+module_t.test() = 20
+module_a.test() = 325565
+Deep import test completed successfully!

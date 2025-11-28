@@ -5,6 +5,7 @@ use crate::ast::*;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
@@ -17,13 +18,39 @@ pub struct CodeGen<'ctx> {
     pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>)>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
-    pub(crate) imported_modules: Vec<Program>,
+    pub(crate) imported_modules: Vec<(String, Program)>, // (module_name, program)
+    pub(crate) module_name: String,
+    /// Map of imported symbols: local_name -> real_module_name (for name mangling)
+    pub(crate) imported_symbols: HashMap<String, String>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
         let module = context.create_module(module_name);
         let builder = context.create_builder();
+
+        // Initialize target for the native platform
+        Target::initialize_native(&InitializationConfig::default())
+            .expect("Failed to initialize native target");
+
+        // Get the native target and create target machine
+        let target_triple = inkwell::targets::TargetMachine::get_default_triple();
+        let target =
+            Target::from_triple(&target_triple).expect("Failed to create target from triple");
+        let target_machine = target
+            .create_target_machine(
+                &target_triple,
+                "generic",
+                "",
+                inkwell::OptimizationLevel::Default,
+                inkwell::targets::RelocMode::PIC,
+                inkwell::targets::CodeModel::Default,
+            )
+            .expect("Failed to create target machine");
+
+        // Set the data layout and target triple for the module
+        module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+        module.set_triple(&target_triple);
 
         CodeGen {
             context,
@@ -33,18 +60,36 @@ impl<'ctx> CodeGen<'ctx> {
             current_function: None,
             strings: HashMap::new(),
             imported_modules: Vec::new(),
+            module_name: module_name.to_string(),
+            imported_symbols: HashMap::new(),
         }
     }
 
-    pub fn add_imported_module(&mut self, program: Program) {
+    pub fn set_imported_symbols(&mut self, imported_symbols: HashMap<String, String>) {
+        self.imported_symbols = imported_symbols;
+    }
+
+    /// Mangle function name with module name
+    /// Format: {module_name}_{function_name}
+    /// Replaces special characters in module name (., <, >) with underscores
+    fn mangle_function_name(&self, module_name: &str, function_name: &str) -> String {
+        let clean_module = module_name
+            .replace(".", "_")
+            .replace("<", "")
+            .replace(">", "");
+        format!("{}_{}", clean_module, function_name)
+    }
+
+    pub fn add_imported_module(&mut self, module_name: String, program: Program) {
         log::debug!(
-            "Adding imported module with {} functions",
+            "Adding imported module '{}' with {} functions",
+            module_name,
             program.functions.len()
         );
         for func in &program.functions {
             log::debug!("  - {}", func.name);
         }
-        self.imported_modules.push(program);
+        self.imported_modules.push((module_name, program));
     }
 
     pub fn get_module(&self) -> &Module<'ctx> {
@@ -110,23 +155,59 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn declare_imported_functions(&mut self, _program: &Program) -> Result<(), String> {
-        // Collect all functions that need to be declared
+        // Collect all functions that need to be declared with their module names
         let mut functions_to_declare = Vec::new();
-        for imported_program in &self.imported_modules {
+        for (module_name, imported_program) in &self.imported_modules {
             for func in &imported_program.functions {
-                // Only declare if not already defined in this module
-                if self.module.get_function(&func.name).is_none() {
-                    functions_to_declare.push(func.clone());
+                let mangled_name = self.mangle_function_name(module_name, &func.name);
+                // Only declare if not already defined
+                if self.module.get_function(&mangled_name).is_none() {
+                    functions_to_declare.push((module_name.clone(), func.clone()));
                 }
             }
         }
 
         // Declare all collected functions
-        for func in functions_to_declare {
-            self.declare_function(&func)?;
+        for (module_name, func) in functions_to_declare {
+            self.declare_imported_function(&module_name, &func)?;
         }
 
         Ok(())
+    }
+
+    /// Declare an imported function with its mangled name
+    fn declare_imported_function(
+        &mut self,
+        module_name: &str,
+        func: &Function,
+    ) -> Result<FunctionValue<'ctx>, String> {
+        let param_types: Vec<BasicMetadataTypeEnum> = func
+            .params
+            .iter()
+            .map(|p| self.type_to_llvm(&p.param_type).into())
+            .collect();
+
+        let fn_type = match func.return_type {
+            Type::None => self.context.void_type().fn_type(&param_types, false),
+            _ => {
+                let return_type = self.type_to_llvm(&func.return_type);
+                return_type.fn_type(&param_types, false)
+            }
+        };
+
+        // Mangle function name with the imported module name
+        let mangled_name = self.mangle_function_name(module_name, &func.name);
+        let function = self.module.add_function(&mangled_name, fn_type, None);
+
+        // Set parameter names
+        for (i, param) in func.params.iter().enumerate() {
+            function
+                .get_nth_param(i as u32)
+                .unwrap()
+                .set_name(&param.name);
+        }
+
+        Ok(function)
     }
 
     pub(crate) fn declare_function(
@@ -147,7 +228,9 @@ impl<'ctx> CodeGen<'ctx> {
             }
         };
 
-        let function = self.module.add_function(&func.name, fn_type, None);
+        // Mangle function name with current module name
+        let mangled_name = self.mangle_function_name(&self.module_name, &func.name);
+        let function = self.module.add_function(&mangled_name, fn_type, None);
 
         // Set parameter names
         for (i, param) in func.params.iter().enumerate() {
@@ -511,19 +594,28 @@ impl<'ctx> CodeGen<'ctx> {
             return self.generate_print_call(args);
         }
 
-        // Handle qualified names (module.function)
-        // Extract the function name from qualified name
-        let function_name = if name.contains('.') {
-            // For "module.function", extract "function"
-            name.split('.').next_back().unwrap()
+        // Determine the mangled function name
+        let mangled_name = if name.contains('.') {
+            // Qualified call: module.function
+            let parts: Vec<&str> = name.split('.').collect();
+            let module_local_name = parts[0];
+            let function_name = parts[1];
+
+            // Look up the real module name from imported symbols
+            if let Some(real_module_name) = self.imported_symbols.get(module_local_name) {
+                self.mangle_function_name(real_module_name, function_name)
+            } else {
+                return Err(format!("Module {} not found in imports", module_local_name));
+            }
         } else {
-            name
+            // Unqualified call: function - use current module name
+            self.mangle_function_name(&self.module_name, name)
         };
 
         let function = self
             .module
-            .get_function(function_name)
-            .ok_or_else(|| format!("Function {} not found", function_name))?;
+            .get_function(&mangled_name)
+            .ok_or_else(|| format!("Function {} (mangled: {}) not found", name, mangled_name))?;
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {

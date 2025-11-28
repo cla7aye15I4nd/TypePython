@@ -67,8 +67,9 @@ fn get_or_generate_expected_output(path: &Path) -> Result<String> {
         Ok(fs::read_to_string(&output_path)?)
     } else {
         // Generate expected output using Python 3
+        let filename = path.file_name().unwrap_or(path.as_os_str());
         let output = Command::new("python3")
-            .arg(path)
+            .arg(filename)
             .current_dir(path.parent().unwrap_or(Path::new(".")))
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to run python3: {}", e))?;

@@ -65,11 +65,15 @@ fn build_function(pair: Pair<Rule>) -> Function {
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::LPAREN);
 
-    let param_pair = inner.next().unwrap();
-    assert_eq!(param_pair.as_rule(), Rule::param_list);
-    let params = build_param_list(param_pair);
+    let param_or_rparen_pair = inner.next().unwrap();
+    let params = if param_or_rparen_pair.as_rule() == Rule::param_list {
+        assert_eq!(inner.next().unwrap().as_rule(), Rule::RPAREN);
+        build_param_list(param_or_rparen_pair)
+    } else {
+        assert_eq!(param_or_rparen_pair.as_rule(), Rule::RPAREN);
+        vec![]
+    };
 
-    assert_eq!(inner.next().unwrap().as_rule(), Rule::RPAREN);
     assert_eq!(inner.next().unwrap().as_rule(), Rule::ARROW);
 
     let return_pair = inner.next().unwrap();

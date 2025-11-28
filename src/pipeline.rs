@@ -7,6 +7,7 @@ use crate::preprocessor;
 use crate::{LangParser, Parser, Rule};
 use inkwell::context::Context;
 use log::debug;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Options for the compilation pipeline
@@ -86,9 +87,9 @@ pub fn compile_source_with_imports<'ctx>(
     debug!("Generating LLVM IR");
     let mut codegen = CodeGen::new(context, module_name);
 
-    // Add imported modules to codegen
+    // Add imported modules to codegen (old API without module names)
     for imported_prog in imported_programs {
-        codegen.add_imported_module(imported_prog.clone());
+        codegen.add_imported_module("unknown".to_string(), imported_prog.clone());
     }
 
     codegen.generate(&program)?;
@@ -140,73 +141,21 @@ pub fn compile_bitcode_to_lto_object(
     bitcode_path: &Path,
     object_path: &Path,
 ) -> Result<(), String> {
-    let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX")
-        .map_err(|_| "LLVM_SYS_211_PREFIX environment variable is not set".to_string())?;
-
-    let clang = format!("{}/bin/clang", llvm_prefix);
-
-    debug!(
-        "Compiling bitcode to LTO object: {} -> {}",
-        bitcode_path.display(),
-        object_path.display()
-    );
-
-    // Use clang -c -flto to create LTO-compatible object files
-    // These .o files actually contain bitcode for LTO
-    let status = std::process::Command::new(&clang)
-        .arg("-c")
-        .arg("-flto")
-        .arg("-O2")
-        .arg("-o")
-        .arg(object_path)
-        .arg(bitcode_path)
-        .status()
-        .map_err(|e| format!("Failed to execute clang: {}", e))?;
-
-    if !status.success() {
-        return Err("Failed to compile bitcode to LTO object file".to_string());
-    }
-
-    debug!(
-        "Successfully compiled to LTO object file: {}",
-        object_path.display()
-    );
-    Ok(())
+    ModuleRegistry::compile_bitcode_to_lto_object(bitcode_path, object_path)
 }
 
 /// Compile bitcode to executable using Clang
 pub fn compile_to_executable(bitcode_path: &Path, output_path: &Path) -> Result<(), String> {
-    let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX")
-        .map_err(|_| "LLVM_SYS_211_PREFIX environment variable is not set".to_string())?;
-
-    let clang = format!("{}/bin/clang", llvm_prefix);
-
-    // Use global builtin library directory to find builtin.ll
-    let runtime_path = std::env::var("TYPEPYTHON_RUNTIME")
-        .map(PathBuf::from)
-        .expect("TYPEPYTHON_RUNTIME environment variable not set")
-        .join("runtime.c");
+    let clang = crate::module::get_clang_path();
 
     debug!(
-        "Linking with clang: {} + {} -> {}",
+        "Linking with clang: {} -> {}",
         bitcode_path.display(),
-        runtime_path.display(),
         output_path.display()
     );
 
-    let mut cmd = std::process::Command::new(&clang);
+    let mut cmd = std::process::Command::new(clang);
     cmd.arg("-Wno-override-module").arg(bitcode_path);
-
-    // Link runtime library if it exists
-    if runtime_path.exists() {
-        debug!("Linking runtime library: {}", runtime_path.display());
-        cmd.arg(&runtime_path);
-    } else {
-        debug!(
-            "Warning: Runtime library not found at {}",
-            runtime_path.display()
-        );
-    }
 
     cmd.arg("-o").arg(output_path).arg("-lm"); // Link math library for pow
 
@@ -221,54 +170,13 @@ pub fn compile_to_executable(bitcode_path: &Path, output_path: &Path) -> Result<
     Ok(())
 }
 
-/// Compile a file with full module support (resolves and compiles imports)
-pub fn compile_file_with_modules<'ctx>(
-    path: &Path,
-    context: &'ctx Context,
-    options: &CompileOptions,
-) -> Result<ModuleRegistry<'ctx>, String> {
-    let source = std::fs::read_to_string(path)
-        .map_err(|e| format!("Error reading {}: {}", path.display(), e))?;
-
-    let _module_name = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| "Invalid file name".to_string())?;
-
-    // Create module registry
-    let mut registry = ModuleRegistry::new(context);
-
-    // Add the directory of the source file to search paths
-    if let Some(parent) = path.parent() {
-        registry.add_search_path(parent.to_path_buf());
-    }
-
-    // Parse the main file first to get its imports
-    debug!("Preprocessing main module");
-    let preprocessed = preprocessor::preprocess(&source)?;
-    let pairs = LangParser::parse(Rule::program, &preprocessed)
-        .map_err(|e| format!("Parse error: {}", e))?;
-    let program = parser::build_program(pairs);
-
-    // Compile all imported modules first
-    for import in &program.imports {
-        registry.compile_module(&import.module_path, options)?;
-    }
-
-    // Don't compile the main module here - it will be compiled later with import information
-    Ok(registry)
-}
-
 /// Link multiple object files together into an executable using LTO
 pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result<(), String> {
-    let llvm_prefix = std::env::var("LLVM_SYS_211_PREFIX")
-        .map_err(|_| "LLVM_SYS_211_PREFIX environment variable is not set".to_string())?;
-
-    let clang = format!("{}/bin/clang", llvm_prefix);
+    let clang = crate::module::get_clang_path();
 
     debug!("Linking object files with LTO: {:?}", object_files);
 
-    let mut cmd = std::process::Command::new(&clang);
+    let mut cmd = std::process::Command::new(clang);
     cmd.arg("-Wno-override-module");
 
     // Enable LTO (Link-Time Optimization)
@@ -295,28 +203,6 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
     Ok(())
 }
 
-/// Full pipeline: compile source file to executable
-pub fn compile_and_link(
-    source_path: &Path,
-    output_path: &Path,
-    options: &CompileOptions,
-) -> Result<(), String> {
-    let context = Context::create();
-    let result = compile_file(source_path, &context, options)?;
-
-    // Write bitcode to temporary file
-    let bc_path = source_path.with_extension("bc");
-    write_bitcode(&result.codegen, &bc_path)?;
-
-    // Compile to executable
-    compile_to_executable(&bc_path, output_path)?;
-
-    // Clean up bitcode file
-    let _ = std::fs::remove_file(&bc_path);
-
-    Ok(())
-}
-
 /// Full pipeline: compile source file and all imports to executable
 ///
 /// This function:
@@ -327,156 +213,118 @@ pub fn compile_and_link(
 pub fn compile(
     source_path: &Path,
     output_path: &Path,
-    options: &CompileOptions,
+    _options: &CompileOptions,
 ) -> Result<(), String> {
     let context = Context::create();
     debug!("Starting compilation pipeline");
 
     // ============================================================================
-    // Step 1: Recursively compile all .py modules with their imports
+    // Step 1: Preprocess all modules - discover and register all modules via BFS
     // ============================================================================
-    let mut module_registry = ModuleRegistry::new(&context);
 
-    // Add source file directory to search paths
-    if let Some(parent) = source_path.parent() {
-        module_registry.add_search_path(parent.to_path_buf());
-    }
+    let module_registry =
+        ModuleRegistry::new(&context, source_path.parent().unwrap().to_path_buf());
 
-    // Read and parse main file to discover imports
-    let source = std::fs::read_to_string(source_path)
-        .map_err(|e| format!("Error reading {}: {}", source_path.display(), e))?;
-    let preprocessed = preprocessor::preprocess(&source)?;
-    let pairs = LangParser::parse(Rule::program, &preprocessed)
-        .map_err(|e| format!("Parse error in main file: {}", e))?;
-    let main_program = parser::build_program(pairs);
+    // Use BFS to discover all modules, generate their names, and build symbol maps
+    let module_data = module_registry.preprocess_modules(source_path)?;
 
-    // Compile all imported modules recursively
-    for import in &main_program.imports {
-        module_registry.compile_module(&import.module_path, options)?;
-    }
-
-    // Compile main module with all imports available
-    let module_name = source_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| "Invalid file name".to_string())?;
-
-    // Collect imported programs for main module
-    let mut imported_programs = Vec::new();
-    for import in &main_program.imports {
-        let import_name = import.module_path.join(".");
-        if let Some(compiled_mod) = module_registry.get_module(&import_name) {
-            imported_programs.push(compiled_mod.program.clone());
-        }
-    }
-
-    // Compile main module with imports
-    let main_result =
-        compile_source_with_imports(&source, module_name, &context, options, &imported_programs)?;
-
-    debug!(
-        "Compiled main module and {} imports",
-        module_registry.modules().len()
-    );
+    debug!("Discovered and preprocessed {} modules", module_data.len());
 
     // ============================================================================
-    // Step 2: Compile all modules to .o files
+    // Step 2: Compile all modules to LLVM IR and .o files
     // ============================================================================
-    let temp_dir = std::env::temp_dir().join(format!(
-        "typepython_build_{}_{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
+    let temp_dir = std::env::temp_dir().join(format!("tpy_{}", std::process::id()));
     std::fs::create_dir_all(&temp_dir)
         .map_err(|e| format!("Failed to create temp directory: {}", e))?;
 
     let mut object_files = Vec::new();
 
-    // Compile imported modules to .o files
-    for (mod_name, compiled_mod) in module_registry.modules() {
-        let bc_path = temp_dir.join(format!("{}.bc", mod_name.replace(".", "_")));
+    // Compile each module
+    for (module_path, (module_name, program, imported_symbols)) in &module_data {
+        // Check if it's a C file
+        if module_path.extension().and_then(|s| s.to_str()) == Some("c") {
+            // Compile C file to .o
+            let source_dir = module_path
+                .parent()
+                .ok_or_else(|| format!("Invalid source path: {}", module_path.display()))?;
+            let cache_dir = source_dir.join("__tpycache__");
+            std::fs::create_dir_all(&cache_dir)
+                .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
 
-        // Place .o file in __tpycache__ directory next to source file
-        let source_dir = compiled_mod
-            .path
+            let obj_path = module_registry.compile_c_module(module_path, &temp_dir, &cache_dir)?;
+            object_files.push(obj_path);
+            continue;
+        }
+
+        // For Python modules, compile to LLVM IR
+        debug!("Compiling module '{}' to LLVM IR", module_name);
+
+        // Collect imported programs with their module names
+        let mut imported_modules_data = Vec::new();
+        for imported_symbol in imported_symbols.values() {
+            if let crate::module::ImportedSymbol::Module(real_module_name) = imported_symbol {
+                // Find the imported module's program
+                for (other_module_name, other_program, _) in module_data.values() {
+                    if other_module_name == real_module_name {
+                        imported_modules_data
+                            .push((real_module_name.clone(), other_program.clone()));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Generate LLVM IR for this module
+        let mut codegen = CodeGen::new(&context, module_name);
+
+        // Set imported symbols for name mangling
+        let imported_symbols_map: HashMap<String, String> = imported_symbols
+            .iter()
+            .filter_map(|(local_name, symbol)| {
+                if let crate::module::ImportedSymbol::Module(real_name) = symbol {
+                    Some((local_name.clone(), real_name.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        codegen.set_imported_symbols(imported_symbols_map);
+
+        for (mod_name, imported_prog) in imported_modules_data {
+            codegen.add_imported_module(mod_name, imported_prog);
+        }
+        codegen.generate(program)?;
+
+        // Verify LLVM module
+        codegen
+            .get_module()
+            .verify()
+            .map_err(|e| format!("Module '{}' verification failed: {}", module_name, e))?;
+
+        // Write directly to .o file (bitcode format)
+        let source_dir = module_path
             .parent()
-            .ok_or_else(|| format!("Invalid source path: {}", compiled_mod.path.display()))?;
+            .ok_or_else(|| format!("Invalid source path: {}", module_path.display()))?;
         let cache_dir = source_dir.join("__tpycache__");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
 
-        let obj_filename = format!("{}.o", mod_name.replace(".", "_"));
+        let obj_filename = format!(
+            "{}.o",
+            module_name
+                .replace(".", "_")
+                .replace("<", "")
+                .replace(">", "")
+        );
         let obj_path = cache_dir.join(obj_filename);
 
-        compiled_mod
-            .codegen
-            .get_module()
-            .write_bitcode_to_path(&bc_path);
-        compile_bitcode_to_lto_object(&bc_path, &obj_path)?;
+        // LLVM bitcode can be directly written to .o files for LTO
+        codegen.get_module().write_bitcode_to_path(&obj_path);
         object_files.push(obj_path);
-
-        let _ = std::fs::remove_file(&bc_path);
-    }
-
-    // Compile main module to .o file
-    let main_bc = temp_dir.join(format!("{}.bc", module_name));
-
-    // Place main module .o in __tpycache__ next to source file
-    let main_source_dir = source_path
-        .parent()
-        .ok_or_else(|| "Invalid main source path".to_string())?;
-    let main_cache_dir = main_source_dir.join("__tpycache__");
-    std::fs::create_dir_all(&main_cache_dir)
-        .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
-
-    let main_obj = main_cache_dir.join(format!("{}.o", module_name));
-    write_bitcode(&main_result.codegen, &main_bc)?;
-    compile_bitcode_to_lto_object(&main_bc, &main_obj)?;
-    object_files.push(main_obj);
-    let _ = std::fs::remove_file(&main_bc);
-
-    // ============================================================================
-    // Step 3: Compile C files (builtin and runtime) to .o files
-    // ============================================================================
-
-    // Compile builtin module - it's always included
-    let builtin_path = module_registry.get_builtin_path();
-    let builtin_dir = builtin_path
-        .parent()
-        .ok_or_else(|| "Invalid builtin path".to_string())?;
-    let builtin_cache_dir = builtin_dir.join("__tpycache__");
-    std::fs::create_dir_all(&builtin_cache_dir)
-        .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
-
-    let builtin_obj =
-        module_registry.compile_c_module(&builtin_path, &temp_dir, &builtin_cache_dir)?;
-    object_files.push(builtin_obj);
-
-    // Compile runtime library if it exists
-    let runtime_path = std::env::var("TYPEPYTHON_RUNTIME")
-        .map(PathBuf::from)
-        .expect("TYPEPYTHON_RUNTIME environment variable not set")
-        .join("runtime.c");
-
-    if runtime_path.exists() {
-        debug!("Compiling runtime library");
-        let runtime_dir = runtime_path
-            .parent()
-            .ok_or_else(|| "Invalid runtime path".to_string())?;
-        let runtime_cache_dir = runtime_dir.join("__tpycache__");
-        std::fs::create_dir_all(&runtime_cache_dir)
-            .map_err(|e| format!("Failed to create __tpycache__ directory: {}", e))?;
-
-        let runtime_obj =
-            module_registry.compile_c_module(&runtime_path, &temp_dir, &runtime_cache_dir)?;
-        object_files.push(runtime_obj);
     }
 
     // ============================================================================
-    // Step 4: Link all .o files into executable
+    // Step 3: Link all .o files into executable
     // ============================================================================
     debug!("Linking {} object files", object_files.len());
     link_object_files(&object_files, output_path)?;

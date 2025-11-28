@@ -1,263 +1,326 @@
 /// Module resolution and management for TypePython
 use inkwell::context::Context;
 use log::debug;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use crate::ast::Program;
 use crate::codegen::CodeGen;
-use crate::pipeline::CompileOptions;
 use crate::Parser;
 
-/// Global builtin library directory path
-/// This is initialized once on first access and reused throughout the program
-static BUILTIN_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
+/// Represents an imported symbol (module or function)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportedSymbol {
+    /// An imported module with its real module name
+    Module(String),
+    /// An imported function with its real function name - for future use
+    Function(String),
+}
+
+/// Get the clang executable path
+pub fn get_clang_path() -> String {
+    let llvm_prefix =
+        std::env::var("LLVM_SYS_211_PREFIX").unwrap_or_else(|_| "/usr/lib/llvm-21".to_string());
+    format!("{}/bin/clang", llvm_prefix)
+}
 
 /// Get the builtin library directory path
-/// Automatically finds and caches the correct path on first call
-pub fn builtin_lib_dir() -> &'static PathBuf {
-    BUILTIN_LIB_DIR.get_or_init(find_builtin_lib_dir)
+pub fn get_builtin_library_dir() -> PathBuf {
+    std::env::var("TYPEPYTHON_RUNTIME")
+        .map(PathBuf::from)
+        .expect("TYPEPYTHON_RUNTIME environment variable not set")
 }
 
-/// Find the builtin library directory by checking environment variable or searching
-fn find_builtin_lib_dir() -> PathBuf {
-    // First, check if TYPEPYTHON_RUNTIME environment variable is set
-    if let Ok(runtime_dir) = std::env::var("TYPEPYTHON_RUNTIME") {
-        let path = PathBuf::from(runtime_dir);
-        if path.join("builtin.c").exists() {
-            debug!(
-                "Using builtin library directory from TYPEPYTHON_RUNTIME: {}",
-                path.display()
-            );
-            return path;
-        } else {
-            debug!(
-                "Warning: TYPEPYTHON_RUNTIME is set but builtin.c not found at: {}",
-                path.display()
-            );
-        }
-    }
-
-    // Fallback: search multiple candidate locations
-    let candidates = [
-        PathBuf::from("src/runtime"),
-        PathBuf::from("./src/runtime"),
-        PathBuf::from("../src/runtime"),
-        std::env::current_dir()
-            .ok()
-            .map(|p| p.join("src/runtime"))
-            .unwrap_or_default(),
-        std::env::current_exe()
-            .ok()
-            .and_then(|exe| {
-                exe.parent()
-                    .and_then(|p| p.parent())
-                    .map(|p| p.join("src/runtime"))
-            })
-            .unwrap_or_default(),
-    ];
-
-    // Find the first directory that contains builtin.c
-    for candidate in &candidates {
-        let builtin_c = candidate.join("builtin.c");
-        if builtin_c.exists() {
-            debug!(
-                "Found builtin library directory at: {}",
-                candidate.display()
-            );
-            return candidate.clone();
-        }
-    }
-
-    // Fallback to default location
-    debug!("Warning: Builtin library directory not found, using default: src/runtime");
-    PathBuf::from("src/runtime")
-}
+/// Type alias for preprocessed module data: (module_name, program, imported_symbols)
+type PreprocessedModule = (String, Program, HashMap<String, ImportedSymbol>);
 
 /// Represents a compiled module with its LLVM bitcode
-pub struct CompiledModule<'ctx> {
+pub struct Module<'ctx> {
     pub name: String,
     pub path: PathBuf,
     pub program: Program,
     pub codegen: CodeGen<'ctx>,
+    /// Map of imported symbols: local_name -> ImportedSymbol (containing real name)
+    pub imported_symbols: HashMap<String, ImportedSymbol>,
 }
 
 /// Module registry manages all compiled modules
 pub struct ModuleRegistry<'ctx> {
     /// Map from module name to compiled module
-    modules: HashMap<String, CompiledModule<'ctx>>,
+    modules: HashMap<String, Module<'ctx>>,
     /// LLVM context (shared across all modules)
-    context: &'ctx Context,
-    /// Base search paths for module resolution
-    search_paths: Vec<PathBuf>,
+    _context: &'ctx Context,
+    /// Root paths for all module
+    root: PathBuf,
 }
 
 impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry
-    pub fn new(context: &'ctx Context) -> Self {
+    pub fn new(context: &'ctx Context, root: PathBuf) -> Self {
         ModuleRegistry {
             modules: HashMap::new(),
-            context,
-            search_paths: vec![],
+            _context: context,
+            root,
         }
     }
 
-    /// Add a search path for module resolution
-    pub fn add_search_path(&mut self, path: PathBuf) {
-        if !self.search_paths.contains(&path) {
-            self.search_paths.push(path);
+    /// Generate a module name from a file path
+    /// For example:
+    /// - /path/to/project/math/helpers.py -> "math.helpers"
+    /// - /usr/lib/typepython/builtins/list.py -> "<builtin>.builtins.list"
+    fn generate_module_name(&self, path: &Path) -> Result<String, String> {
+        let builtin_dir = get_builtin_library_dir();
+
+        // Check if it's a builtin module
+        if let Ok(rel_path) = path.strip_prefix(&builtin_dir) {
+            let module_path = rel_path
+                .with_extension("")
+                .to_string_lossy()
+                .replace("/", ".");
+            return Ok(format!("<builtin>.{}", module_path));
         }
+
+        // Otherwise, it's a user module relative to root
+        let rel_path = path.strip_prefix(&self.root).map_err(|_| {
+            format!(
+                "Path {} is not relative to root {}",
+                path.display(),
+                self.root.display()
+            )
+        })?;
+
+        let module_path = rel_path
+            .with_extension("")
+            .to_string_lossy()
+            .replace("/", ".");
+
+        Ok(module_path)
+    }
+
+    /// Preprocess all modules using BFS starting from entry file
+    /// Discovers all imported modules, generates module names, and builds symbol maps
+    /// Returns a map of file paths to their (module_name, program, imported_symbols)
+    pub fn preprocess_modules(
+        &self,
+        entry_path: &Path,
+    ) -> Result<HashMap<PathBuf, PreprocessedModule>, String> {
+        use crate::{LangParser, Rule};
+
+        let mut queue = VecDeque::new();
+        let mut visited = HashSet::new();
+        let mut module_data = HashMap::new();
+
+        // Add entry module to queue
+        queue.push_back(entry_path.to_path_buf());
+
+        // Automatically add all builtin modules from TYPEPYTHON_RUNTIME
+        let builtin_dir = get_builtin_library_dir();
+        if builtin_dir.exists() {
+            if let Ok(entries) = std::fs::read_dir(&builtin_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        // Add all .c, .py files from builtin directory
+                        if let Some(ext) = path.extension() {
+                            if ext == "c" || ext == "py" {
+                                debug!("Auto-adding builtin module: {}", path.display());
+                                queue.push_back(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // BFS through all modules
+        while let Some(current_path) = queue.pop_front() {
+            // Skip if already visited
+            let path_key = current_path.to_string_lossy().to_string();
+            if visited.contains(&path_key) {
+                continue;
+            }
+            visited.insert(path_key);
+
+            // Generate module name for this module
+            let module_name = self.generate_module_name(&current_path)?;
+
+            // Handle C files separately - they don't have imports but should be registered
+            if current_path.extension().and_then(|s| s.to_str()) == Some("c") {
+                debug!(
+                    "Preprocessing C module '{}' at {}",
+                    module_name,
+                    current_path.display()
+                );
+                // C files have no AST program or imports, but we still register them
+                // Use empty program and symbol map as placeholders (will be compiled directly to .o)
+                let empty_program = Program {
+                    imports: vec![],
+                    functions: vec![],
+                    statements: vec![],
+                };
+                module_data.insert(
+                    current_path.clone(),
+                    (module_name, empty_program, HashMap::new()),
+                );
+                continue;
+            }
+
+            // Read source file
+            let current_source = std::fs::read_to_string(&current_path)
+                .map_err(|e| format!("Error reading {}: {}", current_path.display(), e))?;
+
+            // Parse and build AST
+            let preprocessed = crate::preprocessor::preprocess(&current_source)?;
+            let pairs = LangParser::parse(Rule::program, &preprocessed)
+                .map_err(|e| format!("Parse error in {}: {}", current_path.display(), e))?;
+            let program = crate::ast::parser::build_program(pairs);
+
+            debug!(
+                "Preprocessing module '{}' at {}",
+                module_name,
+                current_path.display()
+            );
+
+            // Build symbol map for this module's imports
+            let mut imported_symbols = HashMap::new();
+
+            // Add this module's imports to the queue
+            for import in &program.imports {
+                // Resolve import path
+                let import_path =
+                    self.resolve_module(&import.module_path, current_path.parent().unwrap())?;
+
+                // Generate the real module name for the imported module
+                let import_module_name = self.generate_module_name(&import_path)?;
+
+                // For now, use the last component as local name
+                // TODO: Support "import foo as bar" syntax
+                let local_name = import
+                    .module_path
+                    .last()
+                    .ok_or_else(|| "Empty import path".to_string())?
+                    .clone();
+
+                // Add to symbol map (local_name -> real module name)
+                imported_symbols.insert(local_name, ImportedSymbol::Module(import_module_name));
+
+                queue.push_back(import_path);
+            }
+
+            debug!(
+                "Module '{}' imports {} symbols",
+                module_name,
+                imported_symbols.len()
+            );
+
+            // Store module data
+            module_data.insert(
+                current_path.clone(),
+                (module_name, program, imported_symbols),
+            );
+        }
+
+        debug!("Preprocessed {} modules total", module_data.len());
+        Ok(module_data)
     }
 
     /// Resolve a module path to a file path
     /// For example: ["math", "helpers"] -> "math/helpers.py" or "./math/helpers.py"
     /// Supports .py, .tpy, and .c files
-    pub fn resolve_module(&self, module_path: &[String]) -> Result<PathBuf, String> {
+    pub fn resolve_module(
+        &self,
+        module_path: &[String],
+        current_path: &Path,
+    ) -> Result<PathBuf, String> {
         // Try different file extensions
         let extensions = ["py", "c"];
         let module_base = module_path.join("/");
 
-        // Search in all search paths
-        for base_path in &self.search_paths {
+        // Search in the builtin library directory and current directory
+        let search_paths = [
+            (
+                "<builtin>",
+                get_builtin_library_dir(),
+                get_builtin_library_dir(),
+            ),
+            ("", current_path.to_path_buf(), self.root.clone()),
+        ];
+        for (name, dir, root) in search_paths {
             for ext in &extensions {
-                let module_file = format!("{}.{}", module_base, ext);
-                let full_path = base_path.join(&module_file);
-                debug!("Checking for module at: {}", full_path.display());
+                let candidate = dir.join(format!("{}.{}", module_base, ext));
 
-                if full_path.exists() {
-                    debug!("Found module at: {}", full_path.display());
-                    return Ok(full_path);
+                // compare the relative module name for
+                let rel_path = candidate.strip_prefix(&root).unwrap();
+                let module_name = format!(
+                    "{}.{}",
+                    name,
+                    &rel_path
+                        .with_extension("")
+                        .to_string_lossy()
+                        .replace("/", ".")
+                );
+                if candidate.exists() {
+                    debug!(
+                        "Resolved module '{}' to {}",
+                        module_name,
+                        candidate.display()
+                    );
+
+                    return Ok(candidate);
                 }
             }
         }
 
         Err(format!(
-            "Module '{}' not found in search paths: {:?}",
-            module_path.join("."),
-            self.search_paths
+            "Module '{}' not found in builtin or current directory",
+            module_path.join(".")
         ))
     }
 
-    /// Compile a C file to LLVM bitcode
-    fn compile_c_file(&self, c_file: &Path, output_bc: &Path) -> Result<(), String> {
-        let llvm_prefix =
-            std::env::var("LLVM_SYS_211_PREFIX").unwrap_or_else(|_| "/usr/lib/llvm-21".to_string());
-
-        let clang = format!("{}/bin/clang", llvm_prefix);
+    /// Compile LLVM bitcode to LTO object file (.o containing bitcode)
+    /// These .o files contain LLVM bitcode for link-time optimization
+    pub fn compile_bitcode_to_lto_object(
+        bitcode_path: &Path,
+        object_path: &Path,
+    ) -> Result<(), String> {
+        let clang = get_clang_path();
 
         debug!(
-            "Compiling C file {} to {}",
-            c_file.display(),
-            output_bc.display()
+            "Compiling bitcode to LTO object: {} -> {}",
+            bitcode_path.display(),
+            object_path.display()
         );
 
-        let output = std::process::Command::new(&clang)
-            .args([
-                "-c",
-                "-emit-llvm",
-                "-O2",
-                "-o",
-                output_bc.to_str().unwrap(),
-                c_file.to_str().unwrap(),
-            ])
-            .output()
+        // Use clang -c -flto to create LTO-compatible object files
+        // These .o files actually contain bitcode for LTO
+        let status = std::process::Command::new(clang)
+            .arg("-c")
+            .arg("-flto")
+            .arg("-O2")
+            .arg("-o")
+            .arg(object_path)
+            .arg(bitcode_path)
+            .status()
             .map_err(|e| format!("Failed to execute clang: {}", e))?;
 
-        if !output.status.success() {
-            return Err(format!(
-                "Failed to compile C file to bitcode:\n{}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+        if !status.success() {
+            return Err("Failed to compile bitcode to LTO object file".to_string());
         }
 
-        debug!("Successfully compiled C file to bitcode");
-        Ok(())
-    }
-
-    /// Compile and register a module
-    pub fn compile_module(
-        &mut self,
-        module_path: &[String],
-        options: &CompileOptions,
-    ) -> Result<(), String> {
-        let module_name = module_path.join(".");
-
-        // Check if already compiled
-        if self.modules.contains_key(&module_name) {
-            debug!("Module '{}' already compiled", module_name);
-            return Ok(());
-        }
-
-        debug!("Compiling module: {}", module_name);
-
-        // Resolve the module file path
-        let file_path = self.resolve_module(module_path)?;
-
-        // Check if it's a C file
-        if file_path.extension().and_then(|s| s.to_str()) == Some("c") {
-            debug!(
-                "Module '{}' is a C file, will be compiled separately",
-                module_name
-            );
-            // C files don't have imports and are handled at link time
-            // We don't store them in the modules map since they're compiled directly to .bc
-            return Ok(());
-        }
-
-        // Read the source code (for .py and .tpy files)
-        let source = std::fs::read_to_string(&file_path)
-            .map_err(|e| format!("Error reading {}: {}", file_path.display(), e))?;
-
-        // Parse to get imports first
-        let preprocessed = crate::preprocessor::preprocess(&source)?;
-        let pairs = crate::LangParser::parse(crate::Rule::program, &preprocessed)
-            .map_err(|e| format!("Parse error: {}", e))?;
-        let program = crate::ast::parser::build_program(pairs);
-
-        // Recursively compile imported modules first
-        for import in &program.imports {
-            self.compile_module(&import.module_path, options)?;
-        }
-
-        // Collect programs from imported modules
-        let mut imported_programs = Vec::new();
-        for import in &program.imports {
-            let import_name = import.module_path.join(".");
-            if let Some(compiled_mod) = self.modules.get(&import_name) {
-                imported_programs.push(compiled_mod.program.clone());
-            }
-        }
-
-        // Compile the module with imports
-        let result = crate::pipeline::compile_source_with_imports(
-            &source,
-            &module_name,
-            self.context,
-            options,
-            &imported_programs,
-        )?;
-
-        // Store the compiled module
-        let compiled_module = CompiledModule {
-            name: module_name.clone(),
-            path: file_path,
-            program: result.program,
-            codegen: result.codegen,
-        };
-
-        self.modules.insert(module_name, compiled_module);
-
+        debug!(
+            "Successfully compiled to LTO object file: {}",
+            object_path.display()
+        );
         Ok(())
     }
 
     /// Get a compiled module by name
-    pub fn get_module(&self, name: &str) -> Option<&CompiledModule<'ctx>> {
+    pub fn get_module(&self, name: &str) -> Option<&Module<'ctx>> {
         self.modules.get(name)
     }
 
     /// Get all compiled modules
-    pub fn modules(&self) -> &HashMap<String, CompiledModule<'ctx>> {
+    pub fn modules(&self) -> &HashMap<String, Module<'ctx>> {
         &self.modules
     }
 
@@ -282,18 +345,12 @@ impl<'ctx> ModuleRegistry<'ctx> {
         Ok(bitcode_files)
     }
 
-    /// Get the path to the builtin.c file
-    /// The builtin module is always compiled and included automatically
-    pub fn get_builtin_path(&self) -> PathBuf {
-        builtin_lib_dir().join("builtin.c")
-    }
-
-    /// Compile a C module to bitcode and object file
+    /// Compile a C module directly to LTO object file
     /// Returns the path to the generated object file
     pub fn compile_c_module(
         &self,
         c_path: &Path,
-        output_dir: &Path,
+        _output_dir: &Path,
         cache_dir: &Path,
     ) -> Result<PathBuf, String> {
         let module_name = c_path
@@ -301,17 +358,36 @@ impl<'ctx> ModuleRegistry<'ctx> {
             .and_then(|s| s.to_str())
             .ok_or_else(|| format!("Invalid C file name: {}", c_path.display()))?;
 
-        let bc_path = output_dir.join(format!("{}.bc", module_name));
         let obj_path = cache_dir.join(format!("{}.o", module_name));
 
-        // Compile C to bitcode
-        self.compile_c_file(c_path, &bc_path)?;
+        // Compile C directly to LTO object file (contains bitcode)
+        let clang = get_clang_path();
 
-        // Compile bitcode to LTO object
-        crate::pipeline::compile_bitcode_to_lto_object(&bc_path, &obj_path)?;
+        debug!(
+            "Compiling C file {} to LTO object {}",
+            c_path.display(),
+            obj_path.display()
+        );
 
-        // Clean up temporary bitcode file
-        let _ = std::fs::remove_file(&bc_path);
+        let output = std::process::Command::new(clang)
+            .args([
+                "-c",
+                "-emit-llvm", // Emit LLVM bitcode
+                "-flto",      // Enable LTO
+                "-O2",
+                "-o",
+                obj_path.to_str().unwrap(),
+                c_path.to_str().unwrap(),
+            ])
+            .output()
+            .map_err(|e| format!("Failed to execute clang: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "Failed to compile C file to LTO object:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
 
         debug!(
             "Compiled C module {} to {}",

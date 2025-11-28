@@ -90,3 +90,7 @@ test_case!(
     test_multiple_imports,
     "tests/fixtures/valid/modules/multiple_imports/main.py"
 );
+test_case!(
+    test_deep_import,
+    "tests/fixtures/valid/modules/deep_import/main.py"
+);
