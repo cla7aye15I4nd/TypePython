@@ -63,14 +63,6 @@ pub(super) trait CodeGenOps<'a, 'ctx> {
         print_fn: FunctionValue<'ctx>,
         val: BasicValueEnum<'ctx>,
     ) -> Result<(), String>;
-
-    /// Coerce a value to the target type (e.g., int to float).
-    fn coerce_to(
-        &self,
-        cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String>;
 }
 
 // ============================================================================
@@ -265,26 +257,6 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::IntType {
             .build_call(print_fn, &[int_val.into()], "print_int")
             .unwrap();
         Ok(())
-    }
-
-    fn coerce_to(
-        &self,
-        cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        match target {
-            crate::ast::Type::Int => Ok(val),
-            crate::ast::Type::Float => {
-                let int_val = val.into_int_value();
-                Ok(cg
-                    .builder
-                    .build_signed_int_to_float(int_val, cg.ctx.f64_type(), "itof")
-                    .unwrap()
-                    .into())
-            }
-            _ => Err(format!("Cannot coerce Int to {:?}", target)),
-        }
     }
 }
 
@@ -489,18 +461,6 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::FloatType {
             .unwrap();
         Ok(())
     }
-
-    fn coerce_to(
-        &self,
-        _cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        match target {
-            crate::ast::Type::Float => Ok(val),
-            _ => Err(format!("Cannot coerce Float to {:?}", target)),
-        }
-    }
 }
 
 // ============================================================================
@@ -633,39 +593,6 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::BoolType {
             .build_call(print_fn, &[bool_val.into()], "print_bool")
             .unwrap();
         Ok(())
-    }
-
-    fn coerce_to(
-        &self,
-        cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        let bool_val = val.into_int_value();
-        match target {
-            crate::ast::Type::Bool => Ok(val),
-            crate::ast::Type::Int => {
-                // Zero-extend bool to i64
-                Ok(cg
-                    .builder
-                    .build_int_z_extend(bool_val, cg.ctx.i64_type(), "btoi")
-                    .unwrap()
-                    .into())
-            }
-            crate::ast::Type::Float => {
-                // First extend to i64, then convert to float
-                let int_val = cg
-                    .builder
-                    .build_int_z_extend(bool_val, cg.ctx.i64_type(), "btoi")
-                    .unwrap();
-                Ok(cg
-                    .builder
-                    .build_signed_int_to_float(int_val, cg.ctx.f64_type(), "itof")
-                    .unwrap()
-                    .into())
-            }
-            _ => Err(format!("Cannot coerce Bool to {:?}", target)),
-        }
     }
 }
 
@@ -863,18 +790,6 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::BytesType {
             .unwrap();
         Ok(())
     }
-
-    fn coerce_to(
-        &self,
-        _cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        match target {
-            crate::ast::Type::Bytes => Ok(val),
-            _ => Err(format!("Cannot coerce Bytes to {:?}", target)),
-        }
-    }
 }
 
 // ============================================================================
@@ -938,18 +853,6 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::NoneType {
     ) -> Result<(), String> {
         builder.build_call(print_fn, &[], "print_none").unwrap();
         Ok(())
-    }
-
-    fn coerce_to(
-        &self,
-        _cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &crate::ast::Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        match target {
-            crate::ast::Type::None => Ok(val),
-            _ => Err(format!("Cannot coerce None to {:?}", target)),
-        }
     }
 }
 
@@ -1106,22 +1009,6 @@ impl PyType {
             PyType::Bool(t) => t.print(builder, print_fn, val),
             PyType::Bytes(t) => t.print(builder, print_fn, val),
             PyType::None(t) => t.print(builder, print_fn, val),
-        }
-    }
-
-    /// Dispatch coercion to the appropriate type implementation
-    pub fn coerce_to<'a, 'ctx>(
-        &self,
-        cg: &CgCtx<'a, 'ctx>,
-        val: BasicValueEnum<'ctx>,
-        target: &Type,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        match self {
-            PyType::Int(t) => t.coerce_to(cg, val, target),
-            PyType::Float(t) => t.coerce_to(cg, val, target),
-            PyType::Bool(t) => t.coerce_to(cg, val, target),
-            PyType::Bytes(t) => t.coerce_to(cg, val, target),
-            PyType::None(t) => t.coerce_to(cg, val, target),
         }
     }
 

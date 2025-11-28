@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use crate::ast::Program;
-use crate::codegen::CodeGen;
 use crate::Parser;
 
 /// Represents an imported symbol (module or function)
@@ -33,20 +32,8 @@ pub fn get_builtin_library_dir() -> Option<PathBuf> {
 /// Type alias for preprocessed module data: (module_name, program, imported_symbols)
 type PreprocessedModule = (String, Program, HashMap<String, ImportedSymbol>);
 
-/// Represents a compiled module with its LLVM bitcode
-pub struct Module<'ctx> {
-    pub name: String,
-    pub path: PathBuf,
-    pub program: Program,
-    pub codegen: CodeGen<'ctx>,
-    /// Map of imported symbols: local_name -> ImportedSymbol (containing real name)
-    pub imported_symbols: HashMap<String, ImportedSymbol>,
-}
-
 /// Module registry manages all compiled modules
 pub struct ModuleRegistry<'ctx> {
-    /// Map from module name to compiled module
-    modules: HashMap<String, Module<'ctx>>,
     /// LLVM context (shared across all modules)
     _context: &'ctx Context,
     /// Root paths for all module
@@ -59,7 +46,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry and preprocess all modules starting from entry_path
     pub fn new(context: &'ctx Context, root: PathBuf, entry_path: &Path) -> Result<Self, String> {
         let mut registry = ModuleRegistry {
-            modules: HashMap::new(),
             _context: context,
             root,
             module_data: HashMap::new(),
@@ -291,120 +277,5 @@ impl<'ctx> ModuleRegistry<'ctx> {
             "Module '{}' not found in builtin or current directory",
             module_path.join(".")
         ))
-    }
-
-    /// Compile LLVM bitcode to LTO object file (.o containing bitcode)
-    /// These .o files contain LLVM bitcode for link-time optimization
-    pub fn compile_bitcode_to_lto_object(
-        bitcode_path: &Path,
-        object_path: &Path,
-    ) -> Result<(), String> {
-        let clang = get_clang_path();
-
-        debug!(
-            "Compiling bitcode to LTO object: {} -> {}",
-            bitcode_path.display(),
-            object_path.display()
-        );
-
-        // Use clang -c -flto to create LTO-compatible object files
-        // These .o files actually contain bitcode for LTO
-        let status = std::process::Command::new(clang)
-            .arg("-c")
-            .arg("-flto")
-            .arg("-O2")
-            .arg("-o")
-            .arg(object_path)
-            .arg(bitcode_path)
-            .status()
-            .map_err(|e| format!("Failed to execute clang: {}", e))?;
-
-        if !status.success() {
-            return Err("Failed to compile bitcode to LTO object file".to_string());
-        }
-
-        debug!(
-            "Successfully compiled to LTO object file: {}",
-            object_path.display()
-        );
-        Ok(())
-    }
-
-    /// Get a compiled module by name
-    pub fn get_module(&self, name: &str) -> Option<&Module<'ctx>> {
-        self.modules.get(name)
-    }
-
-    /// Get all compiled modules
-    pub fn modules(&self) -> &HashMap<String, Module<'ctx>> {
-        &self.modules
-    }
-
-    /// Write all modules to bitcode files
-    pub fn write_all_bitcode(&self, output_dir: &Path) -> Result<Vec<PathBuf>, String> {
-        let mut bitcode_files = Vec::new();
-
-        for (name, module) in &self.modules {
-            let bc_filename = format!("{}.bc", name.replace(".", "_"));
-            let bc_path = output_dir.join(bc_filename);
-
-            module.codegen.get_module().write_bitcode_to_path(&bc_path);
-            debug!(
-                "Wrote bitcode for module '{}' to {}",
-                name,
-                bc_path.display()
-            );
-
-            bitcode_files.push(bc_path);
-        }
-
-        Ok(bitcode_files)
-    }
-
-    /// Compile a C module directly to LTO object file
-    /// Returns the path to the generated object file
-    pub fn compile_c_module(&self, c_path: &Path, cache_dir: &Path) -> Result<PathBuf, String> {
-        let module_name = c_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| format!("Invalid C file name: {}", c_path.display()))?;
-
-        let obj_path = cache_dir.join(format!("{}.o", module_name));
-
-        // Compile C directly to LTO object file (contains bitcode)
-        let clang = get_clang_path();
-
-        debug!(
-            "Compiling C file {} to LTO object {}",
-            c_path.display(),
-            obj_path.display()
-        );
-
-        let output = std::process::Command::new(clang)
-            .args([
-                "-c",
-                "-emit-llvm", // Emit LLVM bitcode
-                "-flto",      // Enable LTO
-                "-O2",
-                "-o",
-                obj_path.to_str().unwrap(),
-                c_path.to_str().unwrap(),
-            ])
-            .output()
-            .map_err(|e| format!("Failed to execute clang: {}", e))?;
-
-        if !output.status.success() {
-            return Err(format!(
-                "Failed to compile C file to LTO object:\n{}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
-
-        debug!(
-            "Compiled C module {} to {}",
-            module_name,
-            obj_path.display()
-        );
-        Ok(obj_path)
     }
 }

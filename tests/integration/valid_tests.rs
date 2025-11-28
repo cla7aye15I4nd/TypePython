@@ -130,6 +130,18 @@ test_case!(
     test_bool_identity_ops,
     "tests/fixtures/valid/basic/bool_identity_ops.py"
 );
+test_case!(
+    test_bool_logical_ops,
+    "tests/fixtures/valid/basic/bool_logical_ops.py"
+);
+test_case!(
+    test_bool_mixed_ops,
+    "tests/fixtures/valid/basic/bool_mixed_ops.py"
+);
+test_case!(
+    test_int_unary_not,
+    "tests/fixtures/valid/basic/int_unary_not.py"
+);
 
 // ============================================================================
 // Advanced Tests - Arithmetic

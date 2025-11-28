@@ -1,0 +1,10 @@
+b'Bool And tests:'
+True
+False
+False
+False
+b'Bool Or tests:'
+True
+True
+True
+False

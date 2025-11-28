@@ -1,0 +1,6 @@
+b'Int unary not (bitwise):'
+-1
+-2
+0
+-256
+42
