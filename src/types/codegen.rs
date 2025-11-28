@@ -97,12 +97,21 @@ impl<'a, 'ctx> CodeGenOps<'a, 'ctx> for super::IntType {
                 BinaryOp::Sub => cg.builder.build_int_sub(lhs_int, rhs_int, "sub").unwrap(),
                 BinaryOp::Mul => cg.builder.build_int_mul(lhs_int, rhs_int, "mul").unwrap(),
                 BinaryOp::Div => {
-                    return Ok(PyValue::int(
+                    // Python 3 semantics: int / int -> float
+                    let lhs_float = cg
+                        .builder
+                        .build_signed_int_to_float(lhs_int, cg.ctx.f64_type(), "lhs_itof")
+                        .unwrap();
+                    let rhs_float = cg
+                        .builder
+                        .build_signed_int_to_float(rhs_int, cg.ctx.f64_type(), "rhs_itof")
+                        .unwrap();
+                    return Ok(PyValue::float(
                         cg.builder
-                            .build_int_signed_div(lhs_int, rhs_int, "div")
+                            .build_float_div(lhs_float, rhs_float, "fdiv")
                             .unwrap()
                             .into(),
-                    ))
+                    ));
                 }
                 BinaryOp::FloorDiv => {
                     let floordiv_fn = get_or_declare_builtin(cg.module, cg.ctx, "floordiv_int");

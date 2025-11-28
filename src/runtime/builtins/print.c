@@ -11,10 +11,32 @@ void print_int(int64_t value) {
 
 void print_float(double value) {
     // Check if it's a whole number
-    if (value == floor(value)) {
+    if (value == floor(value) && value >= -9007199254740992.0 && value <= 9007199254740992.0) {
         printf("%.1f", value);
     } else {
-        printf("%.15g", value);
+        // Try minimal precision first, increase until round-trip works
+        // This approximates Python's shortest-representation algorithm
+        char buf[32];
+        double reparsed;
+
+        // Try 15 digits first (covers most cases cleanly)
+        snprintf(buf, sizeof(buf), "%.15g", value);
+        sscanf(buf, "%lf", &reparsed);
+        if (reparsed == value) {
+            printf("%s", buf);
+            return;
+        }
+
+        // Try 16 digits
+        snprintf(buf, sizeof(buf), "%.16g", value);
+        sscanf(buf, "%lf", &reparsed);
+        if (reparsed == value) {
+            printf("%s", buf);
+            return;
+        }
+
+        // Fall back to 17 digits for full precision
+        printf("%.17g", value);
     }
 }
 

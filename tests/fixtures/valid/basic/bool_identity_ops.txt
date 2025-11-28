@@ -1,0 +1,9 @@
+b'True is True:' True
+b'False is False:' True
+b'True is False:' False
+b'True is not False:' True
+b'False is not True:' True
+b'True is not True:' False
+b'a is b (both True):' True
+b'a is c (True is False):' False
+b'a is not c:' True

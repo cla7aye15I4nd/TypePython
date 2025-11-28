@@ -123,6 +123,14 @@ test_case!(
     test_type_coercion,
     "tests/fixtures/valid/basic/type_coercion.py"
 );
+test_case!(
+    test_int_true_division,
+    "tests/fixtures/valid/basic/int_true_division.py"
+);
+test_case!(
+    test_bool_identity_ops,
+    "tests/fixtures/valid/basic/bool_identity_ops.py"
+);
 
 // ============================================================================
 // Advanced Tests - Arithmetic
