@@ -148,6 +148,22 @@ test_case!(
     test_numeric_literals,
     "tests/fixtures/valid/basic/numeric_literals.py"
 );
+test_case!(
+    test_pass_statement,
+    "tests/fixtures/valid/basic/pass_statement.py"
+);
+test_case!(
+    test_tab_indentation,
+    "tests/fixtures/valid/basic/tab_indentation.py"
+);
+test_case!(
+    test_int_float_bool_conversion,
+    "tests/fixtures/valid/basic/int_float_bool_conversion.py"
+);
+test_case!(
+    test_escape_sequences,
+    "tests/fixtures/valid/basic/escape_sequences.py"
+);
 
 // ============================================================================
 // Advanced Tests - Arithmetic
