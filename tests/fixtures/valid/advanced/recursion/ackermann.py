@@ -19,5 +19,5 @@ def test_ackermann() -> int:
     return a00 + a01 + a10 + a11 + a20 + a22
 
 result: int = test_ackermann()
-print("Ackermann test result:", result)
-print("A(3, 2):", ackermann(3, 2))
+print(b"Ackermann test result:", result)
+print(b"A(3, 2):", ackermann(3, 2))

@@ -52,7 +52,7 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     }
 
     fn visit_class(&mut self, _class: &Class) -> Result<(), Self::Error> {
-        Err("Classes are not yet supported in code generation".to_string())
+        todo!("Classes")
     }
 
     fn visit_assignment(
@@ -156,19 +156,19 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     }
 
     fn visit_list(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        Err("List literals are not yet supported in code generation".to_string())
+        todo!("List literals")
     }
 
     fn visit_tuple(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        Err("Tuple literals are not yet supported in code generation".to_string())
+        todo!("Tuple literals")
     }
 
     fn visit_dict(&mut self, _pairs: &[(Expression, Expression)]) -> Result<(), Self::Error> {
-        Err("Dict literals are not yet supported in code generation".to_string())
+        todo!("Dict literals")
     }
 
     fn visit_set(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        Err("Set literals are not yet supported in code generation".to_string())
+        todo!("Set literals")
     }
 
     fn visit_binop(
@@ -189,7 +189,7 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     }
 
     fn visit_attribute(&mut self, _object: &Expression, _attr: &str) -> Result<(), Self::Error> {
-        Err("Attribute access is not yet supported in code generation".to_string())
+        todo!("Attribute access")
     }
 
     fn visit_subscript(
@@ -197,7 +197,7 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         _object: &Expression,
         _index: &Expression,
     ) -> Result<(), Self::Error> {
-        Err("Subscript operation is not yet supported in code generation".to_string())
+        todo!("Subscript operation")
     }
 
     fn visit_slice(
@@ -206,6 +206,6 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         _stop: &Option<Box<Expression>>,
         _step: &Option<Box<Expression>>,
     ) -> Result<(), Self::Error> {
-        Err("Slice operation is not yet supported in code generation".to_string())
+        todo!("Slice operation")
     }
 }

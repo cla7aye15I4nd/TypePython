@@ -24,7 +24,7 @@ def test_multiple_lcms() -> int:
 result1: int = test_multiple_gcds()
 result2: int = test_multiple_lcms()
 
-print("GCD tests sum:", result1)
-print("LCM tests sum:", result2)
-print("GCD(48, 18):", gcd(48, 18))
-print("LCM(12, 18):", lcm(12, 18))
+print(b"GCD tests sum:", result1)
+print(b"LCM tests sum:", result2)
+print(b"GCD(48, 18):", gcd(48, 18))
+print(b"LCM(12, 18):", lcm(12, 18))

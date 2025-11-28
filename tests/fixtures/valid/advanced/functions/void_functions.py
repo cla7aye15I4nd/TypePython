@@ -21,16 +21,16 @@ def multiply_counter(factor: int) -> None:
 increment_counter()
 increment_counter()
 increment_counter()
-print("Counter after 3 increments:", counter)
+print(b"Counter after 3 increments:", counter)
 
 add_to_counter(10)
-print("Counter after adding 10:", counter)
+print(b"Counter after adding 10:", counter)
 
 multiply_counter(2)
-print("Counter after multiply by 2:", counter)
+print(b"Counter after multiply by 2:", counter)
 
 reset_counter()
-print("Counter after reset:", counter)
+print(b"Counter after reset:", counter)
 
 add_to_counter(100)
-print("Final counter:", counter)
+print(b"Final counter:", counter)

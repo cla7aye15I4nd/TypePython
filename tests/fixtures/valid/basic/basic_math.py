@@ -7,7 +7,7 @@ sub: int = a - b
 mul: int = a * b
 div: int = a // b
 
-print("Addition:", add)
-print("Subtraction:", sub)
-print("Multiplication:", mul)
-print("Division:", div)
+print(b"Addition:", add)
+print(b"Subtraction:", sub)
+print(b"Multiplication:", mul)
+print(b"Division:", div)

@@ -141,25 +141,25 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             Expression::List(_) => {
-                Err("List literals are not yet supported in code generation".to_string())
+                todo!("List literals")
             }
             Expression::Tuple(_) => {
-                Err("Tuple literals are not yet supported in code generation".to_string())
+                todo!("Tuple literals")
             }
             Expression::Dict(_) => {
-                Err("Dict literals are not yet supported in code generation".to_string())
+                todo!("Dict literals")
             }
             Expression::Set(_) => {
-                Err("Set literals are not yet supported in code generation".to_string())
+                todo!("Set literals")
             }
             Expression::Attribute { .. } => {
-                Err("Attribute access is not yet supported in code generation".to_string())
+                todo!("Attribute access")
             }
             Expression::Subscript { .. } => {
-                Err("Subscript operation is not yet supported in code generation".to_string())
+                todo!("Subscript operation")
             }
             Expression::Slice { .. } => {
-                Err("Slice operation is not yet supported in code generation".to_string())
+                todo!("Slice operation")
             }
         }
     }
@@ -483,19 +483,17 @@ impl<'ctx> CodeGen<'ctx> {
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
-        // Handle string operations first (implemented as C-style null-terminated strings)
-        // Note: TypePython's str type is currently implemented as C-style char* pointers
-        // until full Python string objects with UTF-8 support are added
+        // Handle bytes operations (C-style null-terminated byte sequences)
         if lhs.is_pointer_value() && rhs.is_pointer_value() {
             match op {
                 BinaryOp::Add => {
-                    // String concatenation - call tpy_strcat builtin
+                    // Bytes concatenation - call tpy_strcat builtin
                     let lhs_ptr = lhs.into_pointer_value();
                     let rhs_ptr = rhs.into_pointer_value();
                     let strcat_fn = self.get_or_declare_builtin_function("tpy_strcat");
                     let call_site = self
                         .builder
-                        .build_call(strcat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcat")
+                        .build_call(strcat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescat")
                         .unwrap();
                     use inkwell::values::AnyValue;
                     let any_val = call_site.as_any_value_enum();
@@ -506,13 +504,13 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
                 BinaryOp::Eq => {
-                    // String equality - call tpy_strcmp builtin
+                    // Bytes equality - call tpy_strcmp builtin
                     let lhs_ptr = lhs.into_pointer_value();
                     let rhs_ptr = rhs.into_pointer_value();
                     let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
                     let call_site = self
                         .builder
-                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp")
+                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
                         .unwrap();
                     use inkwell::values::AnyValue;
                     let any_val = call_site.as_any_value_enum();
@@ -528,13 +526,13 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
                 BinaryOp::Ne => {
-                    // String inequality - call strcmp and negate
+                    // Bytes inequality - call strcmp and negate
                     let lhs_ptr = lhs.into_pointer_value();
                     let rhs_ptr = rhs.into_pointer_value();
                     let strcmp_fn = self.get_or_declare_builtin_function("tpy_strcmp");
                     let call_site = self
                         .builder
-                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "strcmp")
+                        .build_call(strcmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "bytescmp")
                         .unwrap();
                     use inkwell::values::AnyValue;
                     let any_val = call_site.as_any_value_enum();
@@ -551,7 +549,7 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
                 _ => {
-                    return Err(format!("Operator {:?} not supported for string type", op));
+                    return Err(format!("Operator {:?} not supported for bytes type", op));
                 }
             }
         }
@@ -972,13 +970,13 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(print_float, &[float_val.into()], "print_float")
                     .unwrap();
             } else if val.is_pointer_value() {
-                // String - use tpy_print_str
+                // Bytes - use tpy_print_str
                 let ptr_val = val.into_pointer_value();
                 self.builder
-                    .build_call(print_str, &[ptr_val.into()], "print_str")
+                    .build_call(print_str, &[ptr_val.into()], "print_bytes")
                     .unwrap();
             } else {
-                return Err("print() only supports int, float, bool, and string types".to_string());
+                return Err("print() only supports int, float, bool, and bytes types".to_string());
             }
 
             // Print space between arguments (but not after the last one)
@@ -1001,21 +999,17 @@ impl<'ctx> CodeGen<'ctx> {
             Type::Int => self.context.i64_type().into(),
             Type::Float => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
-            Type::Str => self
-                .context
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
+            Type::Str => todo!("str type (use bytes instead)"),
             Type::Bytes => self
                 .context
                 .ptr_type(inkwell::AddressSpace::default())
                 .into(),
             Type::None => self.context.i32_type().into(),
-            Type::List(_) | Type::Dict(_, _) | Type::Set(_) | Type::Tuple(_) | Type::Custom(_) => {
-                // For now, use generic pointer for complex types
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .into()
-            }
+            Type::List(_) => todo!("List type"),
+            Type::Dict(_, _) => todo!("Dict type"),
+            Type::Set(_) => todo!("Set type"),
+            Type::Tuple(_) => todo!("Tuple type"),
+            Type::Custom(_) => todo!("Custom type"),
         }
     }
 

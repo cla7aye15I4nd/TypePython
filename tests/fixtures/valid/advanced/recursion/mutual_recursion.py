@@ -26,9 +26,9 @@ def count_even_odd(limit: int) -> int:
     return even_count * 100 + odd_count
 
 result: int = count_even_odd(10)
-print("Even/Odd count result:", result)
+print(b"Even/Odd count result:", result)
 
-print("Is 0 even:", is_even(0))
-print("Is 1 even:", is_even(1))
-print("Is 10 even:", is_even(10))
-print("Is 15 even:", is_even(15))
+print(b"Is 0 even:", is_even(0))
+print(b"Is 1 even:", is_even(1))
+print(b"Is 10 even:", is_even(10))
+print(b"Is 15 even:", is_even(15))

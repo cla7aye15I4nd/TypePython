@@ -64,5 +64,5 @@ while j <= 6:
     sum_months = sum_months + month_days(j)
     j = j + 1
 
-print("Sum of day codes:", sum_days)
-print("Sum of month days:", sum_months)
+print(b"Sum of day codes:", sum_days)
+print(b"Sum of month days:", sum_months)

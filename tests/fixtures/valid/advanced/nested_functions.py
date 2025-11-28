@@ -23,5 +23,5 @@ def is_even(n: int) -> bool:
 result: int = compute(5, 3, 2)
 check: bool = is_even(42)
 
-print("Compute (5, 3, 2):", result)
-print("Is 42 even:", check)
+print(b"Compute (5, 3, 2):", result)
+print(b"Is 42 even:", check)

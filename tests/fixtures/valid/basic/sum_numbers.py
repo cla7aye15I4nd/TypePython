@@ -8,4 +8,4 @@ def sum_to_n(n: int) -> int:
     return sum
 
 result: int = sum_to_n(10)
-print("Sum from 1 to 10:", result)
+print(b"Sum from 1 to 10:", result)

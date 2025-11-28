@@ -1,9 +1,9 @@
 # Functions with default-like behavior
-def greet(name: str, formal: bool) -> None:
+def greet(name: bytes, formal: bool) -> None:
     if formal:
-        print("Good day,", name)
+        print(b"Good day,", name)
     else:
-        print("Hey,", name)
+        print(b"Hey,", name)
 
 def compute_discount(price: int, is_member: bool) -> int:
     discount: int = 0
@@ -18,18 +18,18 @@ def compute_discount(price: int, is_member: bool) -> int:
 def format_number(n: int, use_hex: bool) -> None:
     if use_hex:
         # Simulate hex output
-        print("Hex mode:", n)
+        print(b"Hex mode:", n)
     else:
-        print("Decimal:", n)
+        print(b"Decimal:", n)
 
-greet("Alice", True)
-greet("Bob", False)
+greet(b"Alice", True)
+greet(b"Bob", False)
 
 result1: int = compute_discount(100, True)
 result2: int = compute_discount(100, False)
 
-print("Member discount:", result1)
-print("Regular discount:", result2)
+print(b"Member discount:", result1)
+print(b"Regular discount:", result2)
 
 format_number(255, True)
 format_number(255, False)

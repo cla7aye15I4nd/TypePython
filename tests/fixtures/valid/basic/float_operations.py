@@ -6,6 +6,6 @@ sum: float = x + y
 diff: float = x - y
 prod: float = x * y
 
-print("Sum:", sum)
-print("Difference:", diff)
-print("Product:", prod)
+print(b"Sum:", sum)
+print(b"Difference:", diff)
+print(b"Product:", prod)

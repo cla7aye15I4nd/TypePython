@@ -16,6 +16,6 @@ def sum_fibs(n: int) -> int:
 result1: int = fib_recursive(10)
 result2: int = sum_fibs(10)
 
-print("Fib(10):", result1)
-print("Sum of first 11 fibs:", result2)
-print("Fib(12):", fib_recursive(12))
+print(b"Fib(10):", result1)
+print(b"Sum of first 11 fibs:", result2)
+print(b"Fib(12):", fib_recursive(12))

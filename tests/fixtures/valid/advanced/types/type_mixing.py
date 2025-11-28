@@ -1,5 +1,5 @@
 # Mixed type operations and conversions
-def work_with_all_types(i: int, f: float, b: bool, s: str) -> int:
+def work_with_all_types(i: int, f: float, b: bool, s: bytes) -> int:
     result: int = i
 
     if b:
@@ -47,12 +47,12 @@ def complex_type_logic(x: int, y: float, flag: bool) -> float:
 
     return result
 
-result1: int = work_with_all_types(10, 6.5, True, "test")
+result1: int = work_with_all_types(10, 6.5, True, b"test")
 result2: int = boolean_to_numeric()
 result3: int = compare_mixed_types(10, 7.5)
 result4: float = complex_type_logic(5, 3.0, True)
 
-print("Work with all types:", result1)
-print("Boolean to numeric:", result2)
-print("Compare mixed:", result3)
-print("Complex type logic:", result4)
+print(b"Work with all types:", result1)
+print(b"Boolean to numeric:", result2)
+print(b"Compare mixed:", result3)
+print(b"Complex type logic:", result4)

@@ -8,5 +8,5 @@ def multiply(x: int, y: int) -> int:
 sum: int = add(5, 3)
 product: int = multiply(4, 7)
 
-print("Sum:", sum)
-print("Product:", product)
+print(b"Sum:", sum)
+print(b"Product:", product)

@@ -34,6 +34,6 @@ def test_binary_search() -> int:
     return pow1 + pow2 + pow3 + pow4
 
 result: int = test_binary_search()
-print("Binary search result:", result)
-print("Log2(16):", binary_search_power(16, 10))
-print("Log2(256):", binary_search_power(256, 10))
+print(b"Binary search result:", result)
+print(b"Log2(16):", binary_search_power(16, 10))
+print(b"Log2(256):", binary_search_power(256, 10))

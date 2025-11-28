@@ -7,4 +7,4 @@ def factorial(n: int) -> int:
 
 # Main execution
 result: int = factorial(5)
-print("Factorial of 5:", result)
+print(b"Factorial of 5:", result)

@@ -4,5 +4,5 @@ while counter < 5:
     counter = counter + 1
     if counter == 3:
         continue
-    print("Counter:", counter)
-print("Done!")
+    print(b"Counter:", counter)
+print(b"Done!")

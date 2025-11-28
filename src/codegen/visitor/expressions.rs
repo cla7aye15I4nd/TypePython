@@ -15,19 +15,8 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(self.context.f64_type().const_float(val).into())
     }
 
-    pub(crate) fn visit_str_lit_impl(&mut self, val: &str) -> Result<BasicValueEnum<'ctx>, String> {
-        let str_name = if let Some(&id) = self.strings.get(val) {
-            format!(".str_{}", id)
-        } else {
-            let id = self.strings.len() as u64;
-            self.strings.insert(val.to_string(), id);
-            format!(".str_{}", id)
-        };
-        let str_const = self
-            .builder
-            .build_global_string_ptr(val, &str_name)
-            .unwrap();
-        Ok(str_const.as_pointer_value().into())
+    pub(crate) fn visit_str_lit_impl(&mut self, _val: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        todo!("str type (use bytes instead)")
     }
 
     pub(crate) fn visit_bytes_lit_impl(

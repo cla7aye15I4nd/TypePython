@@ -38,4 +38,4 @@ def test_all_paths() -> int:
     return sum
 
 result: int = test_all_paths()
-print("Nested conditionals result:", result)
+print(b"Nested conditionals result:", result)

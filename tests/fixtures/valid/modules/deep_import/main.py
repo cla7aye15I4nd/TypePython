@@ -5,7 +5,7 @@ import module_a
 import module_t
 
 # Test calling functions from different modules
-print("Testing deep import chain with cyclic dependencies...")
-print("module_t.test() =", module_t.test())
-print("module_a.test() =", module_a.test())
-print("Deep import test completed successfully!")
+print(b"Testing deep import chain with cyclic dependencies...")
+print(b"module_t.test() =", module_t.test())
+print(b"module_a.test() =", module_a.test())
+print(b"Deep import test completed successfully!")

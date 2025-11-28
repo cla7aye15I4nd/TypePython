@@ -39,10 +39,10 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
-                Err("Attribute assignment is not yet supported".to_string())
+                todo!("Attribute assignment")
             }
             AssignTarget::Subscript { .. } => {
-                Err("Subscript assignment is not yet supported".to_string())
+                todo!("Subscript assignment")
             }
         }
     }
@@ -152,10 +152,10 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
-                Err("Augmented attribute assignment is not yet supported".to_string())
+                todo!("Augmented attribute assignment")
             }
             AssignTarget::Subscript { .. } => {
-                Err("Augmented subscript assignment is not yet supported".to_string())
+                todo!("Augmented subscript assignment")
             }
         }
     }
@@ -166,7 +166,7 @@ impl<'ctx> CodeGen<'ctx> {
         _iterable: &Expression,
         _body: &[Statement],
     ) -> Result<(), String> {
-        Err("For loops are not yet supported in code generation".to_string())
+        todo!("For loops")
     }
 
     pub(crate) fn visit_break_impl(&mut self) -> Result<(), String> {

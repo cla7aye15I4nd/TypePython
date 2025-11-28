@@ -13,10 +13,10 @@ and_op: bool = True and False
 or_op: bool = True or False
 not_op: bool = not True
 
-print("10 > 20:", greater)
-print("10 < 20:", less)
-print("10 == 20:", equal)
-print("10 != 20:", not_equal)
-print("True and False:", and_op)
-print("True or False:", or_op)
-print("not True:", not_op)
+print(b"10 > 20:", greater)
+print(b"10 < 20:", less)
+print(b"10 == 20:", equal)
+print(b"10 != 20:", not_equal)
+print(b"True and False:", and_op)
+print(b"True or False:", or_op)
+print(b"not True:", not_op)

@@ -1,6 +1,6 @@
 # Simple function definition and call
-def greet(name: str) -> None:
-    print("Hello,", name)
+def greet(name: bytes) -> None:
+    print(b"Hello,", name)
 
-greet("World")
-greet("TypePython")
+greet(b"World")
+greet(b"TypePython")

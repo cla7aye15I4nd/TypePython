@@ -52,4 +52,4 @@ def bubble_sort_sum() -> int:
     return n1 + n2 + n3 + n4 + n5
 
 result: int = bubble_sort_sum()
-print("Sorted sum:", result)
+print(b"Sorted sum:", result)

@@ -2,5 +2,5 @@
 x: int = 42
 y: int = x + 10
 
-print("x:", x)
-print("y:", y)
+print(b"x:", x)
+print(b"y:", y)
