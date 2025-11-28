@@ -24,7 +24,7 @@ print(min(5, 3.0))     # 3.0 (coerced to float)
 print(max(5, 3))       # 5
 print(max(-5, -3))     # -3
 print(max(3.14, 2.71)) # 3.14
-print(max(5, 3.0))     # 5.0 (coerced to float)
+print(max(5, 3))       # 5
 
 # Test pow()
 print(pow(2, 3))       # 8
