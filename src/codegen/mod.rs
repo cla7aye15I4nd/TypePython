@@ -627,24 +627,22 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Create basic blocks for short-circuit
         let eval_rhs_bb = self.context.append_basic_block(current_fn, "eval_rhs");
+        let sc_lhs_bb = self.context.append_basic_block(current_fn, "sc_lhs");
         let merge_bb = self.context.append_basic_block(current_fn, "sc_merge");
 
-        // Get current block for PHI
-        let entry_bb = self.builder.get_insert_block().unwrap();
-
-        // For `and`: if left is false, short-circuit to merge (result is lhs)
-        // For `or`: if left is true, short-circuit to merge (result is lhs)
+        // For `and`: if left is false, short-circuit to sc_lhs (result is lhs)
+        // For `or`: if left is true, short-circuit to sc_lhs (result is lhs)
         match op {
             BinaryOp::And => {
                 // If lhs is false, skip rhs and return lhs
                 self.builder
-                    .build_conditional_branch(lhs_bool, eval_rhs_bb, merge_bb)
+                    .build_conditional_branch(lhs_bool, eval_rhs_bb, sc_lhs_bb)
                     .unwrap();
             }
             BinaryOp::Or => {
                 // If lhs is true, skip rhs and return lhs
                 self.builder
-                    .build_conditional_branch(lhs_bool, merge_bb, eval_rhs_bb)
+                    .build_conditional_branch(lhs_bool, sc_lhs_bb, eval_rhs_bb)
                     .unwrap();
             }
             _ => unreachable!(),
@@ -653,7 +651,20 @@ impl<'ctx> CodeGen<'ctx> {
         // Evaluate right side
         self.builder.position_at_end(eval_rhs_bb);
         let rhs = self.evaluate_expression(right)?;
+
+        // Determine result type and convert values as needed
+        // Type promotion: Bool -> Int -> Float
+        let result_type = self.get_promoted_type(&lhs.ty, &rhs.ty)?;
+
+        // Convert rhs to result type if needed (we're in eval_rhs_bb)
+        let rhs_converted = self.convert_to_type(&rhs, &result_type)?;
         let rhs_bb = self.builder.get_insert_block().unwrap();
+        self.builder.build_unconditional_branch(merge_bb).unwrap();
+
+        // Short-circuit path: convert lhs to result type
+        self.builder.position_at_end(sc_lhs_bb);
+        let lhs_converted = self.convert_to_type(&lhs, &result_type)?;
+        let lhs_bb = self.builder.get_insert_block().unwrap();
         self.builder.build_unconditional_branch(merge_bb).unwrap();
 
         // Merge block - use PHI to select the result
@@ -662,47 +673,89 @@ impl<'ctx> CodeGen<'ctx> {
         // - `or`: returns lhs if truthy, else rhs
         self.builder.position_at_end(merge_bb);
 
-        // We need to handle different types, so we'll use the widest type
-        // For now, we'll handle the common case where both are the same type
-        // and fall back to a runtime error if types don't match
-        let result_type = if lhs.ty == rhs.ty {
-            lhs.ty.clone()
-        } else {
-            // For mixed types, Python returns the actual value, so we need to handle this
-            // For simplicity, we'll return Bool type for now and convert
-            // This is a simplification - proper Python would return the actual object
-            return Err(format!(
-                "Logical {:?} between different types {:?} and {:?} not yet fully supported",
-                op, lhs.ty, rhs.ty
-            ));
-        };
-
         let phi = self
             .builder
-            .build_phi(lhs.runtime_value().get_type(), "sc_result")
+            .build_phi(lhs_converted.get_type(), "sc_result")
             .unwrap();
 
-        match op {
-            BinaryOp::And => {
-                // If we came from entry (short-circuit), result is lhs (falsy)
-                // If we came from eval_rhs, result is rhs
-                phi.add_incoming(&[
-                    (&lhs.runtime_value(), entry_bb),
-                    (&rhs.runtime_value(), rhs_bb),
-                ]);
-            }
-            BinaryOp::Or => {
-                // If we came from entry (short-circuit), result is lhs (truthy)
-                // If we came from eval_rhs, result is rhs
-                phi.add_incoming(&[
-                    (&lhs.runtime_value(), entry_bb),
-                    (&rhs.runtime_value(), rhs_bb),
-                ]);
-            }
-            _ => unreachable!(),
-        }
+        phi.add_incoming(&[(&lhs_converted, lhs_bb), (&rhs_converted, rhs_bb)]);
 
         Ok(PyValue::new(phi.as_basic_value(), result_type, None))
+    }
+
+    /// Get the promoted type for two types (for and/or operations)
+    fn get_promoted_type(&self, lhs_ty: &PyType, rhs_ty: &PyType) -> Result<PyType, String> {
+        if lhs_ty == rhs_ty {
+            return Ok(lhs_ty.clone());
+        }
+
+        match (lhs_ty, rhs_ty) {
+            // Bool with Int -> Int
+            (PyType::Bool, PyType::Int) | (PyType::Int, PyType::Bool) => Ok(PyType::Int),
+            // Bool with Float -> Float
+            (PyType::Bool, PyType::Float) | (PyType::Float, PyType::Bool) => Ok(PyType::Float),
+            // Int with Float -> Float
+            (PyType::Int, PyType::Float) | (PyType::Float, PyType::Int) => Ok(PyType::Float),
+            _ => Err(format!(
+                "Cannot promote types {:?} and {:?}",
+                lhs_ty, rhs_ty
+            )),
+        }
+    }
+
+    /// Convert a value to the target type
+    fn convert_to_type(
+        &mut self,
+        val: &PyValue<'ctx>,
+        target_ty: &PyType,
+    ) -> Result<BasicValueEnum<'ctx>, String> {
+        if &val.ty == target_ty {
+            return Ok(val.runtime_value());
+        }
+
+        match (&val.ty, target_ty) {
+            // Bool to Int
+            (PyType::Bool, PyType::Int) => {
+                let int_val = self
+                    .builder
+                    .build_int_z_extend(
+                        val.runtime_value().into_int_value(),
+                        self.context.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(int_val.into())
+            }
+            // Bool to Float
+            (PyType::Bool, PyType::Float) => {
+                let int_val = self
+                    .builder
+                    .build_int_z_extend(
+                        val.runtime_value().into_int_value(),
+                        self.context.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let float_val = self
+                    .builder
+                    .build_signed_int_to_float(int_val, self.context.f64_type(), "itof")
+                    .unwrap();
+                Ok(float_val.into())
+            }
+            // Int to Float
+            (PyType::Int, PyType::Float) => {
+                let float_val = self
+                    .builder
+                    .build_signed_int_to_float(
+                        val.runtime_value().into_int_value(),
+                        self.context.f64_type(),
+                        "itof",
+                    )
+                    .unwrap();
+                Ok(float_val.into())
+            }
+            _ => Err(format!("Cannot convert {:?} to {:?}", val.ty, target_ty)),
+        }
     }
 
     /// Convert a PyValue to a boolean (i1)

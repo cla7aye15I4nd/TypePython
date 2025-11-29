@@ -149,7 +149,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::int(super::extract_int_result(
                     call_site,
                     "floordiv_int",
-                )?))
+                )))
             }
             PyType::Float => {
                 let lhs_float = cg
@@ -169,7 +169,7 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(super::extract_int_result(
                     call_site, "mod_int",
-                )?))
+                )))
             }
             PyType::Float => {
                 let lhs_float = cg
@@ -193,7 +193,7 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(super::extract_int_result(
                     call_site, "pow_int",
-                )?))
+                )))
             }
             PyType::Float => {
                 let lhs_float = cg
@@ -547,7 +547,7 @@ pub fn binary_op<'a, 'ctx>(
                         "list_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "list_contains")?;
+                let result = extract_int_result(call_site, "list_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -569,7 +569,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "set_contains")?;
+                let result = extract_int_result(call_site, "set_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -591,7 +591,7 @@ pub fn binary_op<'a, 'ctx>(
                         "dict_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "dict_contains")?;
+                let result = extract_int_result(call_site, "dict_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -617,7 +617,7 @@ pub fn binary_op<'a, 'ctx>(
                         "list_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "list_contains")?;
+                let result = extract_int_result(call_site, "list_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -639,7 +639,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "set_contains")?;
+                let result = extract_int_result(call_site, "set_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -661,7 +661,7 @@ pub fn binary_op<'a, 'ctx>(
                         "dict_contains",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "dict_contains")?;
+                let result = extract_int_result(call_site, "dict_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(

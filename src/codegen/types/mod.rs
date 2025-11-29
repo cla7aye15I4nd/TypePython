@@ -44,38 +44,38 @@ fn get_or_declare_builtin<'ctx>(
 fn extract_int_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> BasicValueEnum<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-        Ok(iv.into())
+        iv.into()
     } else {
-        Err(format!("{} did not return an int value", fn_name))
+        panic!("{} did not return an int value", fn_name)
     }
 }
 
 fn extract_float_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> BasicValueEnum<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-        Ok(fv.into())
+        fv.into()
     } else {
-        Err(format!("{} did not return a float value", fn_name))
+        panic!("{} did not return a float value", fn_name)
     }
 }
 
 fn extract_ptr_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> BasicValueEnum<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::PointerValue(pv) = any_val {
-        Ok(pv.into())
+        pv.into()
     } else {
-        Err(format!("{} did not return a pointer value", fn_name))
+        panic!("{} did not return a pointer value", fn_name)
     }
 }

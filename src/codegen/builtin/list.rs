@@ -108,6 +108,19 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
+    /// Delete an item at index: del list[i]
+    pub fn list_delitem(
+        &mut self,
+        list_val: BasicValueEnum<'ctx>,
+        index: BasicValueEnum<'ctx>,
+    ) -> Result<(), String> {
+        let delitem_fn = self.get_or_declare_c_builtin("list_delitem");
+        self.builder
+            .build_call(delitem_fn, &[list_val.into(), index.into()], "list_delitem")
+            .unwrap();
+        Ok(())
+    }
+
     // ========================================================================
     // Slice operations (e.g., my_list[1:4], my_list[::2])
     // ========================================================================

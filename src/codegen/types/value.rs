@@ -562,7 +562,7 @@ impl<'ctx> PyValue<'ctx> {
                     .builder
                     .build_call(strlen_fn, &[ptr_val.into()], "strlen")
                     .unwrap();
-                let len = super::extract_int_result(call_site, "strlen_bytes")?;
+                let len = super::extract_int_result(call_site, "strlen_bytes");
                 let zero = cg.ctx.i64_type().const_zero();
                 Ok(cg
                     .builder
@@ -587,7 +587,7 @@ impl<'ctx> PyValue<'ctx> {
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "list_len")
                     .unwrap();
-                let len = super::extract_int_result(call_site, "list_len")?;
+                let len = super::extract_int_result(call_site, "list_len");
                 let zero = cg.ctx.i64_type().const_zero();
                 Ok(cg
                     .builder
@@ -603,7 +603,7 @@ impl<'ctx> PyValue<'ctx> {
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "dict_len")
                     .unwrap();
-                let len = super::extract_int_result(call_site, "dict_len")?;
+                let len = super::extract_int_result(call_site, "dict_len");
                 let zero = cg.ctx.i64_type().const_zero();
                 Ok(cg
                     .builder
@@ -619,7 +619,7 @@ impl<'ctx> PyValue<'ctx> {
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "set_len")
                     .unwrap();
-                let len = super::extract_int_result(call_site, "set_len")?;
+                let len = super::extract_int_result(call_site, "set_len");
                 let zero = cg.ctx.i64_type().const_zero();
                 Ok(cg
                     .builder

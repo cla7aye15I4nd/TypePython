@@ -32,7 +32,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bytes(super::extract_ptr_result(
                     call_site,
                     "strcat_bytes",
-                )?))
+                )))
             }
             _ => Err(format!("Cannot concatenate Bytes and {:?}", rhs.ty)),
         },
@@ -52,7 +52,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bytes(super::extract_ptr_result(
                     call_site,
                     "strrepeat_bytes",
-                )?))
+                )))
             }
             _ => Err(format!("Cannot multiply Bytes by {:?}", rhs.ty)),
         },
@@ -69,7 +69,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytescmp",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "strcmp_bytes")?;
+                let result = super::extract_int_result(call_site, "strcmp_bytes");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -90,7 +90,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytescmp",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "strcmp_bytes")?;
+                let result = super::extract_int_result(call_site, "strcmp_bytes");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -112,7 +112,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_lt",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_lt")?;
+                let result = super::extract_int_result(call_site, "bytes_lt");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -132,7 +132,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_le",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_le")?;
+                let result = super::extract_int_result(call_site, "bytes_le");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -152,7 +152,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_gt",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_gt")?;
+                let result = super::extract_int_result(call_site, "bytes_gt");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -172,7 +172,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_ge",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_ge")?;
+                let result = super::extract_int_result(call_site, "bytes_ge");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -196,7 +196,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_contains",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_contains")?;
+                let result = super::extract_int_result(call_site, "bytes_contains");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
@@ -218,7 +218,7 @@ pub fn binary_op<'a, 'ctx>(
                         "bytes_contains",
                     )
                     .unwrap();
-                let result = super::extract_int_result(call_site, "bytes_contains")?;
+                let result = super::extract_int_result(call_site, "bytes_contains");
                 let bool_val = cg
                     .builder
                     .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")

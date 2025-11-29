@@ -28,7 +28,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "dict_eq")?;
+                let result = extract_int_result(call_site, "dict_eq");
                 // Convert i64 to i1 bool
                 let bool_val = cg
                     .builder
@@ -53,7 +53,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "dict_eq")?;
+                let result = extract_int_result(call_site, "dict_eq");
                 // Convert i64 to i1 bool and negate
                 let bool_val = cg
                     .builder
@@ -78,7 +78,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(merge_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_merge")
                     .unwrap();
-                let result = super::extract_ptr_result(call_site, "dict_merge")?;
+                let result = super::extract_ptr_result(call_site, "dict_merge");
                 Ok(PyValue::new(result, lhs.ty.clone(), None))
             }
             _ => Err(format!("Cannot use | between dict and {:?}", rhs.ty)),

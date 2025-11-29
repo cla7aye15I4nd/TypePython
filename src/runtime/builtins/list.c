@@ -112,6 +112,25 @@ void list_append(PyList* list, int64_t value) {
     list->data[list->len++] = value;
 }
 
+// Delete item at specific index (mutates in place, returns void)
+// This is used by the del statement: del list[index]
+void list_delitem(PyList* list, int64_t index) {
+    if (list == NULL || list->len == 0) {
+        return;
+    }
+
+    index = normalize_index(index, list->len);
+    if (index < 0 || index >= list->len) {
+        return;
+    }
+
+    // Shift elements left to fill the gap
+    for (int64_t i = index; i < list->len - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->len--;
+}
+
 // Pop item at specific index (mutates in place, returns the value)
 // If index is -1, pops from the end (default behavior)
 int64_t list_pop(PyList* list, int64_t index) {

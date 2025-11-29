@@ -348,6 +348,7 @@ fn build_statement(pair: Pair<Rule>) -> Statement {
             Rule::break_stmt => Statement::Break,
             Rule::continue_stmt => Statement::Continue,
             Rule::pass_stmt => Statement::Pass,
+            Rule::del_stmt => build_del_stmt(inner),
             Rule::expr_stmt => {
                 Statement::Expr(build_expression(inner.into_inner().next().unwrap()))
             }
@@ -629,6 +630,21 @@ fn build_return_stmt(pair: Pair<Rule>) -> Statement {
     assert_eq!(return_inner.next(), None);
 
     Statement::Return(return_value)
+}
+
+fn build_del_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::DEL);
+
+    let target_pair = inner.next().unwrap();
+    assert_eq!(target_pair.as_rule(), Rule::target);
+    let target = build_assign_target(target_pair);
+
+    // Skip NEWLINE
+    assert_eq!(inner.next(), None);
+
+    Statement::Delete(target)
 }
 
 fn build_expression(pair: Pair<Rule>) -> Expression {

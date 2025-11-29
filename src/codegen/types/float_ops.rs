@@ -81,7 +81,7 @@ pub fn binary_op<'a, 'ctx>(
             Ok(PyValue::float(super::extract_float_result(
                 call_site,
                 "floor_float",
-            )?))
+            )))
         }
         BinaryOp::Mod => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -93,7 +93,7 @@ pub fn binary_op<'a, 'ctx>(
             Ok(PyValue::float(super::extract_float_result(
                 call_site,
                 "mod_float",
-            )?))
+            )))
         }
         BinaryOp::Pow => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -105,7 +105,7 @@ pub fn binary_op<'a, 'ctx>(
             Ok(PyValue::float(super::extract_float_result(
                 call_site,
                 "pow_float",
-            )?))
+            )))
         }
 
         // Comparison

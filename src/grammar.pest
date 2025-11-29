@@ -25,6 +25,7 @@ RETURN   = { "return" ~ kw_boundary }
 BREAK    = { "break" ~ kw_boundary }
 CONTINUE = { "continue" ~ kw_boundary }
 PASS     = { "pass" ~ kw_boundary }
+DEL      = { "del" ~ kw_boundary }
 AND      = { "and" ~ kw_boundary }
 OR       = { "or" ~ kw_boundary }
 NOT      = { "not" ~ kw_boundary }
@@ -53,7 +54,7 @@ SET_TYPE   = { "set" ~ kw_boundary }
 // The type syntax list[int], dict[k, v], set[t] is parsed specially in type contexts
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
-    AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
+    DEL | AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
     INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE
 }
 
@@ -151,6 +152,7 @@ statement = {
     var_decl_stmt
     | aug_assignment_stmt
     | assignment_stmt
+    | del_stmt
     | if_stmt
     | while_stmt
     | for_stmt
@@ -169,6 +171,7 @@ return_stmt = { return_inner ~ NEWLINE }
 break_stmt = { BREAK ~ NEWLINE }
 continue_stmt = { CONTINUE ~ NEWLINE }
 pass_stmt = { PASS ~ NEWLINE }
+del_stmt = { DEL ~ WS+ ~ target ~ NEWLINE }
 expr_stmt = { expression ~ NEWLINE }
 
 // Core statement forms

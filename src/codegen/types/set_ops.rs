@@ -32,7 +32,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(diff_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_difference")
                     .unwrap();
-                let result = extract_ptr_result(call_site, "set_difference")?;
+                let result = extract_ptr_result(call_site, "set_difference");
                 Ok(PyValue::new(
                     result,
                     PyType::Set(Box::new(lhs_elem_type)),
@@ -51,7 +51,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(union_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_union")
                     .unwrap();
-                let result = extract_ptr_result(call_site, "set_union")?;
+                let result = extract_ptr_result(call_site, "set_union");
                 Ok(PyValue::new(
                     result,
                     PyType::Set(Box::new(lhs_elem_type)),
@@ -74,7 +74,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_intersection",
                     )
                     .unwrap();
-                let result = extract_ptr_result(call_site, "set_intersection")?;
+                let result = extract_ptr_result(call_site, "set_intersection");
                 Ok(PyValue::new(
                     result,
                     PyType::Set(Box::new(lhs_elem_type)),
@@ -98,7 +98,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_symmetric_difference",
                     )
                     .unwrap();
-                let result = extract_ptr_result(call_site, "set_symmetric_difference")?;
+                let result = extract_ptr_result(call_site, "set_symmetric_difference");
                 Ok(PyValue::new(
                     result,
                     PyType::Set(Box::new(lhs_elem_type)),
@@ -117,7 +117,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "set_eq")?;
+                let result = extract_int_result(call_site, "set_eq");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -141,7 +141,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "set_eq")?;
+                let result = extract_int_result(call_site, "set_eq");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -169,7 +169,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_proper_subset",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "set_is_proper_subset")?;
+                let result = extract_int_result(call_site, "set_is_proper_subset");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -193,7 +193,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(subset_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_issubset")
                     .unwrap();
-                let result = extract_int_result(call_site, "set_issubset")?;
+                let result = extract_int_result(call_site, "set_issubset");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -222,7 +222,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_proper_superset",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "set_is_proper_superset")?;
+                let result = extract_int_result(call_site, "set_is_proper_superset");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
@@ -250,7 +250,7 @@ pub fn binary_op<'a, 'ctx>(
                         "set_issuperset",
                     )
                     .unwrap();
-                let result = extract_int_result(call_site, "set_issuperset")?;
+                let result = extract_int_result(call_site, "set_issuperset");
                 let bool_val = cg
                     .builder
                     .build_int_compare(

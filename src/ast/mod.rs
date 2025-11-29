@@ -96,6 +96,7 @@ pub enum Statement {
     Break,
     Continue,
     Pass,
+    Delete(AssignTarget),
     Expr(Expression),
 }
 

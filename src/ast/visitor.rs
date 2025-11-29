@@ -60,6 +60,7 @@ pub trait Visitor {
             Statement::Break => self.visit_break(),
             Statement::Continue => self.visit_continue(),
             Statement::Pass => self.visit_pass(),
+            Statement::Delete(target) => self.visit_delete(target),
             Statement::Expr(expr) => self.visit_expr_statement(expr),
         }
     }
@@ -122,6 +123,9 @@ pub trait Visitor {
 
     /// Visit pass statement
     fn visit_pass(&mut self) -> Result<(), Self::Error>;
+
+    /// Visit delete statement
+    fn visit_delete(&mut self, target: &AssignTarget) -> Result<(), Self::Error>;
 
     /// Visit expression statement
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error>;

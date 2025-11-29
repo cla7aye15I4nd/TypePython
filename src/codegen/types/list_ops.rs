@@ -39,7 +39,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(concat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_concat")
                     .unwrap();
-                let result = extract_ptr_result(call_site, "list_concat")?;
+                let result = extract_ptr_result(call_site, "list_concat");
                 Ok(PyValue::new(
                     result,
                     PyType::List(Box::new(lhs_elem_type)),
@@ -58,7 +58,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(repeat_fn, &[lhs_ptr.into(), rhs_int.into()], "list_repeat")
                     .unwrap();
-                let result = extract_ptr_result(call_site, "list_repeat")?;
+                let result = extract_ptr_result(call_site, "list_repeat");
                 Ok(PyValue::new(
                     result,
                     PyType::List(Box::new(lhs_elem_type)),
@@ -77,7 +77,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "list_eq")?;
+                let result = extract_int_result(call_site, "list_eq");
                 // Convert i64 to i1 bool
                 let bool_val = cg
                     .builder
@@ -102,7 +102,7 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_eq")
                     .unwrap();
-                let result = extract_int_result(call_site, "list_eq")?;
+                let result = extract_int_result(call_site, "list_eq");
                 // Convert i64 to i1 bool and negate
                 let bool_val = cg
                     .builder

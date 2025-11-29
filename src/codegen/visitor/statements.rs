@@ -190,4 +190,34 @@ impl<'ctx> CodeGen<'ctx> {
         self.evaluate_expression(expr)?;
         Ok(())
     }
+
+    pub(crate) fn visit_delete_impl(&mut self, target: &AssignTarget) -> Result<(), String> {
+        match target {
+            AssignTarget::Var(_name) => {
+                // del variable - not commonly used, could unset the variable
+                // For now, we don't support deleting simple variables
+                Err("del on variables is not supported".to_string())
+            }
+            AssignTarget::Attribute { .. } => {
+                // del obj.attr - attribute deletion
+                Err("del on attributes is not supported".to_string())
+            }
+            AssignTarget::Subscript { object, index } => {
+                let obj = self.evaluate_expression(object)?;
+                let idx = self.evaluate_expression(index)?;
+
+                match &obj.ty {
+                    PyType::List(_) => {
+                        self.list_delitem(obj.value(), idx.value())?;
+                        Ok(())
+                    }
+                    PyType::Dict(_, _) => {
+                        self.dict_delitem(obj.value(), idx.value())?;
+                        Ok(())
+                    }
+                    _ => Err(format!("del not supported for type {:?}", obj.ty)),
+                }
+            }
+        }
+    }
 }

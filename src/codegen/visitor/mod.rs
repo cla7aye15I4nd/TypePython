@@ -106,6 +106,10 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_pass_impl()
     }
 
+    fn visit_delete(&mut self, target: &AssignTarget) -> Result<(), Self::Error> {
+        self.visit_delete_impl(target)
+    }
+
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error> {
         self.visit_expr_statement_impl(expr)
     }

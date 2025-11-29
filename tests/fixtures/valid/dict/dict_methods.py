@@ -35,3 +35,15 @@ print(v1)
 
 v2: int = d3.get(99, -1)
 print(v2)
+
+# Test setdefault - returns existing value if key exists
+d4: dict[int, int] = {1: 100, 2: 200}
+v3: int = d4.setdefault(1, 999)
+print(v3)
+print(len(d4))
+
+# Test setdefault - sets and returns default if key doesn't exist
+v4: int = d4.setdefault(3, 300)
+print(v4)
+print(len(d4))
+print(d4[3])
