@@ -45,6 +45,18 @@ invalid_test!(
     "tests/fixtures/invalid/bytes_invalid_method.py"
 );
 
+// list has no method 'nonexistent'
+invalid_test!(
+    test_list_invalid_method,
+    "tests/fixtures/invalid/list_invalid_method.py"
+);
+
+// dict has no method 'nonexistent'
+invalid_test!(
+    test_dict_invalid_method,
+    "tests/fixtures/invalid/dict_invalid_method.py"
+);
+
 // ============================================================================
 // Attribute Access Error Tests
 // ============================================================================

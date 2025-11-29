@@ -506,6 +506,10 @@ test_case!(
     "tests/fixtures/valid/list/list_operations.py"
 );
 test_case!(test_list_sort, "tests/fixtures/valid/list/list_sort.py");
+test_case!(
+    test_list_builtin,
+    "tests/fixtures/valid/list/list_builtin.py"
+);
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
 test_case!(
     test_dict_methods,
@@ -518,6 +522,10 @@ test_case!(
 test_case!(
     test_dict_setdefault,
     "tests/fixtures/valid/dict/dict_setdefault.py"
+);
+test_case!(
+    test_dict_builtin,
+    "tests/fixtures/valid/dict/dict_builtin.py"
 );
 test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");
 test_case!(
