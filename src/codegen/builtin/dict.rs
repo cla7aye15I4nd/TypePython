@@ -119,30 +119,6 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    /// Check if key exists: key in dict
-    pub fn dict_contains(
-        &mut self,
-        dict_val: BasicValueEnum<'ctx>,
-        key: BasicValueEnum<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
-        let contains_fn = self.get_or_declare_c_builtin("dict_contains");
-        let call = self
-            .builder
-            .build_call(contains_fn, &[dict_val.into(), key.into()], "dict_contains")
-            .unwrap();
-        self.extract_int_call_result(call)
-    }
-
-    /// Get the length of a dict
-    pub fn dict_len(&mut self, dict_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
-        let len_fn = self.get_or_declare_c_builtin("dict_len");
-        let call = self
-            .builder
-            .build_call(len_fn, &[dict_val.into()], "dict_len")
-            .unwrap();
-        self.extract_int_call_result(call)
-    }
-
     // ========================================================================
     // dict() builtin function
     // ========================================================================

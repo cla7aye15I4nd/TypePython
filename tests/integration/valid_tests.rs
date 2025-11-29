@@ -483,6 +483,15 @@ test_case!(
     test_bytes_methods,
     "tests/fixtures/valid/builtins/bytes_methods.py"
 );
+test_case!(test_bytes_case, "tests/fixtures/valid/builtins/bytes_case.py");
+test_case!(
+    test_bytes_predicates,
+    "tests/fixtures/valid/builtins/bytes_predicates.py"
+);
+test_case!(
+    test_bytes_padding,
+    "tests/fixtures/valid/builtins/bytes_padding.py"
+);
 test_case!(
     test_math_extra,
     "tests/fixtures/valid/builtins/math_extra.py"
@@ -510,14 +519,8 @@ test_case!(
     test_list_builtin,
     "tests/fixtures/valid/list/list_builtin.py"
 );
-test_case!(
-    test_list_remove,
-    "tests/fixtures/valid/list/list_remove.py"
-);
-test_case!(
-    test_list_extend,
-    "tests/fixtures/valid/list/list_extend.py"
-);
+test_case!(test_list_remove, "tests/fixtures/valid/list/list_remove.py");
+test_case!(test_list_extend, "tests/fixtures/valid/list/list_extend.py");
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
 test_case!(
     test_dict_methods,
@@ -535,10 +538,7 @@ test_case!(
     test_dict_builtin,
     "tests/fixtures/valid/dict/dict_builtin.py"
 );
-test_case!(
-    test_dict_update,
-    "tests/fixtures/valid/dict/dict_update.py"
-);
+test_case!(test_dict_update, "tests/fixtures/valid/dict/dict_update.py");
 test_case!(test_dict_pop, "tests/fixtures/valid/dict/dict_pop.py");
 test_case!(
     test_dict_len_and_in,
@@ -552,6 +552,18 @@ test_case!(
 test_case!(
     test_set_update_methods,
     "tests/fixtures/valid/set/set_update_methods.py"
+);
+test_case!(
+    test_set_discard,
+    "tests/fixtures/valid/set/set_discard.py"
+);
+test_case!(
+    test_set_comparisons,
+    "tests/fixtures/valid/set/set_comparisons.py"
+);
+test_case!(
+    test_set_all_methods,
+    "tests/fixtures/valid/set/set_all_methods.py"
 );
 
 // Pressure tests (10^7 elements)

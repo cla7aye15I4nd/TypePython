@@ -9,7 +9,6 @@
 use crate::ast::Expression;
 use crate::codegen::CodeGen;
 use crate::types::{FunctionInfo, PyType, PyValue};
-use inkwell::values::BasicValueEnum;
 
 /// Maps method name to (builtin_symbol, return_type)
 fn get_set_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str, PyType)> {
@@ -77,53 +76,50 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     // ========================================================================
-    // Set membership check (e.g., x in my_set)
-    // ========================================================================
-
-    /// Check if element exists: elem in set
-    pub fn set_contains(
-        &mut self,
-        set_val: BasicValueEnum<'ctx>,
-        elem: BasicValueEnum<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
-        let contains_fn = self.get_or_declare_c_builtin("set_contains");
-        let call = self
-            .builder
-            .build_call(contains_fn, &[set_val.into(), elem.into()], "set_contains")
-            .unwrap();
-        self.extract_int_call_result(call)
-    }
-
-    /// Get the length of a set
-    pub fn set_len(&mut self, set_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
-        let len_fn = self.get_or_declare_c_builtin("set_len");
-        let call = self
-            .builder
-            .build_call(len_fn, &[set_val.into()], "set_len")
-            .unwrap();
-        self.extract_int_call_result(call)
-    }
-
-    // ========================================================================
     // set() builtin function
     // ========================================================================
 
-    /// Generate set() builtin call - creates an empty set
+    /// Generate set() builtin call
     /// set() -> empty set[int] (default element type)
+    /// set(existing_set) -> copy of existing_set
     pub fn generate_set_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
-        if !args.is_empty() {
-            return Err("set() takes no arguments (use set literal {1, 2, 3} instead)".to_string());
+        if args.is_empty() {
+            // Create empty set with default int element type
+            let set_new_fn = self.get_or_declare_c_builtin("set_new");
+            let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
+            let set_ptr = self.extract_ptr_call_result(call_site)?;
+
+            return Ok(PyValue::new(
+                set_ptr.value(),
+                PyType::Set(Box::new(PyType::Int)),
+                None,
+            ));
         }
 
-        // Create empty set with default int element type
-        let set_new_fn = self.get_or_declare_c_builtin("set_new");
-        let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
-        let set_ptr = self.extract_ptr_call_result(call_site)?;
+        if args.len() != 1 {
+            return Err("set() takes at most 1 argument".to_string());
+        }
 
-        Ok(PyValue::new(
-            set_ptr.value(),
-            PyType::Set(Box::new(PyType::Int)),
-            None,
-        ))
+        // Generate the argument value
+        let arg_val = self.evaluate_expression(&args[0])?;
+
+        // If argument is a set, create a copy
+        if let PyType::Set(elem_type) = &arg_val.ty {
+            let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
+            let call_site = self.builder.build_call(
+                set_copy_fn,
+                &[arg_val.value().into()],
+                "set_copy"
+            ).unwrap();
+            let set_ptr = self.extract_ptr_call_result(call_site)?;
+
+            return Ok(PyValue::new(
+                set_ptr.value(),
+                PyType::Set(elem_type.clone()),
+                None,
+            ));
+        }
+
+        Err(format!("set() argument must be a set, got {:?}", arg_val.ty))
     }
 }
