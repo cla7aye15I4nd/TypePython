@@ -430,6 +430,81 @@ invalid_test!(
 );
 
 // ============================================================================
+// List Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot add list and Int
+invalid_test!(test_list_add_int, "tests/fixtures/invalid/list_add_int.py");
+
+// Cannot multiply list by Bytes
+invalid_test!(
+    test_list_mul_bytes,
+    "tests/fixtures/invalid/list_mul_bytes.py"
+);
+
+// Cannot use unary - on list
+invalid_test!(test_list_neg, "tests/fixtures/invalid/list_neg.py");
+
+// Cannot subtract list from list
+invalid_test!(
+    test_list_sub_list,
+    "tests/fixtures/invalid/list_sub_list.py"
+);
+
+// ============================================================================
+// Set Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot subtract Int from set
+invalid_test!(test_set_sub_int, "tests/fixtures/invalid/set_sub_int.py");
+
+// Cannot use | between set and Int
+invalid_test!(
+    test_set_bitor_int,
+    "tests/fixtures/invalid/set_bitor_int.py"
+);
+
+// Cannot use & between set and Int
+invalid_test!(
+    test_set_bitand_int,
+    "tests/fixtures/invalid/set_bitand_int.py"
+);
+
+// Cannot use ^ between set and Int
+invalid_test!(
+    test_set_bitxor_int,
+    "tests/fixtures/invalid/set_bitxor_int.py"
+);
+
+// Cannot compare set with Int using <
+invalid_test!(test_set_lt_int, "tests/fixtures/invalid/set_lt_int.py");
+
+// Cannot use unary - on set
+invalid_test!(test_set_neg, "tests/fixtures/invalid/set_neg.py");
+
+// Cannot add set to set
+invalid_test!(test_set_add_set, "tests/fixtures/invalid/set_add_set.py");
+
+// ============================================================================
+// Dict Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot use | between dict and Int
+invalid_test!(
+    test_dict_bitor_int,
+    "tests/fixtures/invalid/dict_bitor_int.py"
+);
+
+// Cannot add dict to dict
+invalid_test!(
+    test_dict_add_dict,
+    "tests/fixtures/invalid/dict_add_dict.py"
+);
+
+// Cannot use unary - on dict
+invalid_test!(test_dict_neg, "tests/fixtures/invalid/dict_neg.py");
+
+// ============================================================================
 // Phase 2: Type Error Tests
 // ============================================================================
 
