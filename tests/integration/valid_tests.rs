@@ -483,7 +483,10 @@ test_case!(
     test_bytes_methods,
     "tests/fixtures/valid/builtins/bytes_methods.py"
 );
-test_case!(test_bytes_case, "tests/fixtures/valid/builtins/bytes_case.py");
+test_case!(
+    test_bytes_case,
+    "tests/fixtures/valid/builtins/bytes_case.py"
+);
 test_case!(
     test_bytes_predicates,
     "tests/fixtures/valid/builtins/bytes_predicates.py"
@@ -553,10 +556,7 @@ test_case!(
     test_set_update_methods,
     "tests/fixtures/valid/set/set_update_methods.py"
 );
-test_case!(
-    test_set_discard,
-    "tests/fixtures/valid/set/set_discard.py"
-);
+test_case!(test_set_discard, "tests/fixtures/valid/set/set_discard.py");
 test_case!(
     test_set_comparisons,
     "tests/fixtures/valid/set/set_comparisons.py"

@@ -106,11 +106,10 @@ impl<'ctx> CodeGen<'ctx> {
         // If argument is a set, create a copy
         if let PyType::Set(elem_type) = &arg_val.ty {
             let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
-            let call_site = self.builder.build_call(
-                set_copy_fn,
-                &[arg_val.value().into()],
-                "set_copy"
-            ).unwrap();
+            let call_site = self
+                .builder
+                .build_call(set_copy_fn, &[arg_val.value().into()], "set_copy")
+                .unwrap();
             let set_ptr = self.extract_ptr_call_result(call_site)?;
 
             return Ok(PyValue::new(
@@ -120,6 +119,9 @@ impl<'ctx> CodeGen<'ctx> {
             ));
         }
 
-        Err(format!("set() argument must be a set, got {:?}", arg_val.ty))
+        Err(format!(
+            "set() argument must be a set, got {:?}",
+            arg_val.ty
+        ))
     }
 }
