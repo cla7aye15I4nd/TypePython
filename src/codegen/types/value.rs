@@ -155,7 +155,7 @@ impl<'ctx> FunctionInfo<'ctx> {
 }
 
 /// Module metadata containing its members (functions and submodules)
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ModuleInfo<'ctx> {
     /// Module name (e.g., "math" or "<builtin>.math")
     pub name: String,
@@ -218,23 +218,6 @@ impl PyType {
             Type::Set(elem_ty) => Ok(PyType::Set(Box::new(PyType::from_ast_type(elem_ty)?))),
             Type::Tuple(_) => Err("Tuple type not yet implemented".to_string()),
             Type::Custom(name) => Err(format!("Custom type '{}' not yet implemented", name)),
-        }
-    }
-
-    /// Get a debug representation of the type
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            PyType::Int => "Int",
-            PyType::Float => "Float",
-            PyType::Bool => "Bool",
-            PyType::Bytes => "Bytes",
-            PyType::None => "None",
-            PyType::List(_) => "List",
-            PyType::Dict(_, _) => "Dict",
-            PyType::Set(_) => "Set",
-            PyType::Function => "Function",
-            PyType::Module => "Module",
-            PyType::Macro => "Macro",
         }
     }
 
@@ -735,29 +718,6 @@ impl<'ctx> PyValue<'ctx> {
         match &self.inner {
             PyValueInner::Macro(kind) => Ok(*kind),
             _ => Err(format!("Expected macro, got {:?}", self.ty)),
-        }
-    }
-}
-
-impl std::fmt::Debug for PyValue<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
-            PyValueInner::Runtime { ptr, .. } => {
-                if ptr.is_some() {
-                    write!(f, "PyValue::{}(lvalue)", self.ty.type_name())
-                } else {
-                    write!(f, "PyValue::{}", self.ty.type_name())
-                }
-            }
-            PyValueInner::Function(info) => {
-                write!(f, "PyValue::Function({})", info.mangled_name)
-            }
-            PyValueInner::Module(info) => {
-                write!(f, "PyValue::Module({})", info.name)
-            }
-            PyValueInner::Macro(kind) => {
-                write!(f, "PyValue::Macro({:?})", kind)
-            }
         }
     }
 }
