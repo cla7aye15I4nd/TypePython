@@ -33,7 +33,11 @@ pub fn binary_op<'a, 'ctx>(
                     .build_call(diff_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_difference")
                     .unwrap();
                 let result = extract_ptr_result(call_site, "set_difference")?;
-                Ok(PyValue::new(result, PyType::Set(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::Set(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot subtract {:?} from set", rhs.ty)),
         },
@@ -48,7 +52,11 @@ pub fn binary_op<'a, 'ctx>(
                     .build_call(union_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_union")
                     .unwrap();
                 let result = extract_ptr_result(call_site, "set_union")?;
-                Ok(PyValue::new(result, PyType::Set(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::Set(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot use | between set and {:?}", rhs.ty)),
         },
@@ -67,7 +75,11 @@ pub fn binary_op<'a, 'ctx>(
                     )
                     .unwrap();
                 let result = extract_ptr_result(call_site, "set_intersection")?;
-                Ok(PyValue::new(result, PyType::Set(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::Set(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot use & between set and {:?}", rhs.ty)),
         },
@@ -87,7 +99,11 @@ pub fn binary_op<'a, 'ctx>(
                     )
                     .unwrap();
                 let result = extract_ptr_result(call_site, "set_symmetric_difference")?;
-                Ok(PyValue::new(result, PyType::Set(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::Set(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot use ^ between set and {:?}", rhs.ty)),
         },

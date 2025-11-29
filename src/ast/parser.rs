@@ -303,7 +303,11 @@ fn build_dict_type(pair: Pair<Rule>) -> Type {
         .into_inner()
         .filter(|p| p.as_rule() == Rule::type_spec)
         .collect();
-    assert_eq!(type_specs.len(), 2, "Dict type requires exactly 2 type parameters");
+    assert_eq!(
+        type_specs.len(),
+        2,
+        "Dict type requires exactly 2 type parameters"
+    );
     let key_type = build_type(type_specs[0].clone());
     let value_type = build_type(type_specs[1].clone());
     Type::Dict(Box::new(key_type), Box::new(value_type))

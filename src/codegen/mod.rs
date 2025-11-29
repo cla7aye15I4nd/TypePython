@@ -361,7 +361,12 @@ impl<'ctx> CodeGen<'ctx> {
                                     len
                                 };
 
-                                self.list_slice(obj_val, start_val.value(), stop_val.value(), &elem_type)
+                                self.list_slice(
+                                    obj_val,
+                                    start_val.value(),
+                                    stop_val.value(),
+                                    &elem_type,
+                                )
                             }
                         }
                         _ => Err(format!(

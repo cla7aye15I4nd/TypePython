@@ -492,19 +492,10 @@ test_case!(
 // Container Types Tests
 // ============================================================================
 
-test_case!(
-    test_list_basic,
-    "tests/fixtures/valid/list/list_basic.py"
-);
+test_case!(test_list_basic, "tests/fixtures/valid/list/list_basic.py");
 test_case!(
     test_list_methods,
     "tests/fixtures/valid/list/list_methods.py"
 );
-test_case!(
-    test_dict_basic,
-    "tests/fixtures/valid/dict/dict_basic.py"
-);
-test_case!(
-    test_set_basic,
-    "tests/fixtures/valid/set/set_basic.py"
-);
+test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
+test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");

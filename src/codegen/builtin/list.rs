@@ -17,9 +17,21 @@ use inkwell::values::BasicValueEnum;
 fn get_list_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str, PyType, bool)> {
     match name {
         // Mutating methods that return new list pointer
-        "append" => Some(("list_append", PyType::List(Box::new(elem_type.clone())), true)),
-        "insert" => Some(("list_insert", PyType::List(Box::new(elem_type.clone())), true)),
-        "extend" => Some(("list_extend", PyType::List(Box::new(elem_type.clone())), true)),
+        "append" => Some((
+            "list_append",
+            PyType::List(Box::new(elem_type.clone())),
+            true,
+        )),
+        "insert" => Some((
+            "list_insert",
+            PyType::List(Box::new(elem_type.clone())),
+            true,
+        )),
+        "extend" => Some((
+            "list_extend",
+            PyType::List(Box::new(elem_type.clone())),
+            true,
+        )),
 
         // Methods returning values
         "pop" => Some(("list_pop", PyType::Int, false)),
@@ -32,7 +44,11 @@ fn get_list_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str,
         "reverse" => Some(("list_reverse", PyType::None, false)),
 
         // Methods returning new list
-        "copy" => Some(("list_copy", PyType::List(Box::new(elem_type.clone())), false)),
+        "copy" => Some((
+            "list_copy",
+            PyType::List(Box::new(elem_type.clone())),
+            false,
+        )),
 
         _ => None,
     }
@@ -82,11 +98,7 @@ impl<'ctx> CodeGen<'ctx> {
         let getitem_fn = self.get_or_declare_c_builtin("list_getitem");
         let call = self
             .builder
-            .build_call(
-                getitem_fn,
-                &[list_val.into(), index.into()],
-                "list_getitem",
-            )
+            .build_call(getitem_fn, &[list_val.into(), index.into()], "list_getitem")
             .unwrap();
         let result = self.extract_int_call_result(call)?;
         // For now, all elements are stored as i64

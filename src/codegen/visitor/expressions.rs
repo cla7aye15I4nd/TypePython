@@ -174,7 +174,11 @@ impl<'ctx> CodeGen<'ctx> {
             self.builder
                 .build_call(
                     dict_setitem_fn,
-                    &[dict_ptr.into(), key_val.value().into(), val_val.value().into()],
+                    &[
+                        dict_ptr.into(),
+                        key_val.value().into(),
+                        val_val.value().into(),
+                    ],
                     "dict_setitem",
                 )
                 .unwrap();
@@ -194,10 +198,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         // Create a new empty set
         let set_new_fn = self.get_or_declare_c_builtin("set_new");
-        let call_site = self
-            .builder
-            .build_call(set_new_fn, &[], "set_new")
-            .unwrap();
+        let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
         let set_ptr = self.extract_ptr_call_result(call_site)?.value();
 
         // Infer element type from first element (or default to Int for empty set)
@@ -214,7 +215,11 @@ impl<'ctx> CodeGen<'ctx> {
             let elem_val = self.evaluate_expression(elem)?;
             // TODO: Type check that elem_val.ty matches elem_type
             self.builder
-                .build_call(set_add_fn, &[set_ptr.into(), elem_val.value().into()], "set_add")
+                .build_call(
+                    set_add_fn,
+                    &[set_ptr.into(), elem_val.value().into()],
+                    "set_add",
+                )
                 .unwrap();
         }
 

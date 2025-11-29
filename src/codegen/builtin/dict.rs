@@ -126,11 +126,7 @@ impl<'ctx> CodeGen<'ctx> {
         let contains_fn = self.get_or_declare_c_builtin("dict_contains");
         let call = self
             .builder
-            .build_call(
-                contains_fn,
-                &[dict_val.into(), key.into()],
-                "dict_contains",
-            )
+            .build_call(contains_fn, &[dict_val.into(), key.into()], "dict_contains")
             .unwrap();
         self.extract_int_call_result(call)
     }

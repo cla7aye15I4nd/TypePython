@@ -40,7 +40,11 @@ pub fn binary_op<'a, 'ctx>(
                     .build_call(concat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_concat")
                     .unwrap();
                 let result = extract_ptr_result(call_site, "list_concat")?;
-                Ok(PyValue::new(result, PyType::List(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::List(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot add list and {:?}", rhs.ty)),
         },
@@ -55,7 +59,11 @@ pub fn binary_op<'a, 'ctx>(
                     .build_call(repeat_fn, &[lhs_ptr.into(), rhs_int.into()], "list_repeat")
                     .unwrap();
                 let result = extract_ptr_result(call_site, "list_repeat")?;
-                Ok(PyValue::new(result, PyType::List(Box::new(lhs_elem_type)), None))
+                Ok(PyValue::new(
+                    result,
+                    PyType::List(Box::new(lhs_elem_type)),
+                    None,
+                ))
             }
             _ => Err(format!("Cannot multiply list by {:?}", rhs.ty)),
         },
