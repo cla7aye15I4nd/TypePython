@@ -2,12 +2,35 @@
 
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use tpy::pipeline::{compile, CompileOptions};
+
+/// Verify that Python3 also considers this code invalid (runtime error)
+fn verify_python3_fails(test_path: &str) {
+    let output = Command::new("python3")
+        .arg(test_path)
+        .output()
+        .expect("Failed to run python3");
+
+    if output.status.success() {
+        panic!(
+            "Expected Python3 to fail for {}, but it succeeded.\n\
+             This test case is valid Python3 code and should be removed.\n\
+             stdout: {}\nstderr: {}",
+            test_path,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
 
 /// Compile a test file and verify it fails (doesn't return success)
 fn compile_should_fail(test_path: &str) {
     let path = Path::new(test_path);
     let exe_path = path.with_extension("out");
+
+    // First verify this is also invalid in Python3
+    verify_python3_fails(test_path);
 
     // Clean up previous artifacts
     let _ = fs::remove_file(&exe_path);
@@ -226,6 +249,175 @@ invalid_test!(
     test_float_add_bytes,
     "tests/fixtures/invalid/float_add_bytes.py"
 );
+
+// Cannot subtract Bytes from Float
+invalid_test!(
+    test_float_sub_bytes,
+    "tests/fixtures/invalid/float_sub_bytes.py"
+);
+
+// Cannot multiply Float by Bytes
+invalid_test!(
+    test_float_mul_bytes,
+    "tests/fixtures/invalid/float_mul_bytes.py"
+);
+
+// Cannot divide Float by Bytes
+invalid_test!(
+    test_float_div_bytes,
+    "tests/fixtures/invalid/float_div_bytes.py"
+);
+
+// Cannot floor divide Float by Bytes
+invalid_test!(
+    test_float_floordiv_bytes,
+    "tests/fixtures/invalid/float_floordiv_bytes.py"
+);
+
+// Cannot compute Float modulo Bytes
+invalid_test!(
+    test_float_mod_bytes,
+    "tests/fixtures/invalid/float_mod_bytes.py"
+);
+
+// Cannot raise Float to Bytes power
+invalid_test!(
+    test_float_pow_bytes,
+    "tests/fixtures/invalid/float_pow_bytes.py"
+);
+
+// Cannot bitwise AND Float and Int
+invalid_test!(
+    test_float_bitand_int,
+    "tests/fixtures/invalid/float_bitand_int.py"
+);
+
+// Cannot bitwise OR Float and Int
+invalid_test!(
+    test_float_bitor_int,
+    "tests/fixtures/invalid/float_bitor_int.py"
+);
+
+// Cannot bitwise XOR Float and Int
+invalid_test!(
+    test_float_bitxor_int,
+    "tests/fixtures/invalid/float_bitxor_int.py"
+);
+
+// Cannot left shift Float
+invalid_test!(
+    test_float_lshift_int,
+    "tests/fixtures/invalid/float_lshift_int.py"
+);
+
+// Cannot right shift Float
+invalid_test!(
+    test_float_rshift_int,
+    "tests/fixtures/invalid/float_rshift_int.py"
+);
+
+// Cannot use bitwise NOT on Float
+invalid_test!(test_float_bitnot, "tests/fixtures/invalid/float_bitnot.py");
+
+// ============================================================================
+// Int Extended Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot raise Int to Bytes power
+invalid_test!(
+    test_int_pow_bytes,
+    "tests/fixtures/invalid/int_pow_bytes.py"
+);
+
+// Cannot bitwise AND Int and Bytes
+invalid_test!(
+    test_int_bitand_bytes,
+    "tests/fixtures/invalid/int_bitand_bytes.py"
+);
+
+// Cannot bitwise OR Int and Bytes
+invalid_test!(
+    test_int_bitor_bytes,
+    "tests/fixtures/invalid/int_bitor_bytes.py"
+);
+
+// Cannot bitwise XOR Int and Bytes
+invalid_test!(
+    test_int_bitxor_bytes,
+    "tests/fixtures/invalid/int_bitxor_bytes.py"
+);
+
+// Cannot left shift Int by Bytes
+invalid_test!(
+    test_int_lshift_bytes,
+    "tests/fixtures/invalid/int_lshift_bytes.py"
+);
+
+// Cannot right shift Int by Bytes
+invalid_test!(
+    test_int_rshift_bytes,
+    "tests/fixtures/invalid/int_rshift_bytes.py"
+);
+
+// Cannot use 'in' with Int and Int
+invalid_test!(test_int_in_int, "tests/fixtures/invalid/int_in_int.py");
+
+// Cannot use 'not in' with Int and Int
+invalid_test!(
+    test_int_notin_int,
+    "tests/fixtures/invalid/int_notin_int.py"
+);
+
+// ============================================================================
+// Bool Extended Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot use 'in' with Bool and Int
+invalid_test!(test_bool_in_int, "tests/fixtures/invalid/bool_in_int.py");
+
+// Cannot use 'not in' with Bool and Int
+invalid_test!(
+    test_bool_notin_int,
+    "tests/fixtures/invalid/bool_notin_int.py"
+);
+
+// ============================================================================
+// Bytes Extended Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot use 'in' with Bytes and Int
+invalid_test!(test_bytes_in_int, "tests/fixtures/invalid/bytes_in_int.py");
+
+// Cannot use 'not in' with Bytes and Int
+invalid_test!(
+    test_bytes_notin_int,
+    "tests/fixtures/invalid/bytes_notin_int.py"
+);
+
+// Cannot subtract Bytes from Bytes
+invalid_test!(
+    test_bytes_sub_bytes,
+    "tests/fixtures/invalid/bytes_sub_bytes.py"
+);
+
+// Cannot use unary - on Bytes
+invalid_test!(test_bytes_neg, "tests/fixtures/invalid/bytes_neg.py");
+
+// ============================================================================
+// None Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot add None and Int
+invalid_test!(test_none_add_int, "tests/fixtures/invalid/none_add_int.py");
+
+// Cannot subtract Int from None
+invalid_test!(test_none_sub_int, "tests/fixtures/invalid/none_sub_int.py");
+
+// Cannot multiply None and Int
+invalid_test!(test_none_mul_int, "tests/fixtures/invalid/none_mul_int.py");
+
+// Cannot use unary - on None
+invalid_test!(test_none_neg, "tests/fixtures/invalid/none_neg.py");
 
 // ============================================================================
 // Preprocessor Error Tests
