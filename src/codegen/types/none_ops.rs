@@ -30,7 +30,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot compare None with {:?}", rhs.ty)),
+            // None is never equal to other types
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::Ne => match &rhs.ty {
             PyType::None => Ok(PyValue::bool(
@@ -44,7 +45,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot compare None with {:?}", rhs.ty)),
+            // None is always not equal to other types
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         BinaryOp::Is => match &rhs.ty {
             PyType::None => Ok(PyValue::bool(

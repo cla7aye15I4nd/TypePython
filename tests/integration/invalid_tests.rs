@@ -782,3 +782,113 @@ invalid_test!(
     test_undefined_function,
     "tests/fixtures/invalid/type_errors/undefined_func.py"
 );
+
+// ============================================================================
+// Float Bitwise and Logical Operator Error Tests
+// ============================================================================
+
+// Bitwise AND on float (not supported)
+invalid_test!(
+    test_float_bitwise_ops,
+    "tests/fixtures/invalid/float_bitwise_ops.py"
+);
+
+// ============================================================================
+// Int Bitwise with Float Error Tests
+// ============================================================================
+
+// Int bitwise AND with float (not supported)
+invalid_test!(
+    test_int_bitwise_float,
+    "tests/fixtures/invalid/int_bitwise_float.py"
+);
+
+// Int left shift with float (not supported)
+invalid_test!(
+    test_int_lshift_float,
+    "tests/fixtures/invalid/int_lshift_float.py"
+);
+
+// Int right shift with float (not supported)
+invalid_test!(
+    test_int_rshift_float,
+    "tests/fixtures/invalid/int_rshift_float.py"
+);
+
+// ============================================================================
+// Bytes Unsupported Operator Error Tests
+// ============================================================================
+
+// Bytes subtraction (not supported)
+invalid_test!(
+    test_bytes_sub_int,
+    "tests/fixtures/invalid/bytes_sub_int.py"
+);
+
+// Bytes division (not supported)
+invalid_test!(
+    test_bytes_div_bytes,
+    "tests/fixtures/invalid/bytes_div_bytes.py"
+);
+
+// Bytes bitwise AND (not supported)
+invalid_test!(
+    test_bytes_bitand_bytes,
+    "tests/fixtures/invalid/bytes_bitand_bytes.py"
+);
+
+// Bytes bitwise OR (not supported)
+invalid_test!(
+    test_bytes_bitor_bytes,
+    "tests/fixtures/invalid/bytes_bitor_bytes.py"
+);
+
+// Bytes bitwise XOR (not supported)
+invalid_test!(
+    test_bytes_bitxor_bytes,
+    "tests/fixtures/invalid/bytes_bitxor_bytes.py"
+);
+
+// Bytes left shift (not supported)
+invalid_test!(
+    test_bytes_lshift_bytes,
+    "tests/fixtures/invalid/bytes_lshift_bytes.py"
+);
+
+// Bytes right shift (not supported)
+invalid_test!(
+    test_bytes_rshift_bytes,
+    "tests/fixtures/invalid/bytes_rshift_bytes.py"
+);
+
+// ============================================================================
+// Int Bitwise with Float Extended Error Tests
+// ============================================================================
+
+// Int bitwise OR with float (not supported)
+invalid_test!(
+    test_int_bitor_float,
+    "tests/fixtures/invalid/int_bitor_float.py"
+);
+
+// Int bitwise XOR with float (not supported)
+invalid_test!(
+    test_int_bitxor_float,
+    "tests/fixtures/invalid/int_bitxor_float.py"
+);
+
+// ============================================================================
+// Dict and Set Constructor Error Tests
+// ============================================================================
+
+// Cannot call dict() with arguments
+invalid_test!(
+    test_dict_with_args,
+    "tests/fixtures/invalid/dict_with_args.py"
+);
+
+// Cannot call set() with arguments
+invalid_test!(
+    test_set_with_args,
+    "tests/fixtures/invalid/set_with_args.py"
+);

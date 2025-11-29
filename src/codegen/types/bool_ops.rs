@@ -112,7 +112,7 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            PyType::Int => {
+            PyType::Int | PyType::Float => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
@@ -134,7 +134,7 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            PyType::Int => {
+            PyType::Int | PyType::Float => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")

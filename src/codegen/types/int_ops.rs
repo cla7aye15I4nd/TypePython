@@ -28,6 +28,18 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_int_add(lhs_int, rhs_int, "add").unwrap();
+                Ok(PyValue::int(result.into()))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -45,6 +57,18 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_int_sub(lhs_int, rhs_int, "sub").unwrap();
+                Ok(PyValue::int(result.into()))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -60,6 +84,18 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_int_mul(lhs_int, rhs.runtime_value().into_int_value(), "mul")
                     .unwrap();
+                Ok(PyValue::int(result.into()))
+            }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_int_mul(lhs_int, rhs_int, "mul").unwrap();
                 Ok(PyValue::int(result.into()))
             }
             PyType::Float => {
@@ -239,6 +275,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::EQ, lhs_int, rhs_int, "eq")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -260,6 +312,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::NE, lhs_int, rhs_int, "ne")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -281,6 +349,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::SLT, lhs_int, rhs_int, "lt")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -302,6 +386,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::SLE, lhs_int, rhs_int, "le")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -323,6 +423,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::SGT, lhs_int, rhs_int, "gt")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -344,6 +460,22 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::SGE, lhs_int, rhs_int, "ge")
+                        .unwrap()
+                        .into(),
+                ))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder

@@ -727,6 +727,55 @@ sds bytes_lower(const char* s) {
     return result;
 }
 
+// Capitalize: first character uppercase, rest lowercase (returns new bytes)
+sds bytes_capitalize(const char* s) {
+    sds result = sdsnew(s);
+    if (result == NULL) return NULL;
+    size_t len = sdslen(result);
+    if (len > 0) {
+        result[0] = toupper((unsigned char)result[0]);
+        for (size_t i = 1; i < len; i++) {
+            result[i] = tolower((unsigned char)result[i]);
+        }
+    }
+    return result;
+}
+
+// Title case: uppercase after whitespace, lowercase elsewhere (returns new bytes)
+sds bytes_title(const char* s) {
+    sds result = sdsnew(s);
+    if (result == NULL) return NULL;
+    size_t len = sdslen(result);
+    int in_word = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (isspace((unsigned char)result[i])) {
+            in_word = 0;
+        } else if (!in_word) {
+            result[i] = toupper((unsigned char)result[i]);
+            in_word = 1;
+        } else {
+            result[i] = tolower((unsigned char)result[i]);
+        }
+    }
+    return result;
+}
+
+// Swap case: uppercase to lowercase and vice versa (returns new bytes)
+sds bytes_swapcase(const char* s) {
+    sds result = sdsnew(s);
+    if (result == NULL) return NULL;
+    size_t len = sdslen(result);
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = result[i];
+        if (isupper(c)) {
+            result[i] = tolower(c);
+        } else if (islower(c)) {
+            result[i] = toupper(c);
+        }
+    }
+    return result;
+}
+
 // Strip whitespace from both ends (returns new bytes)
 sds bytes_strip(const char* s) {
     sds result = sdsnew(s);

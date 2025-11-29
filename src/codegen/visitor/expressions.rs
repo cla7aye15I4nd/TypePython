@@ -14,8 +14,9 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(PyValue::float(ir_val))
     }
 
-    pub(crate) fn visit_str_lit_impl(&mut self, _val: &str) -> Result<PyValue<'ctx>, String> {
-        todo!("str type (use bytes instead)")
+    pub(crate) fn visit_str_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {
+        // Treat str literals as bytes (since we don't have a separate str type)
+        self.visit_bytes_lit_impl(val)
     }
 
     pub(crate) fn visit_bytes_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {

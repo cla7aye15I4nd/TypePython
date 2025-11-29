@@ -292,5 +292,5 @@ void print_dict(PyDict* dict) {
             }
         }
     }
-    printf("}\n");
+    printf("}");
 }

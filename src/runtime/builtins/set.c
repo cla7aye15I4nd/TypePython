@@ -415,6 +415,10 @@ void set_symmetric_difference_update(PySet* set, PySet* other) {
 // ============================================================================
 
 void print_set(PySet* set) {
+    if (set != NULL && set->len == 0) {
+        printf("set()");
+        return;
+    }
     printf("{");
     if (set != NULL) {
         int first = 1;
@@ -426,5 +430,5 @@ void print_set(PySet* set) {
             }
         }
     }
-    printf("}\n");
+    printf("}");
 }

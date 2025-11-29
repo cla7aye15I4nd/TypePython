@@ -112,13 +112,32 @@ void list_append(PyList* list, int64_t value) {
     list->data[list->len++] = value;
 }
 
-// Pop the last item from the list
-int64_t list_pop(PyList* list) {
+// Pop item at specific index (mutates in place, returns the value)
+// If index is -1, pops from the end (default behavior)
+int64_t list_pop(PyList* list, int64_t index) {
     if (list == NULL || list->len == 0) {
         // TODO: Error handling
         return 0;
     }
-    return list->data[--list->len];
+
+    // Default: pop from end
+    if (index == -1) {
+        return list->data[--list->len];
+    }
+
+    index = normalize_index(index, list->len);
+    if (index < 0 || index >= list->len) {
+        // TODO: Error handling for out of bounds
+        return 0;
+    }
+
+    int64_t value = list->data[index];
+    // Shift elements left to fill the gap
+    for (int64_t i = index; i < list->len - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->len--;
+    return value;
 }
 
 // Insert an item at index (mutates in place, returns void like Python)
@@ -392,7 +411,7 @@ void print_list(PyList* list) {
             printf("%ld", list->data[i]);
         }
     }
-    printf("]\n");
+    printf("]");
 }
 
 // Print list of floats
@@ -405,5 +424,5 @@ void print_list_float(PyList* list) {
             printf("%g", data[i]);
         }
     }
-    printf("]\n");
+    printf("]");
 }

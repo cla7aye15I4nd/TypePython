@@ -18,6 +18,9 @@ fn get_bytes_method_info(name: &str) -> Option<(&'static str, PyType)> {
         // Case conversion - return bytes
         "upper" => Some(("bytes_upper", PyType::Bytes)),
         "lower" => Some(("bytes_lower", PyType::Bytes)),
+        "capitalize" => Some(("bytes_capitalize", PyType::Bytes)),
+        "title" => Some(("bytes_title", PyType::Bytes)),
+        "swapcase" => Some(("bytes_swapcase", PyType::Bytes)),
 
         // Padding/alignment - return bytes
         "ljust" => Some(("bytes_ljust", PyType::Bytes)),
