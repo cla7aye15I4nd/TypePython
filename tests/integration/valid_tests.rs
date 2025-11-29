@@ -499,3 +499,41 @@ test_case!(
 );
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
 test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");
+// New Coverage Tests
+// ============================================================================
+
+// Number literal formats
+test_case!(
+    test_number_literals,
+    "tests/fixtures/valid/basic/number_literals.py"
+);
+
+// Int/Float mixed operations
+test_case!(
+    test_int_float_mixed_ops,
+    "tests/fixtures/valid/advanced/operators/int_float_mixed_ops.py"
+);
+
+// Bitwise operations
+test_case!(
+    test_int_bitwise_ops,
+    "tests/fixtures/valid/advanced/operators/int_bitwise_ops.py"
+);
+
+// Mixed type comparisons
+test_case!(
+    test_int_comparison_mixed,
+    "tests/fixtures/valid/advanced/operators/int_comparison_mixed.py"
+);
+
+// Unary operations
+test_case!(
+    test_int_unary_ops,
+    "tests/fixtures/valid/advanced/operators/int_unary_ops.py"
+);
+
+// Escape sequences (comprehensive)
+test_case!(
+    test_escape_sequences_comprehensive,
+    "tests/fixtures/valid/advanced/strings/escape_sequences.py"
+);
