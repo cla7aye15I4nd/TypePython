@@ -9,6 +9,7 @@
 use crate::ast::Expression;
 use crate::codegen::CodeGen;
 use crate::types::{FunctionInfo, PyType, PyValue};
+use inkwell::values::BasicValueEnum;
 
 /// Maps method name to (builtin_symbol, return_type)
 fn get_set_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str, PyType)> {
@@ -53,14 +54,10 @@ impl<'ctx> CodeGen<'ctx> {
     /// Get a set method as a function with the receiver pre-bound
     pub fn get_set_method(
         &mut self,
-        receiver: &PyValue<'ctx>,
+        receiver_value: BasicValueEnum<'ctx>,
         method_name: &str,
+        elem_type: &PyType,
     ) -> Result<PyValue<'ctx>, String> {
-        let elem_type = match &receiver.ty {
-            PyType::Set(elem) => elem.as_ref(),
-            _ => return Err("Expected set type".to_string()),
-        };
-
         let (symbol, return_type) = get_set_method_info(method_name, elem_type)
             .ok_or_else(|| format!("set has no method '{}'", method_name))?;
 
@@ -71,7 +68,7 @@ impl<'ctx> CodeGen<'ctx> {
             function,
             param_types: vec![],
             return_type,
-            bound_args: vec![receiver.value()],
+            bound_args: vec![receiver_value],
         }))
     }
 

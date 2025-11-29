@@ -50,14 +50,10 @@ impl<'ctx> CodeGen<'ctx> {
     /// Get a list method as a function with the receiver pre-bound
     pub fn get_list_method(
         &mut self,
-        receiver: &PyValue<'ctx>,
+        receiver_value: BasicValueEnum<'ctx>,
         method_name: &str,
+        elem_type: &PyType,
     ) -> Result<PyValue<'ctx>, String> {
-        let elem_type = match &receiver.ty {
-            PyType::List(elem) => elem.as_ref(),
-            _ => return Err("Expected list type".to_string()),
-        };
-
         let (symbol, return_type, _mutates) = get_list_method_info(method_name, elem_type)
             .ok_or_else(|| format!("list has no method '{}'", method_name))?;
 
@@ -68,7 +64,7 @@ impl<'ctx> CodeGen<'ctx> {
             function,
             param_types: vec![],
             return_type,
-            bound_args: vec![receiver.value()],
+            bound_args: vec![receiver_value],
         }))
     }
 

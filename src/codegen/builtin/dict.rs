@@ -46,14 +46,11 @@ impl<'ctx> CodeGen<'ctx> {
     /// Get a dict method as a function with the receiver pre-bound
     pub fn get_dict_method(
         &mut self,
-        receiver: &PyValue<'ctx>,
+        receiver_value: BasicValueEnum<'ctx>,
         method_name: &str,
+        key_type: &PyType,
+        val_type: &PyType,
     ) -> Result<PyValue<'ctx>, String> {
-        let (key_type, val_type) = match &receiver.ty {
-            PyType::Dict(k, v) => (k.as_ref(), v.as_ref()),
-            _ => return Err("Expected dict type".to_string()),
-        };
-
         let (symbol, return_type) = get_dict_method_info(method_name, key_type, val_type)
             .ok_or_else(|| format!("dict has no method '{}'", method_name))?;
 
@@ -64,7 +61,7 @@ impl<'ctx> CodeGen<'ctx> {
             function,
             param_types: vec![],
             return_type,
-            bound_args: vec![receiver.value()],
+            bound_args: vec![receiver_value],
         }))
     }
 

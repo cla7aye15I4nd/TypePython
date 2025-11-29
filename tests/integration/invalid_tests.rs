@@ -475,6 +475,24 @@ invalid_test!(
     "tests/fixtures/invalid/list_with_args.py"
 );
 
+// set has no method 'nonexistent'
+invalid_test!(
+    test_set_invalid_method,
+    "tests/fixtures/invalid/set_invalid_method.py"
+);
+
+// Cannot call set() with multiple arguments
+invalid_test!(
+    test_set_with_multiple_args,
+    "tests/fixtures/invalid/set_with_multiple_args.py"
+);
+
+// Cannot call set() with non-set argument
+invalid_test!(
+    test_set_with_wrong_arg_type,
+    "tests/fixtures/invalid/set_with_wrong_arg_type.py"
+);
+
 // ============================================================================
 // Set Type Mismatch Error Tests
 // ============================================================================

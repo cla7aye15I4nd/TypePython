@@ -222,17 +222,17 @@ impl<'ctx> CodeGen<'ctx> {
                         // Look up bytes method
                         self.get_bytes_method(&obj, attr)
                     }
-                    PyType::List(_) => {
+                    PyType::List(elem_type) => {
                         // Look up list method
-                        self.get_list_method(&obj, attr)
+                        self.get_list_method(obj.value(), attr, elem_type)
                     }
-                    PyType::Dict(_, _) => {
+                    PyType::Dict(key_type, val_type) => {
                         // Look up dict method
-                        self.get_dict_method(&obj, attr)
+                        self.get_dict_method(obj.value(), attr, key_type, val_type)
                     }
-                    PyType::Set(_) => {
+                    PyType::Set(elem_type) => {
                         // Look up set method
-                        self.get_set_method(&obj, attr)
+                        self.get_set_method(obj.value(), attr, elem_type)
                     }
                     _ => Err(format!(
                         "Attribute access not supported for type {:?}",
