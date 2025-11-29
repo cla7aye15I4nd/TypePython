@@ -224,3 +224,13 @@ invalid_test!(
     test_inconsistent_indent,
     "tests/fixtures/invalid/preprocessor/inconsistent_indent.py"
 );
+
+// ============================================================================
+// Phase 2: Type Error Tests
+// ============================================================================
+
+// Call undefined function
+invalid_test!(
+    test_undefined_function,
+    "tests/fixtures/invalid/type_errors/undefined_func.py"
+);

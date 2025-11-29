@@ -572,3 +572,53 @@ test_case!(
     test_escape_sequences_comprehensive,
     "tests/fixtures/valid/advanced/strings/escape_sequences.py"
 );
+
+// ============================================================================
+// Phase 2 Coverage Tests
+// ============================================================================
+
+// Int operations comprehensive
+test_case!(
+    test_int_shift_operations,
+    "tests/fixtures/valid/advanced/operators/int_shift_operations.py"
+);
+test_case!(
+    test_int_modulo_negative,
+    "tests/fixtures/valid/advanced/operators/int_modulo_negative.py"
+);
+
+// Number formats
+test_case!(
+    test_binary_literals,
+    "tests/fixtures/valid/advanced/number_formats/binary_literals.py"
+);
+test_case!(
+    test_hex_literals,
+    "tests/fixtures/valid/advanced/number_formats/hex_literals.py"
+);
+
+// Functions
+test_case!(
+    test_functions_no_params,
+    "tests/fixtures/valid/advanced/functions/no_params.py"
+);
+test_case!(
+    test_functions_multi_params,
+    "tests/fixtures/valid/advanced/functions/multi_params.py"
+);
+
+// Expressions
+test_case!(
+    test_expressions_complex_nested,
+    "tests/fixtures/valid/advanced/expressions/complex_nested.py"
+);
+test_case!(
+    test_expressions_all_operators,
+    "tests/fixtures/valid/advanced/expressions/all_operators.py"
+);
+
+// Control flow
+test_case!(
+    test_control_flow_nested_ifs,
+    "tests/fixtures/valid/advanced/control_flow/nested_ifs.py"
+);
