@@ -27,6 +27,9 @@ impl<'ctx> CodeGen<'ctx> {
             "min" => MacroKind::Min,
             "max" => MacroKind::Max,
             "pow" => MacroKind::Pow,
+            "set" => MacroKind::Set,
+            "list" => MacroKind::List,
+            "dict" => MacroKind::Dict,
             _ => return None,
         };
         Some(PyValue::macro_fn(kind))
@@ -60,6 +63,9 @@ impl<'ctx> CodeGen<'ctx> {
             MacroKind::Len => self
                 .generate_len_call(args)?
                 .ok_or_else(|| "len() failed".to_string()),
+            MacroKind::Set => self.generate_set_call(args),
+            MacroKind::List => self.generate_list_call(args),
+            MacroKind::Dict => self.generate_dict_call(args),
         }
     }
 

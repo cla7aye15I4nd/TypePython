@@ -1,12 +1,12 @@
-# Test list method calls (TypePython specific - methods return the list)
+# Test list method calls
 
 # Test len
 x: list[int] = [1, 2, 3, 4, 5]
 print(len(x))
 
-# Test append returns modified list
-x = x.append(6)
-print(len(x))
+# Test append (mutates in place)
+
+print(x.append(6))
 print(x[5])
 
 # Test pop
@@ -14,9 +14,10 @@ y: int = x.pop()
 print(y)
 print(len(x))
 
-# Test insert
-x = x.insert(0, 99)
+# Test insert (mutates in place)
+x.insert(0, 99)
 print(x[0])
+print(len(x))
 
 # Test index
 idx: int = x.index(3)

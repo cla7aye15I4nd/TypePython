@@ -497,8 +497,43 @@ test_case!(
     test_list_methods,
     "tests/fixtures/valid/list/list_methods.py"
 );
+test_case!(
+    test_list_slicing,
+    "tests/fixtures/valid/list/list_slicing.py"
+);
+test_case!(
+    test_list_operations,
+    "tests/fixtures/valid/list/list_operations.py"
+);
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
+test_case!(
+    test_dict_methods,
+    "tests/fixtures/valid/dict/dict_methods.py"
+);
+test_case!(
+    test_dict_operations,
+    "tests/fixtures/valid/dict/dict_operations.py"
+);
 test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");
+test_case!(
+    test_set_operations,
+    "tests/fixtures/valid/set/set_operations.py"
+);
+
+// Pressure tests (10^7 elements)
+test_case!(
+    test_list_pressure,
+    "tests/fixtures/valid/list/list_pressure.py"
+);
+test_case!(
+    test_dict_pressure,
+    "tests/fixtures/valid/dict/dict_pressure.py"
+);
+test_case!(
+    test_set_pressure,
+    "tests/fixtures/valid/set/set_pressure.py"
+);
+
 // New Coverage Tests
 // ============================================================================
 

@@ -6,6 +6,7 @@
 //! All C runtime functions are in src/runtime/builtins/set.c
 //! and discovered automatically by build.rs.
 
+use crate::ast::Expression;
 use crate::codegen::CodeGen;
 use crate::types::{FunctionInfo, PyType, PyValue};
 use inkwell::values::BasicValueEnum;
@@ -94,5 +95,28 @@ impl<'ctx> CodeGen<'ctx> {
             .build_call(len_fn, &[set_val.into()], "set_len")
             .unwrap();
         self.extract_int_call_result(call)
+    }
+
+    // ========================================================================
+    // set() builtin function
+    // ========================================================================
+
+    /// Generate set() builtin call - creates an empty set
+    /// set() -> empty set[int] (default element type)
+    pub fn generate_set_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
+        if !args.is_empty() {
+            return Err("set() takes no arguments (use set literal {1, 2, 3} instead)".to_string());
+        }
+
+        // Create empty set with default int element type
+        let set_new_fn = self.get_or_declare_c_builtin("set_new");
+        let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
+        let set_ptr = self.extract_ptr_call_result(call_site)?;
+
+        Ok(PyValue::new(
+            set_ptr.value(),
+            PyType::Set(Box::new(PyType::Int)),
+            None,
+        ))
     }
 }

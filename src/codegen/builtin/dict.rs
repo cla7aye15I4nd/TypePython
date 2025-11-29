@@ -7,6 +7,7 @@
 //! All C runtime functions are in src/runtime/builtins/dict.c
 //! and discovered automatically by build.rs.
 
+use crate::ast::Expression;
 use crate::codegen::CodeGen;
 use crate::types::{FunctionInfo, PyType, PyValue};
 use inkwell::values::BasicValueEnum;
@@ -139,5 +140,33 @@ impl<'ctx> CodeGen<'ctx> {
             .build_call(len_fn, &[dict_val.into()], "dict_len")
             .unwrap();
         self.extract_int_call_result(call)
+    }
+
+    // ========================================================================
+    // dict() builtin function
+    // ========================================================================
+
+    /// Generate dict() builtin call - creates an empty dict
+    /// dict() -> empty dict[int, int] (default key/value types)
+    pub fn generate_dict_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
+        if !args.is_empty() {
+            return Err(
+                "dict() takes no arguments (use dict literal {1: 2, 3: 4} instead)".to_string(),
+            );
+        }
+
+        // Create empty dict with default int key/value types
+        let dict_new_fn = self.get_or_declare_c_builtin("dict_new");
+        let call_site = self
+            .builder
+            .build_call(dict_new_fn, &[], "dict_new")
+            .unwrap();
+        let dict_ptr = self.extract_ptr_call_result(call_site)?;
+
+        Ok(PyValue::new(
+            dict_ptr.value(),
+            PyType::Dict(Box::new(PyType::Int), Box::new(PyType::Int)),
+            None,
+        ))
     }
 }

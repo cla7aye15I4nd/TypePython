@@ -49,11 +49,12 @@ DICT_TYPE  = { "dict" ~ kw_boundary }
 SET_TYPE   = { "set" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
+// Note: list, dict, set are NOT keywords - they are builtin function names
+// The type syntax list[int], dict[k, v], set[t] is parsed specially in type contexts
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
     AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
-    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE |
-    LIST_TYPE | DICT_TYPE | SET_TYPE
+    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE
 }
 
 // Identifiers (must not be keywords)
@@ -348,8 +349,8 @@ atom = {
     | BYTES_LIT
     | STR_LIT
     | list_literal
-    | dict_literal
     | set_literal
+    | dict_literal
     | tuple_literal
     | ID
     | LPAREN ~ WS* ~ expression ~ WS* ~ RPAREN
@@ -372,10 +373,12 @@ dict_literal = {
 
 dict_pair = { expression ~ WS* ~ COLON ~ WS* ~ expression }
 
-// Set literal: {1, 2, 3} - must have at least one element to distinguish from dict
+// Set literal: {1, 2, 3} or {1} - must have at least one element to distinguish from empty dict {}
+// Single element without trailing comma must not look like dict (no colon after first expr)
 set_literal = {
-    LBRACE ~ WS* ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ ~ (WS* ~ COMMA)? ~ WS* ~ RBRACE
+    LBRACE ~ WS* ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ ~ (WS* ~ COMMA)? ~ WS* ~ RBRACE  // Multiple elements
     | LBRACE ~ WS* ~ expression ~ WS* ~ COMMA ~ WS* ~ RBRACE  // Single element with trailing comma
+    | LBRACE ~ WS* ~ expression ~ WS* ~ RBRACE  // Single element without comma (distinguished from dict by no colon)
 }
 
 // Additional expression helpers

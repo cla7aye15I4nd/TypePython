@@ -174,6 +174,9 @@ pub enum MacroKind {
     Max,
     Pow,
     Len,
+    Set,
+    List,
+    Dict,
 }
 
 /// Python type enum - represents the type without an LLVM value

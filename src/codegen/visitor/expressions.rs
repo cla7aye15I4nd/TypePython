@@ -109,7 +109,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(list_new_fn, &[capacity.into()], "list_new")
             .unwrap();
-        let mut list_ptr = self.extract_ptr_call_result(call_site)?.value();
+        let list_ptr = self.extract_ptr_call_result(call_site)?.value();
 
         // Infer element type from first element (or default to Int for empty list)
         let elem_type = if elements.is_empty() {
@@ -119,21 +119,18 @@ impl<'ctx> CodeGen<'ctx> {
             first.ty.clone()
         };
 
-        // Append each element
+        // Append each element (list_append mutates in place, returns void)
         let list_append_fn = self.get_or_declare_c_builtin("list_append");
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
             // TODO: Type check that elem_val.ty matches elem_type
-            let call_site = self
-                .builder
+            self.builder
                 .build_call(
                     list_append_fn,
                     &[list_ptr.into(), elem_val.value().into()],
                     "list_append",
                 )
                 .unwrap();
-            // list_append returns the (possibly reallocated) list pointer
-            list_ptr = self.extract_ptr_call_result(call_site)?.value();
         }
 
         Ok(PyValue::new(

@@ -16,7 +16,7 @@
 typedef struct {
     int64_t len;       // Current number of elements
     int64_t capacity;  // Allocated capacity
-    int64_t data[];    // Flexible array member for elements
+    int64_t* data;     // Pointer to element array (separate allocation)
 } PyList;
 
 #define INITIAL_CAPACITY 8
@@ -29,22 +29,28 @@ static PyList* list_alloc(int64_t capacity) {
     if (capacity < INITIAL_CAPACITY) {
         capacity = INITIAL_CAPACITY;
     }
-    PyList* list = (PyList*)malloc(sizeof(PyList) + capacity * sizeof(int64_t));
+    PyList* list = (PyList*)malloc(sizeof(PyList));
     if (list == NULL) return NULL;
+    list->data = (int64_t*)malloc(capacity * sizeof(int64_t));
+    if (list->data == NULL) {
+        free(list);
+        return NULL;
+    }
     list->len = 0;
     list->capacity = capacity;
     return list;
 }
 
-static PyList* list_grow(PyList* list, int64_t min_capacity) {
+// Grow the list's data array (PyList struct stays at same address)
+static void list_grow(PyList* list, int64_t min_capacity) {
     int64_t new_capacity = list->capacity * 2;
     if (new_capacity < min_capacity) {
         new_capacity = min_capacity;
     }
-    PyList* new_list = (PyList*)realloc(list, sizeof(PyList) + new_capacity * sizeof(int64_t));
-    if (new_list == NULL) return NULL;
-    new_list->capacity = new_capacity;
-    return new_list;
+    int64_t* new_data = (int64_t*)realloc(list->data, new_capacity * sizeof(int64_t));
+    if (new_data == NULL) return;  // Keep old data on failure
+    list->data = new_data;
+    list->capacity = new_capacity;
 }
 
 // Normalize negative index to positive
@@ -97,19 +103,13 @@ void list_setitem(PyList* list, int64_t index, int64_t value) {
     list->data[index] = value;
 }
 
-// Append an item to the list
-// Returns the (possibly reallocated) list pointer
-PyList* list_append(PyList* list, int64_t value) {
-    if (list == NULL) {
-        list = list_new();
-        if (list == NULL) return NULL;
-    }
+// Append an item to the list (mutates in place, returns void like Python)
+void list_append(PyList* list, int64_t value) {
+    if (list == NULL) return;
     if (list->len >= list->capacity) {
-        list = list_grow(list, list->len + 1);
-        if (list == NULL) return NULL;
+        list_grow(list, list->len + 1);
     }
     list->data[list->len++] = value;
-    return list;
 }
 
 // Pop the last item from the list
@@ -121,20 +121,16 @@ int64_t list_pop(PyList* list) {
     return list->data[--list->len];
 }
 
-// Insert an item at index
-PyList* list_insert(PyList* list, int64_t index, int64_t value) {
-    if (list == NULL) {
-        list = list_new();
-        if (list == NULL) return NULL;
-    }
+// Insert an item at index (mutates in place, returns void like Python)
+void list_insert(PyList* list, int64_t index, int64_t value) {
+    if (list == NULL) return;
 
     index = normalize_index(index, list->len);
     if (index < 0) index = 0;
     if (index > list->len) index = list->len;
 
     if (list->len >= list->capacity) {
-        list = list_grow(list, list->len + 1);
-        if (list == NULL) return NULL;
+        list_grow(list, list->len + 1);
     }
 
     // Shift elements to the right
@@ -142,7 +138,6 @@ PyList* list_insert(PyList* list, int64_t index, int64_t value) {
             (list->len - index) * sizeof(int64_t));
     list->data[index] = value;
     list->len++;
-    return list;
 }
 
 // Remove the first occurrence of value
@@ -175,24 +170,18 @@ PyList* list_copy(PyList* list) {
     return copy;
 }
 
-// Extend list with another list
-PyList* list_extend(PyList* list, PyList* other) {
-    if (list == NULL) {
-        return list_copy(other);
-    }
-    if (other == NULL || other->len == 0) {
-        return list;
-    }
+// Extend list with another list (mutates in place, returns void like Python)
+void list_extend(PyList* list, PyList* other) {
+    if (list == NULL) return;
+    if (other == NULL || other->len == 0) return;
 
     int64_t new_len = list->len + other->len;
     if (new_len > list->capacity) {
-        list = list_grow(list, new_len);
-        if (list == NULL) return NULL;
+        list_grow(list, new_len);
     }
 
     memcpy(&list->data[list->len], other->data, other->len * sizeof(int64_t));
     list->len = new_len;
-    return list;
 }
 
 // Reverse the list in place
