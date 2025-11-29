@@ -1,2 +1,2 @@
-# Cannot use | between dict and Int
-x: dict[int, int] = {1: 2} | 3
+# Cannot bitwise OR Dict[str, int] and Int
+x: dict[str, int] = {"a": 1} | 1

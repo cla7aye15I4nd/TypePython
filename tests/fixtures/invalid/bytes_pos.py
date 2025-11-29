@@ -1,2 +1,2 @@
-# Cannot use unary + on bytes
+# Cannot use unary + on Bytes
 x: bytes = +b"hello"

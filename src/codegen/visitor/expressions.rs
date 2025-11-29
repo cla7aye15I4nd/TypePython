@@ -15,8 +15,19 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_str_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {
-        // Treat str literals as bytes (since we don't have a separate str type)
-        self.visit_bytes_lit_impl(val)
+        // Str literals are the same as bytes but with Str type
+        let str_name = if let Some(&id) = self.strings.get(val) {
+            format!(".str_{}", id)
+        } else {
+            let id = self.strings.len() as u64;
+            self.strings.insert(val.to_string(), id);
+            format!(".str_{}", id)
+        };
+        let str_const = self
+            .builder
+            .build_global_string_ptr(val, &str_name)
+            .unwrap();
+        Ok(PyValue::new_str(str_const.as_pointer_value().into()))
     }
 
     pub(crate) fn visit_bytes_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {

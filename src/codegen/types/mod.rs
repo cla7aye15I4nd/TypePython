@@ -11,6 +11,7 @@ mod int_ops;
 mod list_ops;
 mod none_ops;
 mod set_ops;
+mod str_ops;
 mod value;
 
 pub use value::{CgCtx, FunctionInfo, MacroKind, ModuleInfo, PyType, PyValue, PyValueInner};

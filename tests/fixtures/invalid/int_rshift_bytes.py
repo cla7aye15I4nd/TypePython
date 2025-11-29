@@ -1,2 +1,2 @@
-# Cannot right shift Int by Bytes
+# Cannot right shift Int and Bytes
 x: int = 1 >> b"hello"

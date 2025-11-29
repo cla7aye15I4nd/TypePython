@@ -1,4 +1,2 @@
-# Test bytes division (unsupported operator)
-x: bytes = b"hello"
-y: bytes = b"world"
-result: bytes = x / y
+# Cannot divide Bytes and Bytes
+x: float = b"hello" / b"hello"

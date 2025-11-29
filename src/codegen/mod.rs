@@ -180,6 +180,7 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Float => self.extract_float_call_result(call_site),
                     PyType::Bool => self.extract_bool_call_result(call_site),
                     PyType::Bytes => Ok(self.extract_bytes_call_result(call_site)),
+                    PyType::Str => Ok(self.extract_str_call_result(call_site)),
                     PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
                         // Container types return pointers
                         let ptr_val = self.extract_ptr_call_result(call_site);
@@ -221,6 +222,10 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Bytes => {
                         // Look up bytes method
                         self.get_bytes_method(&obj, attr)
+                    }
+                    PyType::Str => {
+                        // Look up str method
+                        self.get_str_method(&obj, attr)
                     }
                     PyType::List(elem_type) => {
                         // Look up list method
@@ -789,6 +794,24 @@ impl<'ctx> CodeGen<'ctx> {
                 // None is always falsy
                 Ok(self.context.bool_type().const_zero())
             }
+            PyType::Str => {
+                // Str is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = self.get_or_declare_c_builtin("str_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "str_len")
+                    .unwrap();
+                let len = self
+                    .extract_int_call_result(len_call)
+                    .value()
+                    .into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
             PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
@@ -941,6 +964,7 @@ impl<'ctx> CodeGen<'ctx> {
                 PyType::Int => Ok(PyValue::int(result)),
                 PyType::Float => Ok(PyValue::float(result)),
                 PyType::Bool => Ok(PyValue::bool(result)),
+                PyType::Str => Ok(PyValue::new_str(result)),
                 PyType::Bytes => Ok(PyValue::bytes(result)),
                 PyType::None => Ok(PyValue::none(result)),
                 PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
@@ -1012,6 +1036,17 @@ impl<'ctx> CodeGen<'ctx> {
         PyValue::bytes(pv.into())
     }
 
+    /// Helper to extract str (pointer) result from a call site
+    /// This function is infallible because the type system guarantees the call returns a pointer
+    fn extract_str_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> PyValue<'ctx> {
+        use inkwell::values::AnyValue;
+        let pv = call_site.as_any_value_enum().into_pointer_value();
+        PyValue::new_str(pv.into())
+    }
+
     /// Helper to extract pointer result from a call site (for container types)
     /// This function is infallible because the type system guarantees the call returns a pointer
     pub(crate) fn extract_ptr_call_result(
@@ -1029,7 +1064,10 @@ impl<'ctx> CodeGen<'ctx> {
             Type::Int => self.context.i64_type().into(),
             Type::Float => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
-            Type::Str => todo!("str type (use bytes instead)"),
+            Type::Str => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
             Type::Bytes => self
                 .context
                 .ptr_type(inkwell::AddressSpace::default())

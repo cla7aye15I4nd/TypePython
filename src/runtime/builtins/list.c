@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 // ============================================================================
 // List Data Structure
@@ -392,6 +393,25 @@ PyList* list_repeat(PyList* list, int64_t n) {
     return result;
 }
 
+// Compare two lists lexicographically
+// Returns: -1 if list1 < list2, 0 if equal, 1 if list1 > list2
+int64_t list_cmp(PyList* list1, PyList* list2) {
+    int64_t len1 = list1 ? list1->len : 0;
+    int64_t len2 = list2 ? list2->len : 0;
+    int64_t min_len = len1 < len2 ? len1 : len2;
+
+    // Compare element by element
+    for (int64_t i = 0; i < min_len; i++) {
+        if (list1->data[i] < list2->data[i]) return -1;
+        if (list1->data[i] > list2->data[i]) return 1;
+    }
+
+    // All compared elements are equal, compare by length
+    if (len1 < len2) return -1;
+    if (len1 > len2) return 1;
+    return 0;
+}
+
 // Check equality of two lists
 int64_t list_eq(PyList* list1, PyList* list2) {
     int64_t len1 = list1 ? list1->len : 0;
@@ -416,6 +436,30 @@ static int cmp_int64(const void* a, const void* b) {
 void list_sort(PyList* list) {
     if (list == NULL || list->len <= 1) return;
     qsort(list->data, list->len, sizeof(int64_t), cmp_int64);
+}
+
+// Find the maximum element in the list
+int64_t list_max(PyList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    int64_t max_val = list->data[0];
+    for (int64_t i = 1; i < list->len; i++) {
+        if (list->data[i] > max_val) {
+            max_val = list->data[i];
+        }
+    }
+    return max_val;
+}
+
+// Find the minimum element in the list
+int64_t list_min(PyList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    int64_t min_val = list->data[0];
+    for (int64_t i = 1; i < list->len; i++) {
+        if (list->data[i] < min_val) {
+            min_val = list->data[i];
+        }
+    }
+    return min_val;
 }
 
 // ============================================================================
@@ -444,4 +488,105 @@ void print_list_float(PyList* list) {
         }
     }
     printf("]");
+}
+
+// ============================================================================
+// Builtin Functions: sum, sorted, reversed
+// ============================================================================
+
+// Sum all elements in the list (for int lists)
+int64_t list_sum(PyList* list, int64_t start) {
+    int64_t sum = start;
+    if (list != NULL) {
+        for (int64_t i = 0; i < list->len; i++) {
+            sum += list->data[i];
+        }
+    }
+    return sum;
+}
+
+// Helper for qsort
+static int compare_int64(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Return a new sorted list (ascending order)
+PyList* list_sorted(PyList* list) {
+    if (list == NULL) return list_new();
+
+    PyList* result = list_with_capacity(list->len);
+    if (result == NULL) return NULL;
+
+    // Copy elements
+    for (int64_t i = 0; i < list->len; i++) {
+        result->data[i] = list->data[i];
+    }
+    result->len = list->len;
+
+    // Sort
+    qsort(result->data, result->len, sizeof(int64_t), compare_int64);
+
+    return result;
+}
+
+// Return a new reversed list
+PyList* list_reversed(PyList* list) {
+    if (list == NULL) return list_new();
+
+    PyList* result = list_with_capacity(list->len);
+    if (result == NULL) return NULL;
+
+    for (int64_t i = 0; i < list->len; i++) {
+        result->data[i] = list->data[list->len - 1 - i];
+    }
+    result->len = list->len;
+
+    return result;
+}
+
+// ============================================================================
+// divmod - returns a list with [quotient, remainder]
+// ============================================================================
+
+PyList* divmod_int(int64_t a, int64_t b) {
+    PyList* result = list_with_capacity(2);
+    if (result == NULL) return NULL;
+
+    // Python-style floor division and modulo
+    int64_t q = a / b;
+    int64_t r = a % b;
+
+    // Adjust for Python semantics (floor division)
+    if ((r != 0) && ((a < 0) != (b < 0))) {
+        q -= 1;
+        r += b;
+    }
+
+    result->data[0] = q;
+    result->data[1] = r;
+    result->len = 2;
+
+    return result;
+}
+
+// divmod for floats - returns a list with [quotient, remainder] stored as doubles
+PyList* divmod_float(double a, double b) {
+    PyList* result = list_with_capacity(2);
+    if (result == NULL) return NULL;
+
+    // Python-style floor division and modulo for floats
+    double q = floor(a / b);
+    double r = a - q * b;
+
+    // Store doubles in the int64_t array (type punning)
+    double* data = (double*)result->data;
+    data[0] = q;
+    data[1] = r;
+    result->len = 2;
+
+    return result;
 }

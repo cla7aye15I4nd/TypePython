@@ -1,2 +1,2 @@
-# Cannot add set to set (use | instead)
-x: set[int] = {1, 2} + {3, 4}
+# Cannot add Set[int] and Set[int]
+x: set[int] = {1, 2, 3} + {1, 2, 3}

@@ -1,2 +1,2 @@
-# Cannot subtract Int from None
-x: int = None - 1
+# Cannot subtract None and Int
+x: None = None - 1

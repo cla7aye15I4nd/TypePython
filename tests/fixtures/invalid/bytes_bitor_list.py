@@ -1,0 +1,2 @@
+# Cannot bitwise OR Bytes and List[int]
+x: bytes = b"hello" | [1, 2, 3]

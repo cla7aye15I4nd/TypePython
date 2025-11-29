@@ -1,2 +1,2 @@
-# Cannot add dict to dict (use | instead)
-x: dict[int, int] = {1: 2} + {3: 4}
+# Cannot add Dict[str, int] and Dict[str, int]
+x: dict[str, int] = {"a": 1} + {"a": 1}

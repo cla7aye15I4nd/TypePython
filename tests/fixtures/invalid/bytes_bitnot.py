@@ -1,2 +1,3 @@
-# Cannot use bitwise NOT on bytes
-x: int = ~b"hello"
+# Cannot use bitwise NOT on Bytes
+x: bytes = b"hello"
+y: int = ~x

@@ -1,2 +1,2 @@
 # Cannot bitwise XOR Bool and Bytes
-x: int = True ^ b"hello"
+x: bool = True ^ b"hello"

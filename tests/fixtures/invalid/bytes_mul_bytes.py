@@ -1,2 +1,2 @@
-# Cannot multiply Bytes by Bytes
-x: bytes = b"hello" * b"world"
+# Cannot multiply Bytes and Bytes
+x: bytes = b"hello" * b"hello"

@@ -28,8 +28,20 @@ print_status() {
     fi
 }
 
-# 1. Check formatting
-echo -e "${YELLOW}[1/4]${NC} Checking code formatting..."
+# 1. Check for executable files
+echo -e "${YELLOW}[1/5]${NC} Checking for executable files..."
+exe_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(exe|dll|so|dylib|bin|out)$' || true)
+if [ -n "$exe_files" ]; then
+    echo -e "${RED}✗${NC} Executable files detected in staged changes:"
+    echo "$exe_files"
+    echo "Please remove these files from the commit."
+    exit 1
+fi
+print_status "No executable files"
+echo ""
+
+# 2. Check formatting
+echo -e "${YELLOW}[2/5]${NC} Checking code formatting..."
 cargo fmt -- --check
 print_status "Format check"
 echo ""

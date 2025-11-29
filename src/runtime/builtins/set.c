@@ -324,6 +324,16 @@ int64_t set_eq(PySet* set1, PySet* set2) {
     return set_issubset(set1, set2);
 }
 
+// Compare two sets for min/max operations
+// Returns: -1 if set1 is proper subset of set2
+//           1 if set1 is proper superset of set2
+//           0 if incomparable or equal
+int64_t set_cmp(PySet* set1, PySet* set2) {
+    if (set_is_proper_subset(set1, set2)) return -1;
+    if (set_is_proper_superset(set1, set2)) return 1;
+    return 0;
+}
+
 // ============================================================================
 // In-place Update Operations
 // ============================================================================
@@ -410,6 +420,38 @@ void set_symmetric_difference_update(PySet* set, PySet* other) {
     }
 }
 
+// Find the maximum element in the set
+int64_t set_max(PySet* set) {
+    if (set == NULL || set->len == 0) return 0;
+    int64_t max_val = 0;
+    int first = 1;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (first || set->entries[i].key > max_val) {
+                max_val = set->entries[i].key;
+                first = 0;
+            }
+        }
+    }
+    return max_val;
+}
+
+// Find the minimum element in the set
+int64_t set_min(PySet* set) {
+    if (set == NULL || set->len == 0) return 0;
+    int64_t min_val = 0;
+    int first = 1;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (first || set->entries[i].key < min_val) {
+                min_val = set->entries[i].key;
+                first = 0;
+            }
+        }
+    }
+    return min_val;
+}
+
 // ============================================================================
 // Print Support
 // ============================================================================
@@ -431,4 +473,61 @@ void print_set(PySet* set) {
         }
     }
     printf("}");
+}
+
+// ============================================================================
+// Builtin Functions: sum, sorted
+// ============================================================================
+
+// Sum all elements in the set
+int64_t set_sum(PySet* set, int64_t start) {
+    int64_t sum = start;
+    if (set != NULL) {
+        for (int64_t i = 0; i < set->capacity; i++) {
+            if (set->entries[i].state == SET_OCCUPIED) {
+                sum += set->entries[i].key;
+            }
+        }
+    }
+    return sum;
+}
+
+// Forward declaration for list operations
+typedef struct PyList {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyList;
+
+extern PyList* list_new(void);
+extern PyList* list_with_capacity(int64_t capacity);
+
+// Helper for qsort
+static int compare_int64_set(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Return a sorted list from set elements
+PyList* set_sorted(PySet* set) {
+    if (set == NULL || set->len == 0) return list_new();
+
+    PyList* result = list_with_capacity(set->len);
+    if (result == NULL) return NULL;
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < set->capacity && j < set->len; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            result->data[j++] = set->entries[i].key;
+        }
+    }
+    result->len = j;
+
+    // Sort
+    qsort(result->data, result->len, sizeof(int64_t), compare_int64_set);
+
+    return result;
 }

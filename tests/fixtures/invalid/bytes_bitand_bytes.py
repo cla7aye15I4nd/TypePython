@@ -1,4 +1,2 @@
-# Test bytes bitwise AND (unsupported operator)
-x: bytes = b"hello"
-y: bytes = b"world"
-result: bytes = x & y
+# Cannot bitwise AND Bytes and Bytes
+x: bytes = b"hello" & b"hello"

@@ -9,6 +9,7 @@ mod list;
 mod math;
 mod print;
 mod set;
+mod str;
 
 use super::CodeGen;
 use crate::ast::Expression;
@@ -30,6 +31,24 @@ impl<'ctx> CodeGen<'ctx> {
             "set" => MacroKind::Set,
             "list" => MacroKind::List,
             "dict" => MacroKind::Dict,
+            // Type conversion builtins
+            "int" => MacroKind::Int,
+            "float" => MacroKind::Float,
+            "bool" => MacroKind::Bool,
+            "str" => MacroKind::Str,
+            // String representation builtins
+            "bin" => MacroKind::Bin,
+            "hex" => MacroKind::Hex,
+            "oct" => MacroKind::Oct,
+            "chr" => MacroKind::Chr,
+            "ord" => MacroKind::Ord,
+            "ascii" => MacroKind::Ascii,
+            // Sequence builtins
+            "sum" => MacroKind::Sum,
+            "sorted" => MacroKind::Sorted,
+            "reversed" => MacroKind::Reversed,
+            // Math builtins
+            "divmod" => MacroKind::Divmod,
             _ => return None,
         };
         Some(PyValue::macro_fn(kind))
@@ -54,6 +73,24 @@ impl<'ctx> CodeGen<'ctx> {
             MacroKind::Set => self.generate_set_call(args),
             MacroKind::List => self.generate_list_call(args),
             MacroKind::Dict => self.generate_dict_call(args),
+            // Type conversion builtins
+            MacroKind::Int => self.generate_int_call(args),
+            MacroKind::Float => self.generate_float_call(args),
+            MacroKind::Bool => self.generate_bool_call(args),
+            MacroKind::Str => self.generate_str_call(args),
+            // String representation builtins
+            MacroKind::Bin => self.generate_bin_call(args),
+            MacroKind::Hex => self.generate_hex_call(args),
+            MacroKind::Oct => self.generate_oct_call(args),
+            MacroKind::Chr => self.generate_chr_call(args),
+            MacroKind::Ord => self.generate_ord_call(args),
+            MacroKind::Ascii => self.generate_ascii_call(args),
+            // Sequence builtins
+            MacroKind::Sum => self.generate_sum_call(args),
+            MacroKind::Sorted => self.generate_sorted_call(args),
+            MacroKind::Reversed => self.generate_reversed_call(args),
+            // Math builtins
+            MacroKind::Divmod => self.generate_divmod_call(args),
         }
     }
 

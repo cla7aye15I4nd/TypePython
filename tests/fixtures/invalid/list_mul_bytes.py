@@ -1,2 +1,2 @@
-# Cannot multiply list by Bytes
-x: list[int] = [1, 2] * b"hello"
+# Cannot multiply List[int] and Bytes
+x: list[int] = [1, 2, 3] * b"hello"

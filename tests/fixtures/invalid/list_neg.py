@@ -1,2 +1,2 @@
-# Cannot use unary - on list
-x: list[int] = -[1, 2, 3]
+# Cannot use unary - on List[int]
+x: list = -[1, 2, 3]

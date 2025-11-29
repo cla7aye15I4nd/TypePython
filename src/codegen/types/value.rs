@@ -177,6 +177,24 @@ pub enum MacroKind {
     Set,
     List,
     Dict,
+    // Type conversion builtins
+    Int,
+    Float,
+    Bool,
+    Str,
+    // String representation builtins
+    Bin,
+    Hex,
+    Oct,
+    Chr,
+    Ord,
+    Ascii,
+    // Sequence builtins
+    Sum,
+    Sorted,
+    Reversed,
+    // Math builtins
+    Divmod,
 }
 
 /// Python type enum - represents the type without an LLVM value
@@ -186,6 +204,7 @@ pub enum PyType {
     Int,
     Float,
     Bool,
+    Str,
     Bytes,
     None,
     // Container types (heap-allocated, pointer values)
@@ -208,8 +227,8 @@ impl PyType {
             Type::Float => Ok(PyType::Float),
             Type::Bool => Ok(PyType::Bool),
             Type::Bytes => Ok(PyType::Bytes),
+            Type::Str => Ok(PyType::Str),
             Type::None => Ok(PyType::None),
-            Type::Str => Err("Str type not yet implemented (use Bytes)".to_string()),
             Type::List(elem_ty) => Ok(PyType::List(Box::new(PyType::from_ast_type(elem_ty)?))),
             Type::Dict(key_ty, val_ty) => Ok(PyType::Dict(
                 Box::new(PyType::from_ast_type(key_ty)?),
@@ -280,6 +299,11 @@ impl<'ctx> PyValue<'ctx> {
     /// Create a Python bool value
     pub fn bool(value: BasicValueEnum<'ctx>) -> Self {
         Self::new(value, PyType::Bool, None)
+    }
+
+    /// Create a Python str value
+    pub fn new_str(value: BasicValueEnum<'ctx>) -> Self {
+        Self::new(value, PyType::Str, None)
     }
 
     /// Create a Python bytes value
@@ -412,6 +436,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Int => super::int_ops::binary_op(self, cg, op, rhs),
             PyType::Float => super::float_ops::binary_op(self, cg, op, rhs),
             PyType::Bool => super::bool_ops::binary_op(self, cg, op, rhs),
+            PyType::Str => super::str_ops::binary_op(self, cg, op, rhs),
             PyType::Bytes => super::bytes_ops::binary_op(self, cg, op, rhs),
             PyType::None => super::none_ops::binary_op(self, cg, op, rhs),
             PyType::List(_) => super::list_ops::binary_op(self, cg, op, rhs),
@@ -437,6 +462,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Int => super::int_ops::unary_op(self, cg, op),
             PyType::Float => super::float_ops::unary_op(self, cg, op),
             PyType::Bool => super::bool_ops::unary_op(self, cg, op),
+            PyType::Str => super::str_ops::unary_op(self, cg, op),
             PyType::Bytes => super::bytes_ops::unary_op(self, cg, op),
             PyType::None => super::none_ops::unary_op(self, cg, op),
             PyType::List(_) => super::list_ops::unary_op(self, cg, op),
@@ -458,6 +484,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Int => "print_int",
             PyType::Float => "print_float",
             PyType::Bool => "print_bool",
+            PyType::Str => "print_str",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
             PyType::List(_) => "print_list",
@@ -489,6 +516,11 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Bool => {
                 builder
                     .build_call(print_fn, &[self.runtime_value().into()], "print_bool")
+                    .unwrap();
+            }
+            PyType::Str => {
+                builder
+                    .build_call(print_fn, &[self.runtime_value().into()], "print_str")
                     .unwrap();
             }
             PyType::Bytes => {
@@ -555,14 +587,29 @@ impl<'ctx> PyValue<'ctx> {
                     .into())
             }
             PyType::Bool => Ok(self.runtime_value()),
-            PyType::Bytes => {
+            PyType::Str => {
                 let ptr_val = self.runtime_value().into_pointer_value();
-                let strlen_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strlen_bytes");
+                let strlen_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_len");
                 let call_site = cg
                     .builder
                     .build_call(strlen_fn, &[ptr_val.into()], "strlen")
                     .unwrap();
-                let len = super::extract_int_result(call_site, "strlen_bytes");
+                let len = super::extract_int_result(call_site, "str_len");
+                let zero = cg.ctx.i64_type().const_zero();
+                Ok(cg
+                    .builder
+                    .build_int_compare(IntPredicate::NE, len.into_int_value(), zero, "str_to_bool")
+                    .unwrap()
+                    .into())
+            }
+            PyType::Bytes => {
+                let ptr_val = self.runtime_value().into_pointer_value();
+                let strlen_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+                let call_site = cg
+                    .builder
+                    .build_call(strlen_fn, &[ptr_val.into()], "strlen")
+                    .unwrap();
+                let len = super::extract_int_result(call_site, "bytes_len");
                 let zero = cg.ctx.i64_type().const_zero();
                 Ok(cg
                     .builder

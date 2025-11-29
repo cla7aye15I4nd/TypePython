@@ -1036,3 +1036,19 @@ sds bytes_zfill(const char* s, int64_t width) {
 
     return result;
 }
+
+// ============================================================================
+// Builtin Functions: sum
+// ============================================================================
+
+// Sum all bytes in the bytes object
+int64_t bytes_sum(const char* s, int64_t start) {
+    int64_t sum = start;
+    if (s != NULL) {
+        size_t len = strlen(s);
+        for (size_t i = 0; i < len; i++) {
+            sum += (unsigned char)s[i];
+        }
+    }
+    return sum;
+}

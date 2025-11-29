@@ -1,0 +1,2 @@
+# Cannot bitwise AND Int and None
+x: int = 1 & None

@@ -1,2 +1,2 @@
-# Cannot use unary + on set
-x: set[int] = +{1, 2, 3}
+# Cannot use unary + on Set[int]
+x: set = +{1, 2, 3}

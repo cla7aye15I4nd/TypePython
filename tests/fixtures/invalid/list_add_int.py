@@ -1,2 +1,2 @@
-# Cannot add list and Int
-x: list[int] = [1, 2] + 3
+# Cannot add List[int] and Int
+x: list[int] = [1, 2, 3] + 1

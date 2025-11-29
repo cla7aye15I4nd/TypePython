@@ -1,2 +1,2 @@
-# Cannot subtract Bytes from Int
+# Cannot subtract Int and Bytes
 x: int = 1 - b"hello"

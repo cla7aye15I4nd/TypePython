@@ -129,6 +129,25 @@ pub fn binary_op<'a, 'ctx>(
                         .unwrap();
                     Ok(PyValue::float(result.into()))
                 }
+                PyType::Bool => {
+                    let rhs_int = cg
+                        .builder
+                        .build_int_z_extend(
+                            rhs.runtime_value().into_int_value(),
+                            cg.ctx.i64_type(),
+                            "btoi",
+                        )
+                        .unwrap();
+                    let rhs_float = cg
+                        .builder
+                        .build_signed_int_to_float(rhs_int, cg.ctx.f64_type(), "rhs_itof")
+                        .unwrap();
+                    let result = cg
+                        .builder
+                        .build_float_div(lhs_float, rhs_float, "fdiv")
+                        .unwrap();
+                    Ok(PyValue::float(result.into()))
+                }
                 PyType::Float => {
                     super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
                 }
@@ -151,6 +170,25 @@ pub fn binary_op<'a, 'ctx>(
                     "floordiv_int",
                 )))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let floordiv_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "floordiv_int");
+                let call_site = cg
+                    .builder
+                    .build_call(floordiv_fn, &[lhs_int.into(), rhs_int.into()], "floordiv")
+                    .unwrap();
+                Ok(PyValue::int(super::extract_int_result(
+                    call_site,
+                    "floordiv_int",
+                )))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -166,6 +204,24 @@ pub fn binary_op<'a, 'ctx>(
                 let call_site = cg
                     .builder
                     .build_call(mod_fn, &[lhs_int.into(), rhs.runtime_value().into()], "mod")
+                    .unwrap();
+                Ok(PyValue::int(super::extract_int_result(
+                    call_site, "mod_int",
+                )))
+            }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let mod_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "mod_int");
+                let call_site = cg
+                    .builder
+                    .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "mod")
                     .unwrap();
                 Ok(PyValue::int(super::extract_int_result(
                     call_site, "mod_int",
@@ -195,6 +251,24 @@ pub fn binary_op<'a, 'ctx>(
                     call_site, "pow_int",
                 )))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let pow_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "pow_int");
+                let call_site = cg
+                    .builder
+                    .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "ipow")
+                    .unwrap();
+                Ok(PyValue::int(super::extract_int_result(
+                    call_site, "pow_int",
+                )))
+            }
             PyType::Float => {
                 let lhs_float = cg
                     .builder
@@ -214,6 +288,18 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_and(lhs_int, rhs_int, "bitand").unwrap();
+                Ok(PyValue::int(result.into()))
+            }
             _ => Err(format!("Cannot bitwise AND Int and {:?}", rhs.ty)),
         },
         BinaryOp::BitOr => match &rhs.ty {
@@ -222,6 +308,18 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_or(lhs_int, rhs.runtime_value().into_int_value(), "bitor")
                     .unwrap();
+                Ok(PyValue::int(result.into()))
+            }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_or(lhs_int, rhs_int, "bitor").unwrap();
                 Ok(PyValue::int(result.into()))
             }
             _ => Err(format!("Cannot bitwise OR Int and {:?}", rhs.ty)),
@@ -234,6 +332,18 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_xor(lhs_int, rhs_int, "bitxor").unwrap();
+                Ok(PyValue::int(result.into()))
+            }
             _ => Err(format!("Cannot bitwise XOR Int and {:?}", rhs.ty)),
         },
         BinaryOp::LShift => match &rhs.ty {
@@ -242,6 +352,18 @@ pub fn binary_op<'a, 'ctx>(
                     .builder
                     .build_left_shift(lhs_int, rhs.runtime_value().into_int_value(), "lshift")
                     .unwrap();
+                Ok(PyValue::int(result.into()))
+            }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_left_shift(lhs_int, rhs_int, "lshift").unwrap();
                 Ok(PyValue::int(result.into()))
             }
             _ => Err(format!("Cannot left shift Int by {:?}", rhs.ty)),
@@ -257,6 +379,18 @@ pub fn binary_op<'a, 'ctx>(
                         "rshift",
                     )
                     .unwrap();
+                Ok(PyValue::int(result.into()))
+            }
+            PyType::Bool => {
+                let rhs_int = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let result = cg.builder.build_right_shift(lhs_int, rhs_int, true, "rshift").unwrap();
                 Ok(PyValue::int(result.into()))
             }
             _ => Err(format!("Cannot right shift Int by {:?}", rhs.ty)),

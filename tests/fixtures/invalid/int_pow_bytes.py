@@ -1,2 +1,2 @@
-# Cannot raise Int to Bytes power
-x: int = 2 ** b"hello"
+# Cannot power Int and Bytes
+x: int = 1 ** b"hello"

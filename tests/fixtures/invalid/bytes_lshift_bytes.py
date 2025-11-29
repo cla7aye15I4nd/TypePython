@@ -1,4 +1,2 @@
-# Test bytes left shift (unsupported operator)
-x: bytes = b"hello"
-y: bytes = b"world"
-result: bytes = x << y
+# Cannot left shift Bytes and Bytes
+x: bytes = b"hello" << b"hello"

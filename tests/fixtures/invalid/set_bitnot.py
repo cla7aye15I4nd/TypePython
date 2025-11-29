@@ -1,2 +1,3 @@
-# Cannot use bitwise NOT on set
-x: int = ~{1, 2, 3}
+# Cannot use bitwise NOT on Set[int]
+x: set[int] = {1, 2, 3}
+y: int = ~x

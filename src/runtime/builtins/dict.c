@@ -276,6 +276,38 @@ int64_t dict_setdefault(PyDict* dict, int64_t key, int64_t default_val) {
     return default_val;
 }
 
+// Find the maximum key in the dict
+int64_t dict_max(PyDict* dict) {
+    if (dict == NULL || dict->len == 0) return 0;
+    int64_t max_key = 0;
+    int first = 1;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (first || dict->entries[i].key > max_key) {
+                max_key = dict->entries[i].key;
+                first = 0;
+            }
+        }
+    }
+    return max_key;
+}
+
+// Find the minimum key in the dict
+int64_t dict_min(PyDict* dict) {
+    if (dict == NULL || dict->len == 0) return 0;
+    int64_t min_key = 0;
+    int first = 1;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (first || dict->entries[i].key < min_key) {
+                min_key = dict->entries[i].key;
+                first = 0;
+            }
+        }
+    }
+    return min_key;
+}
+
 // ============================================================================
 // Print Support
 // ============================================================================

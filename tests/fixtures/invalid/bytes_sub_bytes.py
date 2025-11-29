@@ -1,2 +1,2 @@
-# Cannot subtract Bytes from Bytes
-x: bytes = b"hello" - b"world"
+# Cannot subtract Bytes and Bytes
+x: bytes = b"hello" - b"hello"

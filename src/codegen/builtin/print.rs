@@ -52,6 +52,7 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Int => "print_int",
             PyType::Float => "print_float",
             PyType::Bool => "print_bool",
+            PyType::Str => "print_str",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
             PyType::List(_) => "print_list",

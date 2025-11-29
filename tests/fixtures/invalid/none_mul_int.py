@@ -1,2 +1,2 @@
 # Cannot multiply None and Int
-x: int = None * 1
+x: None = None * 1

@@ -1,2 +1,2 @@
-# Cannot subtract list from list
-x: list[int] = [1, 2, 3] - [1]
+# Cannot subtract List[int] and List[int]
+x: list[int] = [1, 2, 3] - [1, 2, 3]

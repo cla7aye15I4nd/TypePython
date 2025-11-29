@@ -1,0 +1,2 @@
+# Cannot bitwise OR Int and Set[int]
+x: int = 1 | {1, 2, 3}
