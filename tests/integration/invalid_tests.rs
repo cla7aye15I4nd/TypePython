@@ -601,6 +601,130 @@ invalid_test!(test_set_ge_int, "tests/fixtures/invalid/set_ge_int.py");
 // Phase 2: Type Error Tests
 // ============================================================================
 
+// ============================================================================
+// Int vs Bytes Comparison Error Tests
+// ============================================================================
+
+// Cannot compare Int with Bytes using <
+invalid_test!(test_int_lt_bytes, "tests/fixtures/invalid/int_lt_bytes.py");
+
+// Cannot compare Int with Bytes using <=
+invalid_test!(test_int_le_bytes, "tests/fixtures/invalid/int_le_bytes.py");
+
+// Cannot compare Int with Bytes using >
+invalid_test!(test_int_gt_bytes, "tests/fixtures/invalid/int_gt_bytes.py");
+
+// Cannot compare Int with Bytes using >=
+invalid_test!(test_int_ge_bytes, "tests/fixtures/invalid/int_ge_bytes.py");
+
+// ============================================================================
+// Float vs Bytes Comparison Error Tests
+// ============================================================================
+
+// Cannot compare Float with Bytes using <
+invalid_test!(
+    test_float_compare_bytes,
+    "tests/fixtures/invalid/float_compare_bytes.py"
+);
+
+// ============================================================================
+// Bytes vs Int Comparison Error Tests
+// ============================================================================
+
+// Cannot compare Bytes with Int using !=
+invalid_test!(test_bytes_ne_int, "tests/fixtures/invalid/bytes_ne_int.py");
+
+// Cannot compare Bytes with Int using <
+invalid_test!(test_bytes_lt_int, "tests/fixtures/invalid/bytes_lt_int.py");
+
+// Cannot compare Bytes with Int using <=
+invalid_test!(test_bytes_le_int, "tests/fixtures/invalid/bytes_le_int.py");
+
+// Cannot compare Bytes with Int using >
+invalid_test!(test_bytes_gt_int, "tests/fixtures/invalid/bytes_gt_int.py");
+
+// Cannot compare Bytes with Int using >=
+invalid_test!(test_bytes_ge_int, "tests/fixtures/invalid/bytes_ge_int.py");
+
+// ============================================================================
+// Int-Bytes Logical Error Tests
+// ============================================================================
+
+// Cannot use 'and' with Int and Bytes
+invalid_test!(
+    test_int_and_bytes,
+    "tests/fixtures/invalid/int_and_bytes.py"
+);
+
+// Cannot use 'or' with Int and Bytes
+invalid_test!(test_int_or_bytes, "tests/fixtures/invalid/int_or_bytes.py");
+
+// Cannot use 'is' with Int and Bytes
+invalid_test!(test_int_is_bytes, "tests/fixtures/invalid/int_is_bytes.py");
+
+// Cannot use 'is not' with Int and Bytes
+invalid_test!(
+    test_int_isnot_bytes,
+    "tests/fixtures/invalid/int_isnot_bytes.py"
+);
+
+// Cannot multiply Int by Bytes
+invalid_test!(
+    test_int_mul_bytes,
+    "tests/fixtures/invalid/int_mul_bytes.py"
+);
+
+// ============================================================================
+// Float Membership Error Tests
+// ============================================================================
+
+// Cannot use 'in' with Float and list
+invalid_test!(
+    test_float_in_list,
+    "tests/fixtures/invalid/float_in_list.py"
+);
+
+// Cannot use 'not' on Float
+invalid_test!(
+    test_float_not_float,
+    "tests/fixtures/invalid/float_not_float.py"
+);
+
+// ============================================================================
+// Bool-Bytes Error Tests
+// ============================================================================
+
+// Cannot use 'is not' with Bool and Bytes
+invalid_test!(
+    test_bool_isnot_bytes,
+    "tests/fixtures/invalid/bool_isnot_bytes.py"
+);
+
+// Cannot use 'and' with Bool and Bytes
+invalid_test!(
+    test_bool_and_bytes,
+    "tests/fixtures/invalid/bool_and_bytes.py"
+);
+
+// Cannot use 'or' with Bool and Bytes
+invalid_test!(
+    test_bool_or_bytes,
+    "tests/fixtures/invalid/bool_or_bytes.py"
+);
+
+// Cannot use unary - on Bool
+invalid_test!(test_bool_neg, "tests/fixtures/invalid/bool_neg.py");
+
+// Cannot use unary + on Bool
+invalid_test!(test_bool_pos, "tests/fixtures/invalid/bool_pos.py");
+
+// Cannot use bitwise NOT on Bool
+invalid_test!(test_bool_bitnot, "tests/fixtures/invalid/bool_bitnot.py");
+
+// ============================================================================
+// Phase 2: Type Error Tests
+// ============================================================================
+
 // Call undefined function
 invalid_test!(
     test_undefined_function,
