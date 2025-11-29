@@ -18,3 +18,5 @@ print(d[4])
 
 # Test len
 print(len(d))
+print(d != 1)
+print(d == 1)

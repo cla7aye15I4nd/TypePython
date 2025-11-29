@@ -433,6 +433,26 @@ test_case!(
     test_logical_short_circuit,
     "tests/fixtures/valid/advanced/operators/logical_short_circuit.py"
 );
+test_case!(
+    test_float_logical_ops,
+    "tests/fixtures/valid/advanced/operators/float_logical_ops.py"
+);
+test_case!(
+    test_bool_identity_cross_type,
+    "tests/fixtures/valid/advanced/operators/bool_identity_cross_type.py"
+);
+test_case!(
+    test_bool_logical_same_type,
+    "tests/fixtures/valid/advanced/operators/bool_logical_same_type.py"
+);
+test_case!(
+    test_bool_unary_ops,
+    "tests/fixtures/valid/advanced/operators/bool_unary_ops.py"
+);
+test_case!(
+    test_bytes_eq_cross_type,
+    "tests/fixtures/valid/advanced/operators/bytes_eq_cross_type.py"
+);
 
 // ============================================================================
 // Module Tests
@@ -498,6 +518,10 @@ test_case!(
 test_case!(
     test_math_extra,
     "tests/fixtures/valid/builtins/math_extra.py"
+);
+test_case!(
+    test_comprehensive_enum_all,
+    "tests/fixtures/valid/builtins/comprehensive_enum_all.py"
 );
 
 // ============================================================================
@@ -673,4 +697,9 @@ test_case!(
 test_case!(
     test_constructors_valid,
     "tests/fixtures/valid/basic/test_constructors_valid.py"
+);
+
+test_case!(
+    test_max_containers,
+    "tests/fixtures/valid/basic/test_max_containers.py"
 );

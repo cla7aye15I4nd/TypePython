@@ -76,7 +76,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            // Different types are never equal
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::Ne => match &rhs.ty {
             PyType::Bytes => {
@@ -97,7 +98,8 @@ pub fn binary_op<'a, 'ctx>(
                 let negated = cg.builder.build_not(bool_val, "ne").unwrap();
                 Ok(PyValue::bool(negated.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            // Different types are never equal
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         BinaryOp::Lt => match &rhs.ty {
             PyType::Bytes => {

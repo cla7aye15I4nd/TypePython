@@ -632,17 +632,17 @@ impl<'ctx> CodeGen<'ctx> {
         // Get current block for PHI
         let entry_bb = self.builder.get_insert_block().unwrap();
 
-        // For `and`: if left is false, short-circuit to merge (result is false)
-        // For `or`: if left is true, short-circuit to merge (result is true)
+        // For `and`: if left is false, short-circuit to merge (result is lhs)
+        // For `or`: if left is true, short-circuit to merge (result is lhs)
         match op {
             BinaryOp::And => {
-                // If lhs is false, skip rhs and return false
+                // If lhs is false, skip rhs and return lhs
                 self.builder
                     .build_conditional_branch(lhs_bool, eval_rhs_bb, merge_bb)
                     .unwrap();
             }
             BinaryOp::Or => {
-                // If lhs is true, skip rhs and return true
+                // If lhs is true, skip rhs and return lhs
                 self.builder
                     .build_conditional_branch(lhs_bool, merge_bb, eval_rhs_bb)
                     .unwrap();
@@ -653,38 +653,56 @@ impl<'ctx> CodeGen<'ctx> {
         // Evaluate right side
         self.builder.position_at_end(eval_rhs_bb);
         let rhs = self.evaluate_expression(right)?;
-        let rhs_bool = self.value_to_bool(&rhs)?;
         let rhs_bb = self.builder.get_insert_block().unwrap();
         self.builder.build_unconditional_branch(merge_bb).unwrap();
 
         // Merge block - use PHI to select the result
+        // Python's and/or return the actual values, not booleans:
+        // - `and`: returns lhs if falsy, else rhs
+        // - `or`: returns lhs if truthy, else rhs
         self.builder.position_at_end(merge_bb);
+
+        // We need to handle different types, so we'll use the widest type
+        // For now, we'll handle the common case where both are the same type
+        // and fall back to a runtime error if types don't match
+        let result_type = if lhs.ty == rhs.ty {
+            lhs.ty.clone()
+        } else {
+            // For mixed types, Python returns the actual value, so we need to handle this
+            // For simplicity, we'll return Bool type for now and convert
+            // This is a simplification - proper Python would return the actual object
+            return Err(format!(
+                "Logical {:?} between different types {:?} and {:?} not yet fully supported",
+                op, lhs.ty, rhs.ty
+            ));
+        };
+
         let phi = self
             .builder
-            .build_phi(self.context.bool_type(), "sc_result")
+            .build_phi(lhs.runtime_value().get_type(), "sc_result")
             .unwrap();
 
         match op {
             BinaryOp::And => {
-                // If we came from entry (short-circuit), result is false
+                // If we came from entry (short-circuit), result is lhs (falsy)
                 // If we came from eval_rhs, result is rhs
                 phi.add_incoming(&[
-                    (&self.context.bool_type().const_int(0, false), entry_bb),
-                    (&rhs_bool, rhs_bb),
+                    (&lhs.runtime_value(), entry_bb),
+                    (&rhs.runtime_value(), rhs_bb),
                 ]);
             }
             BinaryOp::Or => {
-                // If we came from entry (short-circuit), result is true
+                // If we came from entry (short-circuit), result is lhs (truthy)
                 // If we came from eval_rhs, result is rhs
                 phi.add_incoming(&[
-                    (&self.context.bool_type().const_int(1, false), entry_bb),
-                    (&rhs_bool, rhs_bb),
+                    (&lhs.runtime_value(), entry_bb),
+                    (&rhs.runtime_value(), rhs_bb),
                 ]);
             }
             _ => unreachable!(),
         }
 
-        Ok(PyValue::bool(phi.as_basic_value()))
+        Ok(PyValue::new(phi.as_basic_value(), result_type, None))
     }
 
     /// Convert a PyValue to a boolean (i1)

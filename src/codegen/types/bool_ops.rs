@@ -164,7 +164,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is' between Bool and {:?}", rhs.ty)),
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::IsNot => match &rhs.ty {
             PyType::Bool => Ok(PyValue::bool(
@@ -178,7 +179,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is not' between Bool and {:?}", rhs.ty)),
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
 
         // Logical
@@ -219,6 +221,13 @@ pub fn unary_op<'a, 'ctx>(
     let bool_val = val.runtime_value().into_int_value();
     match op {
         UnaryOp::Not => Ok(cg.builder.build_not(bool_val, "not").unwrap().into()),
-        _ => Err(format!("Operator {:?} not supported on bools", op)),
+        // For bitwise NOT, unary minus, and unary plus, coerce to int first
+        UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Pos => {
+            let int_val = cg
+                .builder
+                .build_int_z_extend(bool_val, cg.ctx.i64_type(), "btoi")
+                .unwrap();
+            super::int_ops::unary_op(&PyValue::int(int_val.into()), cg, op)
+        }
     }
 }
