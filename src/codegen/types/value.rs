@@ -145,7 +145,11 @@ impl<'ctx> FunctionInfo<'ctx> {
             PyType::Bool => context.bool_type().into(),
             PyType::Bytes => context.ptr_type(inkwell::AddressSpace::default()).into(),
             PyType::None => context.i32_type().into(), // void represented as i32 for now
-            _ => context.i64_type().into(),            // fallback for Function/Module
+            // Container types are all pointers to heap-allocated structs
+            PyType::List(_) => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Dict(_, _) => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Set(_) => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            _ => context.i64_type().into(), // fallback for Function/Module
         }
     }
 }
@@ -181,6 +185,10 @@ pub enum PyType {
     Bool,
     Bytes,
     None,
+    // Container types (heap-allocated, pointer values)
+    List(Box<PyType>),              // Element type
+    Dict(Box<PyType>, Box<PyType>), // Key type, Value type
+    Set(Box<PyType>),               // Element type
     // Compile-time types (have special LLVM values)
     Function,
     Module,
@@ -199,9 +207,12 @@ impl PyType {
             Type::Bytes => Ok(PyType::Bytes),
             Type::None => Ok(PyType::None),
             Type::Str => Err("Str type not yet implemented (use Bytes)".to_string()),
-            Type::List(_) => Err("List type not yet implemented".to_string()),
-            Type::Dict(_, _) => Err("Dict type not yet implemented".to_string()),
-            Type::Set(_) => Err("Set type not yet implemented".to_string()),
+            Type::List(elem_ty) => Ok(PyType::List(Box::new(PyType::from_ast_type(elem_ty)?))),
+            Type::Dict(key_ty, val_ty) => Ok(PyType::Dict(
+                Box::new(PyType::from_ast_type(key_ty)?),
+                Box::new(PyType::from_ast_type(val_ty)?),
+            )),
+            Type::Set(elem_ty) => Ok(PyType::Set(Box::new(PyType::from_ast_type(elem_ty)?))),
             Type::Tuple(_) => Err("Tuple type not yet implemented".to_string()),
             Type::Custom(name) => Err(format!("Custom type '{}' not yet implemented", name)),
         }
@@ -215,6 +226,9 @@ impl PyType {
             PyType::Bool => "Bool",
             PyType::Bytes => "Bytes",
             PyType::None => "None",
+            PyType::List(_) => "List",
+            PyType::Dict(_, _) => "Dict",
+            PyType::Set(_) => "Set",
             PyType::Function => "Function",
             PyType::Module => "Module",
             PyType::Macro => "Macro",
@@ -225,7 +239,14 @@ impl PyType {
     pub fn is_runtime(&self) -> bool {
         matches!(
             self,
-            PyType::Int | PyType::Float | PyType::Bool | PyType::Bytes | PyType::None
+            PyType::Int
+                | PyType::Float
+                | PyType::Bool
+                | PyType::Bytes
+                | PyType::None
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
         )
     }
 
@@ -346,33 +367,9 @@ impl<'ctx> PyValue<'ctx> {
         }
     }
 
-    /// Get the runtime value if this is a runtime type
-    pub fn try_runtime_value(&self) -> Option<BasicValueEnum<'ctx>> {
-        match &self.inner {
-            PyValueInner::Runtime { value, .. } => Some(*value),
-            _ => None,
-        }
-    }
-
-    /// Get the function info (panics if not a function type)
-    pub fn function_info(&self) -> &FunctionInfo<'ctx> {
-        match &self.inner {
-            PyValueInner::Function(info) => info,
-            _ => panic!("Expected function value, got {:?}", self.ty),
-        }
-    }
-
     /// Get the module info (panics if not a module type)
     pub fn module_info(&self) -> &ModuleInfo<'ctx> {
         match &self.inner {
-            PyValueInner::Module(info) => info,
-            _ => panic!("Expected module value, got {:?}", self.ty),
-        }
-    }
-
-    /// Get the module info mutably (panics if not a module type)
-    pub fn module_info_mut(&mut self) -> &mut ModuleInfo<'ctx> {
-        match &mut self.inner {
             PyValueInner::Module(info) => info,
             _ => panic!("Expected module value, got {:?}", self.ty),
         }
@@ -467,6 +464,9 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Bool => super::bool_ops::binary_op(self, cg, op, rhs),
             PyType::Bytes => super::bytes_ops::binary_op(self, cg, op, rhs),
             PyType::None => super::none_ops::binary_op(self, cg, op, rhs),
+            PyType::List(_) => super::list_ops::binary_op(self, cg, op, rhs),
+            PyType::Dict(_, _) => super::dict_ops::binary_op(self, cg, op, rhs),
+            PyType::Set(_) => super::set_ops::binary_op(self, cg, op, rhs),
             PyType::Function => Err("Binary operations not supported on functions".to_string()),
             PyType::Module => Err("Binary operations not supported on modules".to_string()),
             PyType::Macro => Err("Binary operations not supported on macros".to_string()),
@@ -489,6 +489,9 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Bool => super::bool_ops::unary_op(self, cg, op),
             PyType::Bytes => super::bytes_ops::unary_op(self, cg, op),
             PyType::None => super::none_ops::unary_op(self, cg, op),
+            PyType::List(_) => super::list_ops::unary_op(self, cg, op),
+            PyType::Dict(_, _) => super::dict_ops::unary_op(self, cg, op),
+            PyType::Set(_) => super::set_ops::unary_op(self, cg, op),
             PyType::Function => Err("Unary operations not supported on functions".to_string()),
             PyType::Module => Err("Unary operations not supported on modules".to_string()),
             PyType::Macro => Err("Unary operations not supported on macros".to_string()),
@@ -507,6 +510,9 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Bool => "print_bool",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
+            PyType::List(_) => "print_list",
+            PyType::Dict(_, _) => "print_dict",
+            PyType::Set(_) => "print_set",
             PyType::Function => "print_function",
             PyType::Module => "print_module",
             PyType::Macro => "print_macro",
@@ -542,6 +548,21 @@ impl<'ctx> PyValue<'ctx> {
             }
             PyType::None => {
                 builder.build_call(print_fn, &[], "print_none").unwrap();
+            }
+            PyType::List(_) => {
+                builder
+                    .build_call(print_fn, &[self.runtime_value().into()], "print_list")
+                    .unwrap();
+            }
+            PyType::Dict(_, _) => {
+                builder
+                    .build_call(print_fn, &[self.runtime_value().into()], "print_dict")
+                    .unwrap();
+            }
+            PyType::Set(_) => {
+                builder
+                    .build_call(print_fn, &[self.runtime_value().into()], "print_set")
+                    .unwrap();
             }
             PyType::Function => {
                 return Err("Cannot print function".to_string());
@@ -607,6 +628,54 @@ impl<'ctx> PyValue<'ctx> {
             PyType::None => {
                 // None is always falsy
                 Ok(cg.ctx.bool_type().const_zero().into())
+            }
+            PyType::List(_) => {
+                // Empty list is falsy, non-empty is truthy
+                let ptr_val = self.runtime_value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+                let call_site = cg
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "list_len")
+                    .unwrap();
+                let len = super::extract_int_result(call_site, "list_len")?;
+                let zero = cg.ctx.i64_type().const_zero();
+                Ok(cg
+                    .builder
+                    .build_int_compare(IntPredicate::NE, len.into_int_value(), zero, "list_to_bool")
+                    .unwrap()
+                    .into())
+            }
+            PyType::Dict(_, _) => {
+                // Empty dict is falsy, non-empty is truthy
+                let ptr_val = self.runtime_value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "dict_len");
+                let call_site = cg
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "dict_len")
+                    .unwrap();
+                let len = super::extract_int_result(call_site, "dict_len")?;
+                let zero = cg.ctx.i64_type().const_zero();
+                Ok(cg
+                    .builder
+                    .build_int_compare(IntPredicate::NE, len.into_int_value(), zero, "dict_to_bool")
+                    .unwrap()
+                    .into())
+            }
+            PyType::Set(_) => {
+                // Empty set is falsy, non-empty is truthy
+                let ptr_val = self.runtime_value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "set_len");
+                let call_site = cg
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "set_len")
+                    .unwrap();
+                let len = super::extract_int_result(call_site, "set_len")?;
+                let zero = cg.ctx.i64_type().const_zero();
+                Ok(cg
+                    .builder
+                    .build_int_compare(IntPredicate::NE, len.into_int_value(), zero, "set_to_bool")
+                    .unwrap()
+                    .into())
             }
             PyType::Function => {
                 // Functions are always truthy

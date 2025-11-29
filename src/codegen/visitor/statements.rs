@@ -1,7 +1,7 @@
 /// Statement visitor implementation for code generation
 use super::super::CodeGen;
 use crate::ast::*;
-use crate::types::{CgCtx, PyValue};
+use crate::types::{CgCtx, PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_decl_impl(
@@ -47,8 +47,25 @@ impl<'ctx> CodeGen<'ctx> {
             AssignTarget::Attribute { .. } => {
                 todo!("Attribute assignment")
             }
-            AssignTarget::Subscript { .. } => {
-                todo!("Subscript assignment")
+            AssignTarget::Subscript { object, index } => {
+                let obj = self.evaluate_expression(object)?;
+                let idx = self.evaluate_expression(index)?;
+                let val = self.evaluate_expression(value)?;
+
+                match &obj.ty {
+                    PyType::List(_) => {
+                        self.list_setitem(obj.value(), idx.value(), val.value())?;
+                        Ok(())
+                    }
+                    PyType::Dict(_, _) => {
+                        self.dict_setitem(obj.value(), idx.value(), val.value())?;
+                        Ok(())
+                    }
+                    _ => Err(format!(
+                        "Subscript assignment not supported for type {:?}",
+                        obj.ty
+                    )),
+                }
             }
         }
     }

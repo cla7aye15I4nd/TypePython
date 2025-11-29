@@ -265,14 +265,59 @@ fn build_parameter(pair: Pair<Rule>) -> Parameter {
 fn build_type(pair: Pair<Rule>) -> Type {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
+        Rule::basic_type => build_basic_type(inner),
+        Rule::list_type => build_list_type(inner),
+        Rule::dict_type => build_dict_type(inner),
+        Rule::set_type => build_set_type(inner),
+        _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
+    }
+}
+
+fn build_basic_type(pair: Pair<Rule>) -> Type {
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
         Rule::INT_TYPE => Type::Int,
         Rule::FLOAT_TYPE => Type::Float,
         Rule::BOOL_TYPE => Type::Bool,
         Rule::STR_TYPE => Type::Str,
         Rule::BYTES_TYPE => Type::Bytes,
         Rule::NONE_TYPE => Type::None,
-        _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
+        _ => panic!("Unexpected rule in basic type: {:?}", inner.as_rule()),
     }
+}
+
+fn build_list_type(pair: Pair<Rule>) -> Type {
+    // list_type = { LIST_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+    let inner: Vec<_> = pair.into_inner().collect();
+    // Find the type_spec (skip LIST_TYPE, LBRACKET)
+    let elem_type_pair = inner
+        .into_iter()
+        .find(|p| p.as_rule() == Rule::type_spec)
+        .unwrap();
+    Type::List(Box::new(build_type(elem_type_pair)))
+}
+
+fn build_dict_type(pair: Pair<Rule>) -> Type {
+    // dict_type = { DICT_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ COMMA ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+    let type_specs: Vec<_> = pair
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::type_spec)
+        .collect();
+    assert_eq!(type_specs.len(), 2, "Dict type requires exactly 2 type parameters");
+    let key_type = build_type(type_specs[0].clone());
+    let value_type = build_type(type_specs[1].clone());
+    Type::Dict(Box::new(key_type), Box::new(value_type))
+}
+
+fn build_set_type(pair: Pair<Rule>) -> Type {
+    // set_type = { SET_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+    let inner: Vec<_> = pair.into_inner().collect();
+    // Find the type_spec (skip SET_TYPE, LBRACKET)
+    let elem_type_pair = inner
+        .into_iter()
+        .find(|p| p.as_rule() == Rule::type_spec)
+        .unwrap();
+    Type::Set(Box::new(build_type(elem_type_pair)))
 }
 
 fn build_block(pair: Pair<Rule>) -> Vec<Statement> {
@@ -602,6 +647,8 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
         Rule::power_expr => build_power_expr(pair),
         Rule::postfix_expr => build_postfix_expr(pair),
         Rule::atom => build_atom(pair),
+        Rule::subscript_expr => build_subscript_expr(pair),
+        Rule::attribute_expr => build_attribute_expr(pair),
         _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
     }
 }
@@ -874,6 +921,74 @@ fn build_slice_expr(pair: Pair<Rule>) -> Expression {
     }
 }
 
+/// Build a subscript expression from the standalone subscript_expr rule
+/// subscript_expr = { ID ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+fn build_subscript_expr(pair: Pair<Rule>) -> Expression {
+    let items: Vec<_> = pair.into_inner().collect();
+
+    // First item is the ID
+    let id_pair = &items[0];
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let mut expr = Expression::Var(id_pair.as_str().to_string());
+
+    // Remaining items are LBRACKET, (slice_expr | expression), RBRACKET sequences
+    let mut i = 1;
+    while i < items.len() {
+        if items[i].as_rule() == Rule::LBRACKET {
+            i += 1; // skip LBRACKET
+
+            // Find the index expression or slice
+            while i < items.len() && items[i].as_rule() != Rule::RBRACKET {
+                let item = &items[i];
+                if item.as_rule() == Rule::expression {
+                    expr = Expression::Subscript {
+                        object: Box::new(expr),
+                        index: Box::new(build_expression(item.clone())),
+                    };
+                } else if item.as_rule() == Rule::slice_expr {
+                    expr = Expression::Subscript {
+                        object: Box::new(expr),
+                        index: Box::new(build_slice_expr(item.clone())),
+                    };
+                }
+                i += 1;
+            }
+            // Skip RBRACKET
+            if i < items.len() && items[i].as_rule() == Rule::RBRACKET {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    expr
+}
+
+/// Build an attribute expression from the standalone attribute_expr rule
+/// attribute_expr = { ID ~ (WS* ~ DOT ~ WS* ~ ID)+ }
+fn build_attribute_expr(pair: Pair<Rule>) -> Expression {
+    let items: Vec<_> = pair.into_inner().collect();
+
+    // First item is the ID
+    let id_pair = &items[0];
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let mut expr = Expression::Var(id_pair.as_str().to_string());
+
+    // Remaining items are DOT, ID sequences
+    for item in items.iter().skip(1) {
+        if item.as_rule() == Rule::ID {
+            expr = Expression::Attribute {
+                object: Box::new(expr),
+                attr: item.as_str().to_string(),
+            };
+        }
+        // Skip DOT tokens
+    }
+
+    expr
+}
+
 fn build_binary_chain(pair: Pair<Rule>, op: BinaryOp) -> Expression {
     let items: Vec<Expression> = pair
         .into_inner()
@@ -1052,10 +1167,14 @@ fn build_dict_literal(pair: Pair<Rule>) -> Expression {
         .into_inner()
         .filter(|p| p.as_rule() == Rule::dict_pair)
         .map(|dict_pair| {
-            let mut items = dict_pair.into_inner();
-            let key = build_expression(items.next().unwrap());
-            // Skip COLON
-            let value = build_expression(items.next().unwrap());
+            // Filter to get only expression rules (key and value), skipping COLON
+            let exprs: Vec<_> = dict_pair
+                .into_inner()
+                .filter(|p| p.as_rule() == Rule::expression)
+                .collect();
+            assert_eq!(exprs.len(), 2, "dict_pair must have exactly 2 expressions");
+            let key = build_expression(exprs[0].clone());
+            let value = build_expression(exprs[1].clone());
             (key, value)
         })
         .collect();

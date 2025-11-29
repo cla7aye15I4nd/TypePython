@@ -7,6 +7,7 @@ use inkwell::values::BasicValueEnum;
 use inkwell::IntPredicate;
 
 use super::value::{CgCtx, PyType, PyValue};
+use super::{extract_int_result, get_or_declare_builtin};
 
 /// Binary operations for Int type
 pub fn binary_op<'a, 'ctx>(
@@ -403,10 +404,145 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot logical OR Int and {:?}", rhs.ty)),
         },
 
-        BinaryOp::In | BinaryOp::NotIn => Err(format!(
-            "Membership operator {:?} requires container support",
-            op
-        )),
+        BinaryOp::In => match &rhs.ty {
+            PyType::List(_) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "list_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            PyType::Set(_) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "set_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "set_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            PyType::Dict(_, _) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "dict_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "dict_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot use 'in' with Int and {:?}", rhs.ty)),
+        },
+
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::List(_) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "list_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            PyType::Set(_) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "set_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "set_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            PyType::Dict(_, _) => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "dict_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "dict_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with Int and {:?}", rhs.ty)),
+        },
     }
 }
 

@@ -4,8 +4,11 @@
 //! that need special codegen treatment (type dispatch, multiple args, etc.)
 
 mod bytes;
+mod dict;
+mod list;
 mod math;
 mod print;
+mod set;
 
 use super::CodeGen;
 use crate::ast::Expression;

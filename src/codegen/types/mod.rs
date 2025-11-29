@@ -5,9 +5,12 @@
 
 mod bool_ops;
 mod bytes_ops;
+mod dict_ops;
 mod float_ops;
 mod int_ops;
+mod list_ops;
 mod none_ops;
+mod set_ops;
 mod value;
 
 pub use value::{CgCtx, FunctionInfo, MacroKind, ModuleInfo, PyType, PyValue, PyValueInner};

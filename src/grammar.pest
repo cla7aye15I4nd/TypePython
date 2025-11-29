@@ -44,12 +44,16 @@ BOOL_TYPE  = { "bool" ~ kw_boundary }
 STR_TYPE   = { "str" ~ kw_boundary }
 BYTES_TYPE = { "bytes" ~ kw_boundary }
 NONE_TYPE  = { "None" ~ kw_boundary }
+LIST_TYPE  = { "list" ~ kw_boundary }
+DICT_TYPE  = { "dict" ~ kw_boundary }
+SET_TYPE   = { "set" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
     AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
-    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE
+    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE |
+    LIST_TYPE | DICT_TYPE | SET_TYPE
 }
 
 // Identifiers (must not be keywords)
@@ -246,13 +250,27 @@ method_return_type = { ARROW ~ WS* ~ type_spec }
 // Types
 // ============================================================================
 
-type_spec = {
+// Generic type syntax: list[int], dict[str, int], set[int]
+list_type = { LIST_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+dict_type = { DICT_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ COMMA ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+set_type  = { SET_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+
+// Basic types (non-generic)
+basic_type = {
     INT_TYPE
     | FLOAT_TYPE
     | BOOL_TYPE
     | STR_TYPE
     | BYTES_TYPE
     | NONE_TYPE
+}
+
+// Full type specification - generic types must come first due to how parsing works
+type_spec = {
+    list_type
+    | dict_type
+    | set_type
+    | basic_type
 }
 
 // ============================================================================

@@ -293,9 +293,33 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match val.ty {
+        match &val.ty {
             PyType::Bytes => {
                 let len_fn = self.get_or_declare_c_builtin("bytes_len");
+                let call = self
+                    .builder
+                    .build_call(len_fn, &[val.value().into()], "len")
+                    .unwrap();
+                Ok(Some(self.extract_int_call_result(call)?))
+            }
+            PyType::List(_) => {
+                let len_fn = self.get_or_declare_c_builtin("list_len");
+                let call = self
+                    .builder
+                    .build_call(len_fn, &[val.value().into()], "len")
+                    .unwrap();
+                Ok(Some(self.extract_int_call_result(call)?))
+            }
+            PyType::Dict(_, _) => {
+                let len_fn = self.get_or_declare_c_builtin("dict_len");
+                let call = self
+                    .builder
+                    .build_call(len_fn, &[val.value().into()], "len")
+                    .unwrap();
+                Ok(Some(self.extract_int_call_result(call)?))
+            }
+            PyType::Set(_) => {
+                let len_fn = self.get_or_declare_c_builtin("set_len");
                 let call = self
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")

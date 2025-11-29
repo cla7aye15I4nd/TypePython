@@ -169,7 +169,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
 
                 // Use the return type from func_value metadata
-                match return_type {
+                match &return_type {
                     PyType::None => Ok(PyValue::none(
                         self.context
                             .ptr_type(inkwell::AddressSpace::default())
@@ -180,21 +180,20 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Float => self.extract_float_call_result(call_site),
                     PyType::Bool => self.extract_bool_call_result(call_site),
                     PyType::Bytes => self.extract_bytes_call_result(call_site),
+                    PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                        // Container types return pointers
+                        let ptr_val = self.extract_ptr_call_result(call_site)?;
+                        Ok(PyValue::new(ptr_val.value(), return_type.clone(), None))
+                    }
                     _ => Err(format!("Unsupported return type: {:?}", return_type)),
                 }
             }
-            Expression::List(_) => {
-                todo!("List literals")
-            }
+            Expression::List(elements) => self.visit_list_lit_impl(elements),
             Expression::Tuple(_) => {
                 todo!("Tuple literals")
             }
-            Expression::Dict(_) => {
-                todo!("Dict literals")
-            }
-            Expression::Set(_) => {
-                todo!("Set literals")
-            }
+            Expression::Dict(pairs) => self.visit_dict_lit_impl(pairs),
+            Expression::Set(elements) => self.visit_set_lit_impl(elements),
             Expression::Attribute { object, attr } => {
                 let obj = self.evaluate_expression(object)?;
                 match &obj.ty {
@@ -222,6 +221,18 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Bytes => {
                         // Look up bytes method
                         self.get_bytes_method(&obj, attr)
+                    }
+                    PyType::List(_) => {
+                        // Look up list method
+                        self.get_list_method(&obj, attr)
+                    }
+                    PyType::Dict(_, _) => {
+                        // Look up dict method
+                        self.get_dict_method(&obj, attr)
+                    }
+                    PyType::Set(_) => {
+                        // Look up set method
+                        self.get_set_method(&obj, attr)
                     }
                     _ => Err(format!(
                         "Attribute access not supported for type {:?}",
@@ -293,6 +304,66 @@ impl<'ctx> CodeGen<'ctx> {
                                 self.bytes_slice(obj_val, start_val.value(), stop_val.value())
                             }
                         }
+                        PyType::List(elem_type) => {
+                            let obj_val = obj.value();
+                            let elem_type = elem_type.as_ref().clone();
+                            // list[start:stop:step] returns list
+                            let len = self.list_len(obj_val)?;
+
+                            if let Some(step_expr) = step {
+                                // With step: use list_slice_step
+                                let step_val = self.evaluate_expression(step_expr)?;
+
+                                // Get start value (INT64_MAX as sentinel for "use default")
+                                let start_val = if let Some(s) = start {
+                                    self.evaluate_expression(s)?
+                                } else {
+                                    PyValue::int(
+                                        self.context
+                                            .i64_type()
+                                            .const_int(i64::MAX as u64, false)
+                                            .into(),
+                                    )
+                                };
+
+                                // Get stop value (INT64_MAX as sentinel for "use default")
+                                let stop_val = if let Some(e) = stop {
+                                    self.evaluate_expression(e)?
+                                } else {
+                                    PyValue::int(
+                                        self.context
+                                            .i64_type()
+                                            .const_int(i64::MAX as u64, false)
+                                            .into(),
+                                    )
+                                };
+
+                                self.list_slice_step(
+                                    obj_val,
+                                    start_val.value(),
+                                    stop_val.value(),
+                                    step_val.value(),
+                                    &elem_type,
+                                )
+                            } else {
+                                // No step: use simpler list_slice
+                                // Get start value (default 0)
+                                let start_val = if let Some(s) = start {
+                                    self.evaluate_expression(s)?
+                                } else {
+                                    PyValue::int(self.context.i64_type().const_zero().into())
+                                };
+
+                                // Get stop value (default len)
+                                let stop_val = if let Some(e) = stop {
+                                    self.evaluate_expression(e)?
+                                } else {
+                                    len
+                                };
+
+                                self.list_slice(obj_val, start_val.value(), stop_val.value(), &elem_type)
+                            }
+                        }
                         _ => Err(format!(
                             "Slice operation not supported for type {:?}",
                             obj.ty
@@ -304,6 +375,17 @@ impl<'ctx> CodeGen<'ctx> {
                         PyType::Bytes => {
                             // bytes[index] returns an int (the byte value at that index)
                             self.bytes_getitem(obj.value(), idx.value())
+                        }
+                        PyType::List(elem_type) => {
+                            // list[index] returns the element at that index
+                            self.list_getitem(obj.value(), idx.value(), elem_type.as_ref())
+                        }
+                        PyType::Dict(_, val_type) => {
+                            // dict[key] returns the value at that key
+                            self.dict_getitem(obj.value(), idx.value(), val_type.as_ref())
+                        }
+                        PyType::Set(_) => {
+                            Err("Set does not support subscript operation".to_string())
                         }
                         _ => Err(format!(
                             "Subscript operation not supported for type {:?}",
@@ -653,6 +735,60 @@ impl<'ctx> CodeGen<'ctx> {
                 // Functions, modules, and macros are always truthy
                 Ok(self.context.bool_type().const_int(1, false))
             }
+            PyType::List(_) => {
+                // List is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = self.get_or_declare_c_builtin("list_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "list_len")
+                    .unwrap();
+                let len = self
+                    .extract_int_call_result(len_call)?
+                    .value()
+                    .into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Dict(_, _) => {
+                // Dict is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = self.get_or_declare_c_builtin("dict_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "dict_len")
+                    .unwrap();
+                let len = self
+                    .extract_int_call_result(len_call)?
+                    .value()
+                    .into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Set(_) => {
+                // Set is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = self.get_or_declare_c_builtin("set_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "set_len")
+                    .unwrap();
+                let len = self
+                    .extract_int_call_result(len_call)?
+                    .value()
+                    .into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
         }
     }
 
@@ -731,6 +867,9 @@ impl<'ctx> CodeGen<'ctx> {
                 PyType::Bool => Ok(PyValue::bool(result)),
                 PyType::Bytes => Ok(PyValue::bytes(result)),
                 PyType::None => Ok(PyValue::none(result)),
+                PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                    Err("Unary operations not supported on container types".to_string())
+                }
                 PyType::Function | PyType::Module | PyType::Macro => Err(
                     "Unary operations not supported on functions, modules or macros".to_string(),
                 ),
@@ -854,6 +993,21 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Helper to extract pointer result from a call site (for container types)
+    pub(crate) fn extract_ptr_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+        match call_site.as_any_value_enum() {
+            inkwell::values::AnyValueEnum::PointerValue(pv) => {
+                // Return as int type - caller will wrap with proper container type
+                Ok(PyValue::int(pv.into()))
+            }
+            _ => Err("Expected pointer return value".to_string()),
+        }
+    }
+
     pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
         match ty {
             Type::Int => self.context.i64_type().into(),
@@ -865,9 +1019,19 @@ impl<'ctx> CodeGen<'ctx> {
                 .ptr_type(inkwell::AddressSpace::default())
                 .into(),
             Type::None => self.context.i32_type().into(),
-            Type::List(_) => todo!("List type"),
-            Type::Dict(_, _) => todo!("Dict type"),
-            Type::Set(_) => todo!("Set type"),
+            // Container types are all pointers to heap-allocated structs
+            Type::List(_) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            Type::Dict(_, _) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            Type::Set(_) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
             Type::Tuple(_) => todo!("Tuple type"),
             Type::Custom(_) => todo!("Custom type"),
         }
