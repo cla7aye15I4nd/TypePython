@@ -1,6 +1,0 @@
-b'Primes up to 20:' 8
-b'Next prime after 10:' 11
-b'Triangular(5):' 15
-b'Pentagonal(5):' 35
-b'Hexagonal(5):' 45
-b'Sequence sum:' 35

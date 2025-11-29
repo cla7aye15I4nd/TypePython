@@ -1,4 +1,0 @@
-b'Addition:' 15
-b'Subtraction:' 5
-b'Multiplication:' 50
-b'Division:' 2

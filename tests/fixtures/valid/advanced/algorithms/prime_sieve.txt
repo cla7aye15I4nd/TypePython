@@ -1,3 +1,0 @@
-b'Primes 1-50:' 15
-b'Sum primes under 20:' 77
-b'Primes 100-120:' 5

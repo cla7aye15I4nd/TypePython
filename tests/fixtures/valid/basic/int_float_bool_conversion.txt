@@ -1,8 +1,0 @@
-b'int 5 is truthy'
-b'int 0 is falsy'
-b'float 3.14 is truthy'
-b'float 0.0 is falsy'
-b'int -10 is truthy'
-3
-2
-1

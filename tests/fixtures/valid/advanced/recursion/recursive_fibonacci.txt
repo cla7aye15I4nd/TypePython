@@ -1,3 +1,0 @@
-b'Fib(10):' 55
-b'Sum of first 11 fibs:' 143
-b'Fib(12):' 144

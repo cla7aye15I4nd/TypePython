@@ -84,3 +84,9 @@ fn get_or_generate_expected_output(path: &Path) -> Result<String> {
         Ok(expected)
     }
 }
+
+/// Compile and run a test with Python3-generated expected output
+/// This is used by auto-generated tests
+pub fn compile_and_run_test_with_python3(test_path: &str) -> Result<()> {
+    compile_and_run_test(test_path)
+}

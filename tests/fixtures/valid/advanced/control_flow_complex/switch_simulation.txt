@@ -1,2 +1,0 @@
-b'Sum of day codes:' 2800
-b'Sum of month days:' 181

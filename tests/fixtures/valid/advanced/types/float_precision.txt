@@ -1,3 +1,0 @@
-b'Float arithmetic:' 54.6
-b'Float comparisons:' 4
-b'Mixed int float:' 9.0

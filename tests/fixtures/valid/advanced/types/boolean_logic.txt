@@ -1,4 +1,0 @@
-b'AND operations:' 1
-b'OR operations:' 3
-b'NOT operations:' 1
-b'Complex boolean:' 4

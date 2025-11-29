@@ -1,6 +1,0 @@
-b'Counter:' 0
-b'Counter:' 1
-b'Counter:' 2
-b'Counter:' 3
-b'Counter:' 4
-b'Done!'

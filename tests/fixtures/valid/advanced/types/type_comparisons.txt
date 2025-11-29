@@ -1,4 +1,0 @@
-b'Compare integers:' 6
-b'Compare floats:' 4
-b'Compare booleans:' 3
-b'Chained comparisons:' 2

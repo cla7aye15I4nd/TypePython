@@ -1,4 +1,0 @@
-b'GCD tests sum:' 17
-b'LCM tests sum:' 69
-b'GCD(48, 18):' 6
-b'LCM(12, 18):' 36

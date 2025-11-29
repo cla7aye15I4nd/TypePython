@@ -1,4 +1,0 @@
-b'Work with all types:' 25
-b'Boolean to numeric:' 2
-b'Compare mixed:' 3
-b'Complex type logic:' 6.0

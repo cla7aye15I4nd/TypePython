@@ -1,3 +1,0 @@
-b'Negative arithmetic:' 2
-b'Negative combinations:' 97
-b'Mixed signs:' 19

@@ -1,3 +1,0 @@
-b'First divisor of 100:' 2
-b'Square root search:' 12
-b'Collatz steps for 27:' 111

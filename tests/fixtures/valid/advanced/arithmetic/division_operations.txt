@@ -1,3 +1,0 @@
-b'Integer division:' 1408
-b'Division by powers:' 960
-b'Remainder patterns:' 57

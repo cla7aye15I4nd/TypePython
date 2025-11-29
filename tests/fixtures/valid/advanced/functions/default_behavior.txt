@@ -1,6 +1,0 @@
-b'Good day,' b'Alice'
-b'Hey,' b'Bob'
-b'Member discount:' 90
-b'Regular discount:' 95
-b'Hex mode:' 255
-b'Decimal:' 255

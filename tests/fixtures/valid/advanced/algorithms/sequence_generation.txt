@@ -1,4 +1,0 @@
-b'Geometric sum:' 242
-b'Arithmetic sum:' 185
-b'Pell(7):' 169
-b'Lucas(7):' 29

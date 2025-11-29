@@ -1,1 +1,0 @@
-b'Nested conditionals result:' 36

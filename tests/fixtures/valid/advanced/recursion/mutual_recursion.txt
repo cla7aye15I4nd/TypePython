@@ -1,5 +1,0 @@
-b'Even/Odd count result:' 605
-b'Is 0 even:' True
-b'Is 1 even:' False
-b'Is 10 even:' True
-b'Is 15 even:' False

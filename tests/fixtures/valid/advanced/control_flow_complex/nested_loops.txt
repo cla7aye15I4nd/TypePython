@@ -1,3 +1,0 @@
-b'Multiplication table sum:' 225
-b'Triangle pattern sum:' 220
-b'Three level nesting count:' 27

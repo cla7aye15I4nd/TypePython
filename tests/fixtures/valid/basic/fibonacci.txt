@@ -1,1 +1,0 @@
-b'10th Fibonacci number:' 55

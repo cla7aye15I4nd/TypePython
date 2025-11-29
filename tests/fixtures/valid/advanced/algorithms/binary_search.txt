@@ -1,3 +1,0 @@
-b'Binary search result:' 28
-b'Log2(16):' 4
-b'Log2(256):' 8

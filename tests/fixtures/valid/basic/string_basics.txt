@@ -1,4 +1,0 @@
-b'Hello'
-b'World'
-b'TypePython'
-b'Compiler'

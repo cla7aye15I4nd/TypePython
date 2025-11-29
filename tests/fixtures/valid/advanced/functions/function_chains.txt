@@ -1,3 +1,0 @@
-b'Apply operations on 5:' 1600
-b'Nested calls on 5:' 1600
-b'Complex chain on 3:' 198

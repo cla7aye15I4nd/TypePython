@@ -1,3 +1,0 @@
-b'Calculator compute:' 40
-b'Complex compute:' 47
-b'Direct utils:' 70

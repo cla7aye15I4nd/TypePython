@@ -1,3 +1,0 @@
-b'Count multiples:' 2846
-b'Sum conditional:' 310
-b'FizzBuzz sum:' 314

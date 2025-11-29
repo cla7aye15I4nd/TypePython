@@ -1,3 +1,0 @@
-b'Sum:' 5.0
-b'Difference:' 1.0
-b'Product:' 6.0

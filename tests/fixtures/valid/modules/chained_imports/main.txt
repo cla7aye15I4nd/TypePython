@@ -1,4 +1,0 @@
-b'Level 1:' 11
-b'Level 2:' 13
-b'Level 3:' 16
-b'Sum:' 40

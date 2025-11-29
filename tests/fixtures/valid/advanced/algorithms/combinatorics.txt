@@ -1,3 +1,0 @@
-b'C(10,5):' 252
-b'Catalan(4):' 14
-b'Pascal triangle sum (5 rows):' 31

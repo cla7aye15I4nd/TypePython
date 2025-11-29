@@ -1,3 +1,0 @@
-b'Matrix determinant:' 7
-b'Matrix scalar multiply:' 50
-b'Matrix transpose sum:' 83
