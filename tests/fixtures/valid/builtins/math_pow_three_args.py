@@ -1,0 +1,5 @@
+# Test pow with 3 arguments (modular exponentiation)
+print(pow(2, 3, 5))
+print(pow(3, 4, 7))
+print(pow(5, 2, 10))
+print(pow(10, 2, 7))

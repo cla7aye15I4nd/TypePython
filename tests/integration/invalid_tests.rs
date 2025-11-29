@@ -214,3 +214,13 @@ invalid_test!(
     test_float_add_bytes,
     "tests/fixtures/invalid/float_add_bytes.py"
 );
+
+// ============================================================================
+// Preprocessor Error Tests
+// ============================================================================
+
+// Inconsistent indentation
+invalid_test!(
+    test_inconsistent_indent,
+    "tests/fixtures/invalid/preprocessor/inconsistent_indent.py"
+);
