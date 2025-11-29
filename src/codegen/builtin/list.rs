@@ -24,6 +24,7 @@ fn get_list_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str,
         "remove" => Some(("list_remove", PyType::None, false)),
         "clear" => Some(("list_clear", PyType::None, false)),
         "reverse" => Some(("list_reverse", PyType::None, false)),
+        "sort" => Some(("list_sort", PyType::None, false)),
 
         // Methods returning values
         "pop" => Some(("list_pop", PyType::Int, false)),

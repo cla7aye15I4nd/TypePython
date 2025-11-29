@@ -14,11 +14,18 @@ use inkwell::values::BasicValueEnum;
 /// Maps method name to (builtin_symbol, return_type)
 fn get_set_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str, PyType)> {
     match name {
-        // Void methods
+        // Void methods (mutating in-place)
         "add" => Some(("set_add", PyType::None)),
         "remove" => Some(("set_remove", PyType::None)),
         "discard" => Some(("set_discard", PyType::None)),
         "clear" => Some(("set_clear", PyType::None)),
+        "update" => Some(("set_update", PyType::None)),
+        "difference_update" => Some(("set_difference_update", PyType::None)),
+        "intersection_update" => Some(("set_intersection_update", PyType::None)),
+        "symmetric_difference_update" => Some(("set_symmetric_difference_update", PyType::None)),
+
+        // Methods returning an element
+        "pop" => Some(("set_pop", elem_type.clone())),
 
         // Methods returning new set
         "copy" => Some(("set_copy", PyType::Set(Box::new(elem_type.clone())))),

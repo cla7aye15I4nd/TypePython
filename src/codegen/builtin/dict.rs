@@ -22,6 +22,7 @@ fn get_dict_method_info(
         // Methods returning values
         "get" => Some(("dict_get", val_type.clone())),
         "pop" => Some(("dict_pop", val_type.clone())),
+        "setdefault" => Some(("dict_setdefault", val_type.clone())),
 
         // Void methods
         "clear" => Some(("dict_clear", PyType::None)),

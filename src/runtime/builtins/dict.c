@@ -243,6 +243,39 @@ PyDict* dict_merge(PyDict* dict1, PyDict* dict2) {
     return result;
 }
 
+// Pop an arbitrary item (key, value) - returns key, sets *value_out
+// Returns 0 if dict is empty (caller should check len first)
+int64_t dict_popitem(PyDict* dict, int64_t* value_out) {
+    if (dict == NULL || dict->len == 0) {
+        if (value_out) *value_out = 0;
+        return 0;
+    }
+    // Find first occupied slot
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            int64_t key = dict->entries[i].key;
+            if (value_out) *value_out = dict->entries[i].value;
+            dict->entries[i].state = DICT_DELETED;
+            dict->len--;
+            return key;
+        }
+    }
+    if (value_out) *value_out = 0;
+    return 0;
+}
+
+// Get value or set default if key doesn't exist
+int64_t dict_setdefault(PyDict* dict, int64_t key, int64_t default_val) {
+    if (dict == NULL) return default_val;
+    int64_t slot = find_slot(dict, key, 0);
+    if (slot >= 0) {
+        return dict->entries[slot].value;
+    }
+    // Key doesn't exist, insert default
+    dict_setitem(dict, key, default_val);
+    return default_val;
+}
+
 // ============================================================================
 // Print Support
 // ============================================================================

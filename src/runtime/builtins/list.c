@@ -365,6 +365,21 @@ int64_t list_eq(PyList* list1, PyList* list2) {
     return memcmp(list1->data, list2->data, len1 * sizeof(int64_t)) == 0 ? 1 : 0;
 }
 
+// Comparison function for qsort
+static int cmp_int64(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Sort the list in place (ascending order)
+void list_sort(PyList* list) {
+    if (list == NULL || list->len <= 1) return;
+    qsort(list->data, list->len, sizeof(int64_t), cmp_int64);
+}
+
 // ============================================================================
 // Print Support
 // ============================================================================

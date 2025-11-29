@@ -325,6 +325,92 @@ int64_t set_eq(PySet* set1, PySet* set2) {
 }
 
 // ============================================================================
+// In-place Update Operations
+// ============================================================================
+
+// Pop and return an arbitrary element (returns 0 if empty, caller should check len)
+int64_t set_pop(PySet* set) {
+    if (set == NULL || set->len == 0) return 0;
+
+    // Find first occupied slot
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            int64_t key = set->entries[i].key;
+            set->entries[i].state = SET_DELETED;
+            set->len--;
+            return key;
+        }
+    }
+    return 0;
+}
+
+// Update set with another set (in-place union)
+void set_update(PySet* set, PySet* other) {
+    if (set == NULL || other == NULL) return;
+
+    for (int64_t i = 0; i < other->capacity; i++) {
+        if (other->entries[i].state == SET_OCCUPIED) {
+            set_add(set, other->entries[i].key);
+        }
+    }
+}
+
+// Update set with difference (in-place)
+void set_difference_update(PySet* set, PySet* other) {
+    if (set == NULL || other == NULL) return;
+
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (set_contains(other, set->entries[i].key)) {
+                set->entries[i].state = SET_DELETED;
+                set->len--;
+            }
+        }
+    }
+}
+
+// Update set with intersection (in-place)
+void set_intersection_update(PySet* set, PySet* other) {
+    if (set == NULL) return;
+    if (other == NULL) {
+        set_clear(set);
+        return;
+    }
+
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (!set_contains(other, set->entries[i].key)) {
+                set->entries[i].state = SET_DELETED;
+                set->len--;
+            }
+        }
+    }
+}
+
+// Update set with symmetric difference (in-place)
+void set_symmetric_difference_update(PySet* set, PySet* other) {
+    if (set == NULL || other == NULL) return;
+
+    // For each element in other:
+    // - If in set, remove it
+    // - If not in set, add it
+    for (int64_t i = 0; i < other->capacity; i++) {
+        if (other->entries[i].state == SET_OCCUPIED) {
+            int64_t key = other->entries[i].key;
+            int64_t slot = find_slot(set, key, 0);
+            if (slot >= 0) {
+                // Key exists in set, remove it
+                set->entries[slot].state = SET_DELETED;
+                set->len--;
+            } else {
+                // Key doesn't exist, add it
+                set_add(set, key);
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Print Support
 // ============================================================================
 

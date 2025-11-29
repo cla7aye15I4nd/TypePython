@@ -505,6 +505,7 @@ test_case!(
     test_list_operations,
     "tests/fixtures/valid/list/list_operations.py"
 );
+test_case!(test_list_sort, "tests/fixtures/valid/list/list_sort.py");
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
 test_case!(
     test_dict_methods,
@@ -514,10 +515,18 @@ test_case!(
     test_dict_operations,
     "tests/fixtures/valid/dict/dict_operations.py"
 );
+test_case!(
+    test_dict_setdefault,
+    "tests/fixtures/valid/dict/dict_setdefault.py"
+);
 test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");
 test_case!(
     test_set_operations,
     "tests/fixtures/valid/set/set_operations.py"
+);
+test_case!(
+    test_set_update_methods,
+    "tests/fixtures/valid/set/set_update_methods.py"
 );
 
 // Pressure tests (10^7 elements)
