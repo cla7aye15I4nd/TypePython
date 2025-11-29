@@ -220,26 +220,6 @@ impl PyType {
             Type::Custom(name) => Err(format!("Custom type '{}' not yet implemented", name)),
         }
     }
-
-    /// Check if this is a runtime type (has BasicValueEnum)
-    pub fn is_runtime(&self) -> bool {
-        matches!(
-            self,
-            PyType::Int
-                | PyType::Float
-                | PyType::Bool
-                | PyType::Bytes
-                | PyType::None
-                | PyType::List(_)
-                | PyType::Dict(_, _)
-                | PyType::Set(_)
-        )
-    }
-
-    /// Check if this is a compile-time type (Module, Function, or Macro)
-    pub fn is_compile_time(&self) -> bool {
-        matches!(self, PyType::Function | PyType::Module | PyType::Macro)
-    }
 }
 
 /// The inner value of a PyValue - either a runtime LLVM value or compile-time construct
@@ -358,22 +338,6 @@ impl<'ctx> PyValue<'ctx> {
         match &self.inner {
             PyValueInner::Module(info) => info,
             _ => panic!("Expected module value, got {:?}", self.ty),
-        }
-    }
-
-    /// Check if this value has an address (is an lvalue) - only for runtime types
-    pub fn has_address(&self) -> bool {
-        match &self.inner {
-            PyValueInner::Runtime { ptr, .. } => ptr.is_some(),
-            _ => false,
-        }
-    }
-
-    /// Get the pointer if this value has an address (runtime types only)
-    pub fn ptr(&self) -> Option<PointerValue<'ctx>> {
-        match &self.inner {
-            PyValueInner::Runtime { ptr, .. } => *ptr,
-            _ => None,
         }
     }
 
