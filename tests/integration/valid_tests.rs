@@ -479,3 +479,7 @@ test_case!(
     test_bytes_methods,
     "tests/fixtures/valid/builtins/bytes_methods.py"
 );
+test_case!(
+    test_math_extra,
+    "tests/fixtures/valid/builtins/math_extra.py"
+);

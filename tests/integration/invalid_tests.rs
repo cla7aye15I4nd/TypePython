@@ -127,3 +127,58 @@ invalid_test!(
     test_bytes_mul_bytes,
     "tests/fixtures/invalid/bytes_mul_bytes.py"
 );
+
+// ============================================================================
+// Builtin Function Error Tests
+// ============================================================================
+
+// abs() takes exactly 1 argument
+invalid_test!(test_abs_no_args, "tests/fixtures/invalid/abs_no_args.py");
+
+// abs() not supported for type Bytes
+invalid_test!(
+    test_abs_wrong_type,
+    "tests/fixtures/invalid/abs_wrong_type.py"
+);
+
+// round() takes 1 or 2 arguments
+invalid_test!(
+    test_round_no_args,
+    "tests/fixtures/invalid/round_no_args.py"
+);
+
+// round() not supported for type Bytes
+invalid_test!(
+    test_round_wrong_type,
+    "tests/fixtures/invalid/round_wrong_type.py"
+);
+
+// round() ndigits must be an integer
+invalid_test!(
+    test_round_ndigits_not_int,
+    "tests/fixtures/invalid/round_ndigits_not_int.py"
+);
+
+// min() requires at least 2 arguments
+invalid_test!(test_min_one_arg, "tests/fixtures/invalid/min_one_arg.py");
+
+// max() requires at least 2 arguments
+invalid_test!(test_max_one_arg, "tests/fixtures/invalid/max_one_arg.py");
+
+// pow() takes 2 or 3 arguments
+invalid_test!(test_pow_one_arg, "tests/fixtures/invalid/pow_one_arg.py");
+
+// pow() with 3 arguments requires all int arguments
+invalid_test!(
+    test_pow_mod_not_int,
+    "tests/fixtures/invalid/pow_mod_not_int.py"
+);
+
+// len() takes exactly 1 argument
+invalid_test!(test_len_no_args, "tests/fixtures/invalid/len_no_args.py");
+
+// len() not supported for type Int
+invalid_test!(
+    test_len_wrong_type,
+    "tests/fixtures/invalid/len_wrong_type.py"
+);
