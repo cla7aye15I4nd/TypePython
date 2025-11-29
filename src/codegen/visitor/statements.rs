@@ -20,7 +20,7 @@ impl<'ctx> CodeGen<'ctx> {
         let val = self.evaluate_expression(value)?;
 
         // Coerce the value to match the declared type if needed
-        let coerced_val = self.coerce_value_to_type(val.value, var_type)?;
+        let coerced_val = self.coerce_value_to_type(val.value(), var_type)?;
 
         self.builder.build_store(alloca, coerced_val).unwrap();
         let var = PyValue::from_ast_type(var_type, coerced_val, Some(alloca))?;
@@ -158,7 +158,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_return_impl(&mut self, expr: Option<&Expression>) -> Result<(), String> {
         if let Some(expr) = expr {
             let val = self.evaluate_expression(expr)?;
-            self.builder.build_return(Some(&val.value)).unwrap();
+            self.builder.build_return(Some(&val.value())).unwrap();
         } else {
             self.builder.build_return(None).unwrap();
         }

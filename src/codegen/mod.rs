@@ -1,9 +1,9 @@
 pub mod builtins;
+pub mod types;
 mod visitor;
 
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::{CgCtx, PyType, PyValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -12,6 +12,7 @@ use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use std::collections::{HashMap, HashSet};
+use types::{CgCtx, PyType, PyValue};
 
 /// Context for tracking loop control flow (break/continue)
 pub(crate) struct LoopContext<'ctx> {
@@ -183,7 +184,7 @@ impl<'ctx> CodeGen<'ctx> {
                 if let Expression::Slice { start, stop, step } = index.as_ref() {
                     match &obj.ty {
                         PyType::Bytes => {
-                            let obj_val = obj.value;
+                            let obj_val = obj.value();
                             // bytes[start:stop:step] returns bytes
                             let len_fn = self.get_or_declare_builtin_function("bytes_len");
                             let len_call = self
@@ -238,9 +239,9 @@ impl<'ctx> CodeGen<'ctx> {
                                         slice_fn,
                                         &[
                                             obj_val.into(),
-                                            start_val.value.into(),
-                                            stop_val.value.into(),
-                                            step_val.value.into(),
+                                            start_val.value().into(),
+                                            stop_val.value().into(),
+                                            step_val.value().into(),
                                         ],
                                         "bytes_slice_step",
                                     )
@@ -269,8 +270,8 @@ impl<'ctx> CodeGen<'ctx> {
                                         slice_fn,
                                         &[
                                             obj_val.into(),
-                                            start_val.value.into(),
-                                            stop_val.value.into(),
+                                            start_val.value().into(),
+                                            stop_val.value().into(),
                                         ],
                                         "bytes_slice",
                                     )
@@ -293,7 +294,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 .builder
                                 .build_call(
                                     getitem_fn,
-                                    &[obj.value.into(), idx.value.into()],
+                                    &[obj.value().into(), idx.value().into()],
                                     "bytes_getitem",
                                 )
                                 .unwrap();
@@ -683,11 +684,11 @@ impl<'ctx> CodeGen<'ctx> {
         match &val.ty {
             PyType::Bool => {
                 // Already a bool
-                Ok(val.value.into_int_value())
+                Ok(val.value().into_int_value())
             }
             PyType::Int => {
                 // Non-zero is true
-                let int_val = val.value.into_int_value();
+                let int_val = val.value().into_int_value();
                 let zero = int_val.get_type().const_zero();
                 Ok(self
                     .builder
@@ -695,7 +696,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap())
             }
             PyType::Float => {
-                let float_val = val.value.into_float_value();
+                let float_val = val.value().into_float_value();
                 let zero = self.context.f64_type().const_zero();
                 Ok(self
                     .builder
@@ -708,7 +709,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
-                let ptr_val = val.value.into_pointer_value();
+                let ptr_val = val.value().into_pointer_value();
                 let len_fn = self.get_or_declare_builtin_function("bytes_len");
                 let len_call = self
                     .builder
@@ -716,13 +717,17 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 let len = self
                     .extract_int_call_result(len_call)?
-                    .value
+                    .value()
                     .into_int_value();
                 let zero = len.get_type().const_zero();
                 Ok(self
                     .builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap())
+            }
+            PyType::Function | PyType::Module => {
+                // Functions and modules are always truthy
+                Ok(self.context.bool_type().const_int(1, false))
             }
         }
     }
@@ -802,6 +807,9 @@ impl<'ctx> CodeGen<'ctx> {
                 PyType::Bool => Ok(PyValue::bool(result)),
                 PyType::Bytes => Ok(PyValue::bytes(result)),
                 PyType::None => Ok(PyValue::none(result)),
+                PyType::Function | PyType::Module => {
+                    Err("Unary operations not supported on functions or modules".to_string())
+                }
             },
         }
     }
@@ -847,7 +855,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {
-            arg_values.push(self.evaluate_expression(arg)?.value.into());
+            arg_values.push(self.evaluate_expression(arg)?.value().into());
         }
 
         let call_site = self
@@ -995,8 +1003,8 @@ impl<'ctx> CodeGen<'ctx> {
                     self.builder
                         .build_int_compare(
                             pred,
-                            a.value.into_int_value(),
-                            b.value.into_int_value(),
+                            a.value().into_int_value(),
+                            b.value().into_int_value(),
                             "cmp",
                         )
                         .unwrap()
@@ -1010,8 +1018,8 @@ impl<'ctx> CodeGen<'ctx> {
                     self.builder
                         .build_float_compare(
                             pred,
-                            a.value.into_float_value(),
-                            b.value.into_float_value(),
+                            a.value().into_float_value(),
+                            b.value().into_float_value(),
                             "cmp",
                         )
                         .unwrap()
@@ -1021,7 +1029,7 @@ impl<'ctx> CodeGen<'ctx> {
                     let a_int = self
                         .builder
                         .build_int_z_extend(
-                            a.value.into_int_value(),
+                            a.value().into_int_value(),
                             self.context.i64_type(),
                             "btoi",
                         )
@@ -1029,7 +1037,7 @@ impl<'ctx> CodeGen<'ctx> {
                     let b_int = self
                         .builder
                         .build_int_z_extend(
-                            b.value.into_int_value(),
+                            b.value().into_int_value(),
                             self.context.i64_type(),
                             "btoi",
                         )
@@ -1048,7 +1056,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             let select_result = self
                 .builder
-                .build_select(condition, a.value, b.value, "minmax_select")
+                .build_select(condition, a.value(), b.value(), "minmax_select")
                 .unwrap();
 
             // Return the same type as input
@@ -1065,16 +1073,16 @@ impl<'ctx> CodeGen<'ctx> {
             let float_type = self.context.f64_type();
 
             let a_float = match &a.ty {
-                PyType::Float => a.value.into_float_value(),
+                PyType::Float => a.value().into_float_value(),
                 PyType::Int => self
                     .builder
-                    .build_signed_int_to_float(a.value.into_int_value(), float_type, "itof")
+                    .build_signed_int_to_float(a.value().into_int_value(), float_type, "itof")
                     .unwrap(),
                 PyType::Bool => {
                     let int_val = self
                         .builder
                         .build_int_z_extend(
-                            a.value.into_int_value(),
+                            a.value().into_int_value(),
                             self.context.i64_type(),
                             "btoi",
                         )
@@ -1087,16 +1095,16 @@ impl<'ctx> CodeGen<'ctx> {
             };
 
             let b_float = match &b.ty {
-                PyType::Float => b.value.into_float_value(),
+                PyType::Float => b.value().into_float_value(),
                 PyType::Int => self
                     .builder
-                    .build_signed_int_to_float(b.value.into_int_value(), float_type, "itof")
+                    .build_signed_int_to_float(b.value().into_int_value(), float_type, "itof")
                     .unwrap(),
                 PyType::Bool => {
                     let int_val = self
                         .builder
                         .build_int_z_extend(
-                            b.value.into_int_value(),
+                            b.value().into_int_value(),
                             self.context.i64_type(),
                             "btoi",
                         )
@@ -1145,7 +1153,7 @@ impl<'ctx> CodeGen<'ctx> {
                         let abs_fn = self.get_or_declare_builtin_function("abs_int");
                         let call = self
                             .builder
-                            .build_call(abs_fn, &[val.value.into()], "abs")
+                            .build_call(abs_fn, &[val.value().into()], "abs")
                             .unwrap();
                         self.extract_int_call_result(call)?
                     }
@@ -1153,7 +1161,7 @@ impl<'ctx> CodeGen<'ctx> {
                         let abs_fn = self.get_or_declare_builtin_function("abs_float");
                         let call = self
                             .builder
-                            .build_call(abs_fn, &[val.value.into()], "abs")
+                            .build_call(abs_fn, &[val.value().into()], "abs")
                             .unwrap();
                         self.extract_float_call_result(call)?
                     }
@@ -1162,7 +1170,7 @@ impl<'ctx> CodeGen<'ctx> {
                         let int_val = self
                             .builder
                             .build_int_z_extend(
-                                val.value.into_int_value(),
+                                val.value().into_int_value(),
                                 self.context.i64_type(),
                                 "btoi",
                             )
@@ -1188,7 +1196,7 @@ impl<'ctx> CodeGen<'ctx> {
                             let round_fn = self.get_or_declare_builtin_function("round_float");
                             let call = self
                                 .builder
-                                .build_call(round_fn, &[val.value.into()], "round")
+                                .build_call(round_fn, &[val.value().into()], "round")
                                 .unwrap();
                             self.extract_int_call_result(call)?
                         }
@@ -1196,7 +1204,7 @@ impl<'ctx> CodeGen<'ctx> {
                             let int_val = self
                                 .builder
                                 .build_int_z_extend(
-                                    val.value.into_int_value(),
+                                    val.value().into_int_value(),
                                     self.context.i64_type(),
                                     "btoi",
                                 )
@@ -1210,11 +1218,11 @@ impl<'ctx> CodeGen<'ctx> {
                     // round(x, ndigits) - returns float
                     let ndigits = self.evaluate_expression(&args[1])?;
                     let ndigits_int = match &ndigits.ty {
-                        PyType::Int => ndigits.value,
+                        PyType::Int => ndigits.value(),
                         PyType::Bool => self
                             .builder
                             .build_int_z_extend(
-                                ndigits.value.into_int_value(),
+                                ndigits.value().into_int_value(),
                                 self.context.i64_type(),
                                 "btoi",
                             )
@@ -1224,11 +1232,11 @@ impl<'ctx> CodeGen<'ctx> {
                     };
 
                     let val_float = match &val.ty {
-                        PyType::Float => val.value,
+                        PyType::Float => val.value(),
                         PyType::Int => self
                             .builder
                             .build_signed_int_to_float(
-                                val.value.into_int_value(),
+                                val.value().into_int_value(),
                                 self.context.f64_type(),
                                 "itof",
                             )
@@ -1238,7 +1246,7 @@ impl<'ctx> CodeGen<'ctx> {
                             let int_val = self
                                 .builder
                                 .build_int_z_extend(
-                                    val.value.into_int_value(),
+                                    val.value().into_int_value(),
                                     self.context.i64_type(),
                                     "btoi",
                                 )
@@ -1299,11 +1307,11 @@ impl<'ctx> CodeGen<'ctx> {
 
                     // All arguments must be integers for modular exponentiation
                     let base_int = match &base.ty {
-                        PyType::Int => base.value,
+                        PyType::Int => base.value(),
                         PyType::Bool => self
                             .builder
                             .build_int_z_extend(
-                                base.value.into_int_value(),
+                                base.value().into_int_value(),
                                 self.context.i64_type(),
                                 "btoi",
                             )
@@ -1312,11 +1320,11 @@ impl<'ctx> CodeGen<'ctx> {
                         _ => return Err("pow() with modulo requires integer arguments".to_string()),
                     };
                     let exp_int = match &exp.ty {
-                        PyType::Int => exp.value,
+                        PyType::Int => exp.value(),
                         PyType::Bool => self
                             .builder
                             .build_int_z_extend(
-                                exp.value.into_int_value(),
+                                exp.value().into_int_value(),
                                 self.context.i64_type(),
                                 "btoi",
                             )
@@ -1325,11 +1333,11 @@ impl<'ctx> CodeGen<'ctx> {
                         _ => return Err("pow() with modulo requires integer arguments".to_string()),
                     };
                     let mod_int = match &modulo.ty {
-                        PyType::Int => modulo.value,
+                        PyType::Int => modulo.value(),
                         PyType::Bool => self
                             .builder
                             .build_int_z_extend(
-                                modulo.value.into_int_value(),
+                                modulo.value().into_int_value(),
                                 self.context.i64_type(),
                                 "btoi",
                             )
@@ -1366,7 +1374,7 @@ impl<'ctx> CodeGen<'ctx> {
                         let len_fn = self.get_or_declare_builtin_function("bytes_len");
                         let call = self
                             .builder
-                            .build_call(len_fn, &[val.value.into()], "len")
+                            .build_call(len_fn, &[val.value().into()], "len")
                             .unwrap();
                         self.extract_int_call_result(call)?
                     }

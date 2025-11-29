@@ -1,0 +1,186 @@
+//! Bool operations for PyValue
+//!
+//! Binary and unary operations for Python bool type.
+
+use crate::ast::{BinaryOp, UnaryOp};
+use inkwell::values::BasicValueEnum;
+use inkwell::IntPredicate;
+
+use super::value::{CgCtx, PyType, PyValue};
+
+/// Binary operations for Bool type
+pub fn binary_op<'a, 'ctx>(
+    lhs: &PyValue<'ctx>,
+    cg: &CgCtx<'a, 'ctx>,
+    op: &BinaryOp,
+    rhs: &PyValue<'ctx>,
+) -> Result<PyValue<'ctx>, String> {
+    let lhs_bool = lhs.runtime_value().into_int_value();
+
+    match op {
+        // For arithmetic, coerce to int first
+        BinaryOp::Add
+        | BinaryOp::Sub
+        | BinaryOp::Mul
+        | BinaryOp::Div
+        | BinaryOp::FloorDiv
+        | BinaryOp::Mod
+        | BinaryOp::Pow
+        | BinaryOp::LShift
+        | BinaryOp::RShift => {
+            let lhs_int = cg
+                .builder
+                .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                .unwrap();
+
+            // If rhs is Float, coerce to float
+            if let PyType::Float = &rhs.ty {
+                let lhs_float = cg
+                    .builder
+                    .build_signed_int_to_float(lhs_int, cg.ctx.f64_type(), "itof")
+                    .unwrap();
+                return super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs);
+            }
+
+            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+        }
+
+        // Bitwise (bool-specific)
+        BinaryOp::BitAnd => match &rhs.ty {
+            PyType::Bool => {
+                let result = cg
+                    .builder
+                    .build_and(lhs_bool, rhs.runtime_value().into_int_value(), "bitand")
+                    .unwrap();
+                Ok(PyValue::bool(result.into()))
+            }
+            _ => Err(format!("Cannot bitwise AND Bool and {:?}", rhs.ty)),
+        },
+        BinaryOp::BitOr => match &rhs.ty {
+            PyType::Bool => {
+                let result = cg
+                    .builder
+                    .build_or(lhs_bool, rhs.runtime_value().into_int_value(), "bitor")
+                    .unwrap();
+                Ok(PyValue::bool(result.into()))
+            }
+            _ => Err(format!("Cannot bitwise OR Bool and {:?}", rhs.ty)),
+        },
+        BinaryOp::BitXor => match &rhs.ty {
+            PyType::Bool => {
+                let result = cg
+                    .builder
+                    .build_xor(lhs_bool, rhs.runtime_value().into_int_value(), "bitxor")
+                    .unwrap();
+                Ok(PyValue::bool(result.into()))
+            }
+            _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty)),
+        },
+
+        // Comparison
+        BinaryOp::Eq => match &rhs.ty {
+            PyType::Bool => Ok(PyValue::bool(
+                cg.builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        lhs_bool,
+                        rhs.runtime_value().into_int_value(),
+                        "eq",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
+        },
+        BinaryOp::Ne => match &rhs.ty {
+            PyType::Bool => Ok(PyValue::bool(
+                cg.builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        lhs_bool,
+                        rhs.runtime_value().into_int_value(),
+                        "ne",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
+        },
+        BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
+            // Coerce to int for ordering comparisons
+            let lhs_int = cg
+                .builder
+                .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                .unwrap();
+            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+        }
+        BinaryOp::Is => match &rhs.ty {
+            PyType::Bool => Ok(PyValue::bool(
+                cg.builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        lhs_bool,
+                        rhs.runtime_value().into_int_value(),
+                        "is",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            _ => Err(format!("Cannot use 'is' between Bool and {:?}", rhs.ty)),
+        },
+        BinaryOp::IsNot => match &rhs.ty {
+            PyType::Bool => Ok(PyValue::bool(
+                cg.builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        lhs_bool,
+                        rhs.runtime_value().into_int_value(),
+                        "isnot",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            _ => Err(format!("Cannot use 'is not' between Bool and {:?}", rhs.ty)),
+        },
+
+        // Logical
+        BinaryOp::And => match &rhs.ty {
+            PyType::Bool => {
+                let result = cg
+                    .builder
+                    .build_and(lhs_bool, rhs.runtime_value().into_int_value(), "and")
+                    .unwrap();
+                Ok(PyValue::bool(result.into()))
+            }
+            _ => Err(format!("Cannot logical AND Bool and {:?}", rhs.ty)),
+        },
+        BinaryOp::Or => match &rhs.ty {
+            PyType::Bool => {
+                let result = cg
+                    .builder
+                    .build_or(lhs_bool, rhs.runtime_value().into_int_value(), "or")
+                    .unwrap();
+                Ok(PyValue::bool(result.into()))
+            }
+            _ => Err(format!("Cannot logical OR Bool and {:?}", rhs.ty)),
+        },
+
+        BinaryOp::In | BinaryOp::NotIn => Err(format!(
+            "Membership operator {:?} not supported on Bool",
+            op
+        )),
+    }
+}
+
+/// Unary operations for Bool type
+pub fn unary_op<'a, 'ctx>(
+    val: &PyValue<'ctx>,
+    cg: &CgCtx<'a, 'ctx>,
+    op: &UnaryOp,
+) -> Result<BasicValueEnum<'ctx>, String> {
+    let bool_val = val.runtime_value().into_int_value();
+    match op {
+        UnaryOp::Not => Ok(cg.builder.build_not(bool_val, "not").unwrap().into()),
+        _ => Err(format!("Operator {:?} not supported on bools", op)),
+    }
+}

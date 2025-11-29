@@ -1,0 +1,241 @@
+//! Bytes operations for PyValue
+//!
+//! Binary and unary operations for Python bytes type.
+
+use crate::ast::{BinaryOp, UnaryOp};
+use inkwell::values::BasicValueEnum;
+
+use super::value::{CgCtx, PyType, PyValue};
+
+/// Binary operations for Bytes type
+pub fn binary_op<'a, 'ctx>(
+    lhs: &PyValue<'ctx>,
+    cg: &CgCtx<'a, 'ctx>,
+    op: &BinaryOp,
+    rhs: &PyValue<'ctx>,
+) -> Result<PyValue<'ctx>, String> {
+    let lhs_ptr = lhs.runtime_value().into_pointer_value();
+
+    match op {
+        // Concatenation
+        BinaryOp::Add => match &rhs.ty {
+            PyType::Bytes => {
+                let strcat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcat_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        strcat_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytescat",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "strcat_bytes",
+                )?))
+            }
+            _ => Err(format!("Cannot concatenate Bytes and {:?}", rhs.ty)),
+        },
+
+        // Repetition
+        BinaryOp::Mul => match &rhs.ty {
+            PyType::Int => {
+                let repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strrepeat_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        repeat_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_repeat",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "strrepeat_bytes",
+                )?))
+            }
+            _ => Err(format!("Cannot multiply Bytes by {:?}", rhs.ty)),
+        },
+
+        // Comparison
+        BinaryOp::Eq => match &rhs.ty {
+            PyType::Bytes => {
+                let strcmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcmp_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        strcmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytescmp",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "strcmp_bytes")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+        BinaryOp::Ne => match &rhs.ty {
+            PyType::Bytes => {
+                let strcmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcmp_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        strcmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytescmp",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "strcmp_bytes")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                let negated = cg.builder.build_not(bool_val, "ne").unwrap();
+                Ok(PyValue::bool(negated.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+        BinaryOp::Lt => match &rhs.ty {
+            PyType::Bytes => {
+                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_lt");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        cmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_lt",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_lt")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+        BinaryOp::Le => match &rhs.ty {
+            PyType::Bytes => {
+                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_le");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        cmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_le",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_le")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+        BinaryOp::Gt => match &rhs.ty {
+            PyType::Bytes => {
+                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_gt");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        cmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_gt",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_gt")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+        BinaryOp::Ge => match &rhs.ty {
+            PyType::Bytes => {
+                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_ge");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        cmp_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_ge",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_ge")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+        },
+
+        // Membership
+        BinaryOp::In => match &rhs.ty {
+            PyType::Bytes => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let contains_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs_ptr.into(), lhs_ptr.into()],
+                        "bytes_contains",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot use 'in' with Bytes and {:?}", rhs.ty)),
+        },
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::Bytes => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let contains_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs_ptr.into(), lhs_ptr.into()],
+                        "bytes_contains",
+                    )
+                    .unwrap();
+                let result = super::extract_int_result(call_site, "bytes_contains")?;
+                let bool_val = cg
+                    .builder
+                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .unwrap();
+                let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
+                Ok(PyValue::bool(negated.into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty)),
+        },
+
+        _ => Err(format!("Operator {:?} not supported for bytes type", op)),
+    }
+}
+
+/// Unary operations for Bytes type
+pub fn unary_op<'a, 'ctx>(
+    _val: &PyValue<'ctx>,
+    _cg: &CgCtx<'a, 'ctx>,
+    op: &UnaryOp,
+) -> Result<BasicValueEnum<'ctx>, String> {
+    Err(format!("Unary operator {:?} not supported on bytes", op))
+}
