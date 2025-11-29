@@ -45,24 +45,12 @@ impl<'ctx> CodeGen<'ctx> {
         let kind = macro_val.get_macro_kind()?;
         match kind {
             MacroKind::Print => self.generate_print_call(args),
-            MacroKind::Abs => self
-                .generate_abs_call(args)?
-                .ok_or_else(|| "abs() failed".to_string()),
-            MacroKind::Round => self
-                .generate_round_call(args)?
-                .ok_or_else(|| "round() failed".to_string()),
-            MacroKind::Min => self
-                .generate_min_call(args)?
-                .ok_or_else(|| "min() failed".to_string()),
-            MacroKind::Max => self
-                .generate_max_call(args)?
-                .ok_or_else(|| "max() failed".to_string()),
-            MacroKind::Pow => self
-                .generate_pow_call(args)?
-                .ok_or_else(|| "pow() failed".to_string()),
-            MacroKind::Len => self
-                .generate_len_call(args)?
-                .ok_or_else(|| "len() failed".to_string()),
+            MacroKind::Abs => self.generate_abs_call(args),
+            MacroKind::Round => self.generate_round_call(args),
+            MacroKind::Min => self.generate_min_call(args),
+            MacroKind::Max => self.generate_max_call(args),
+            MacroKind::Pow => self.generate_pow_call(args),
+            MacroKind::Len => self.generate_len_call(args),
             MacroKind::Set => self.generate_set_call(args),
             MacroKind::List => self.generate_list_call(args),
             MacroKind::Dict => self.generate_dict_call(args),

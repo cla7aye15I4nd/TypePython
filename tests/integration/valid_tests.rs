@@ -510,6 +510,14 @@ test_case!(
     test_list_builtin,
     "tests/fixtures/valid/list/list_builtin.py"
 );
+test_case!(
+    test_list_remove,
+    "tests/fixtures/valid/list/list_remove.py"
+);
+test_case!(
+    test_list_extend,
+    "tests/fixtures/valid/list/list_extend.py"
+);
 test_case!(test_dict_basic, "tests/fixtures/valid/dict/dict_basic.py");
 test_case!(
     test_dict_methods,
@@ -526,6 +534,15 @@ test_case!(
 test_case!(
     test_dict_builtin,
     "tests/fixtures/valid/dict/dict_builtin.py"
+);
+test_case!(
+    test_dict_update,
+    "tests/fixtures/valid/dict/dict_update.py"
+);
+test_case!(test_dict_pop, "tests/fixtures/valid/dict/dict_pop.py");
+test_case!(
+    test_dict_len_and_in,
+    "tests/fixtures/valid/dict/dict_len_and_in.py"
 );
 test_case!(test_set_basic, "tests/fixtures/valid/set/set_basic.py");
 test_case!(

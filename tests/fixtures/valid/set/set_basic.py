@@ -27,3 +27,6 @@ print(len(s))
 # Test clear
 s.clear()
 print(len(s))
+
+print(s == 0)
+print(s != 0)

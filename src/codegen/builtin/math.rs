@@ -11,7 +11,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(super) fn generate_abs_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.len() != 1 {
             return Err("abs() takes exactly 1 argument".to_string());
         }
@@ -24,7 +24,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(abs_fn, &[val.value().into()], "abs")
                     .unwrap();
-                Ok(Some(self.extract_int_call_result(call)?))
+                Ok(self.extract_int_call_result(call)?)
             }
             PyType::Float => {
                 let abs_fn = self.get_or_declare_c_builtin("abs_float");
@@ -32,7 +32,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(abs_fn, &[val.value().into()], "abs")
                     .unwrap();
-                Ok(Some(self.extract_float_call_result(call)?))
+                Ok(self.extract_float_call_result(call)?)
             }
             _ => Err(format!("abs() not supported for type {:?}", val.ty)),
         }
@@ -42,7 +42,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(super) fn generate_round_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.is_empty() || args.len() > 2 {
             return Err("round() takes 1 or 2 arguments".to_string());
         }
@@ -52,14 +52,14 @@ impl<'ctx> CodeGen<'ctx> {
         if args.len() == 1 {
             // round(x) - round to nearest integer
             match val.ty {
-                PyType::Int => Ok(Some(val)), // int is already rounded
+                PyType::Int => Ok(val), // int is already rounded
                 PyType::Float => {
                     let round_fn = self.get_or_declare_c_builtin("round_float");
                     let call = self
                         .builder
                         .build_call(round_fn, &[val.value().into()], "round")
                         .unwrap();
-                    Ok(Some(self.extract_int_call_result(call)?))
+                    Ok(self.extract_int_call_result(call)?)
                 }
                 _ => Err(format!("round() not supported for type {:?}", val.ty)),
             }
@@ -81,7 +81,7 @@ impl<'ctx> CodeGen<'ctx> {
                             "round",
                         )
                         .unwrap();
-                    Ok(Some(self.extract_float_call_result(call)?))
+                    Ok(self.extract_float_call_result(call)?)
                 }
                 PyType::Int => {
                     // For integers with ndigits, use round_int_ndigits which returns int
@@ -94,7 +94,7 @@ impl<'ctx> CodeGen<'ctx> {
                             "round",
                         )
                         .unwrap();
-                    Ok(Some(self.extract_int_call_result(call)?))
+                    Ok(self.extract_int_call_result(call)?)
                 }
                 _ => Err(format!("round() not supported for type {:?}", val.ty)),
             }
@@ -105,7 +105,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(super) fn generate_min_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.len() < 2 {
             return Err("min() requires at least 2 arguments".to_string());
         }
@@ -115,14 +115,14 @@ impl<'ctx> CodeGen<'ctx> {
             let val = self.evaluate_expression(arg)?;
             result = self.generate_minmax_select(&result, &val, true)?;
         }
-        Ok(Some(result))
+        Ok(result)
     }
 
     /// Generate max() call
     pub(super) fn generate_max_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.len() < 2 {
             return Err("max() requires at least 2 arguments".to_string());
         }
@@ -132,7 +132,7 @@ impl<'ctx> CodeGen<'ctx> {
             let val = self.evaluate_expression(arg)?;
             result = self.generate_minmax_select(&result, &val, false)?;
         }
-        Ok(Some(result))
+        Ok(result)
     }
 
     /// Generate min/max selection between two values
@@ -228,7 +228,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(super) fn generate_pow_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.len() < 2 || args.len() > 3 {
             return Err("pow() takes 2 or 3 arguments".to_string());
         }
@@ -255,7 +255,7 @@ impl<'ctx> CodeGen<'ctx> {
                     "pow",
                 )
                 .unwrap();
-            Ok(Some(self.extract_int_call_result(call)?))
+            Ok(self.extract_int_call_result(call)?)
         } else if base.ty == PyType::Int && exp.ty == PyType::Int {
             // pow(int, int) - use integer power, returns int
             let pow_fn = self.get_or_declare_c_builtin("pow_int");
@@ -263,7 +263,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_call(pow_fn, &[base.value().into(), exp.value().into()], "pow")
                 .unwrap();
-            Ok(Some(self.extract_int_call_result(call)?))
+            Ok(self.extract_int_call_result(call)?)
         } else {
             // pow(base, exp) - use floating point pow
             let base_float = self.coerce_to_float(&base)?;
@@ -279,7 +279,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_call(pow_fn, &[base_float.into(), exp_float.into()], "pow")
                 .unwrap();
-            Ok(Some(self.extract_float_call_result(call)?))
+            Ok(self.extract_float_call_result(call)?)
         }
     }
 
@@ -287,7 +287,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(super) fn generate_len_call(
         &mut self,
         args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
+    ) -> Result<PyValue<'ctx>, String> {
         if args.len() != 1 {
             return Err("len() takes exactly 1 argument".to_string());
         }
@@ -300,7 +300,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(Some(self.extract_int_call_result(call)?))
+                Ok(self.extract_int_call_result(call)?)
             }
             PyType::List(_) => {
                 let len_fn = self.get_or_declare_c_builtin("list_len");
@@ -308,7 +308,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(Some(self.extract_int_call_result(call)?))
+                Ok(self.extract_int_call_result(call)?)
             }
             PyType::Dict(_, _) => {
                 let len_fn = self.get_or_declare_c_builtin("dict_len");
@@ -316,7 +316,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(Some(self.extract_int_call_result(call)?))
+                Ok(self.extract_int_call_result(call)?)
             }
             PyType::Set(_) => {
                 let len_fn = self.get_or_declare_c_builtin("set_len");
@@ -324,7 +324,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(Some(self.extract_int_call_result(call)?))
+                Ok(self.extract_int_call_result(call)?)
             }
             _ => Err(format!("len() not supported for type {:?}", val.ty)),
         }

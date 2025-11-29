@@ -469,6 +469,12 @@ invalid_test!(
     "tests/fixtures/invalid/list_sub_list.py"
 );
 
+// Cannot call list() with multiple arguments
+invalid_test!(
+    test_list_with_args,
+    "tests/fixtures/invalid/list_with_args.py"
+);
+
 // ============================================================================
 // Set Type Mismatch Error Tests
 // ============================================================================
