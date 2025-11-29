@@ -8,3 +8,9 @@ b'Is complete:' False
 b'Name:' b'TypePython'
 b'Message:' b'Hello, World!'
 b'Result:' 1.0
+False
+False
+True
+True
+True
+False
