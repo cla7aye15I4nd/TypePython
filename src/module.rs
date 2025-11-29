@@ -1,6 +1,5 @@
 /// Module resolution and management for TypePython
 use inkwell::context::Context;
-use log::debug;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
@@ -110,7 +109,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
                             // Only add .py files from builtin directory (not .c)
                             if let Some(ext) = path.extension() {
                                 if ext == "py" {
-                                    debug!("Auto-adding builtin Python module: {}", path.display());
                                     queue.push_back(path);
                                 }
                             }
@@ -134,11 +132,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
 
             // Handle C files separately - they don't have imports but should be registered
             if current_path.extension().and_then(|s| s.to_str()) == Some("c") {
-                debug!(
-                    "Preprocessing C module '{}' at {}",
-                    module_name,
-                    current_path.display()
-                );
                 // C files have no AST program or imports, but we still register them
                 let empty_program = Program {
                     imports: vec![],
@@ -167,12 +160,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
                 .map_err(|e| format!("Parse error in {}: {}", current_path.display(), e))?;
             let program = crate::ast::parser::build_program(pairs);
 
-            debug!(
-                "Preprocessing module '{}' at {}",
-                module_name,
-                current_path.display()
-            );
-
             // Collect imports for second pass
             let mut imports = Vec::new();
             for import in &program.imports {
@@ -194,8 +181,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
                 imports.push((local_name, import_module_name));
                 queue.push_back(import_path);
             }
-
-            debug!("Module '{}' imports {} symbols", module_name, imports.len());
 
             // Store program and create module (members will be populated in second pass)
             self.programs.insert(module_name.clone(), program);
@@ -244,7 +229,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
             }
         }
 
-        debug!("Preprocessed {} modules total", self.modules.len());
         Ok(())
     }
 
@@ -280,29 +264,12 @@ impl<'ctx> ModuleRegistry<'ctx> {
         // Add current directory
         search_paths.push(("", current_path.to_path_buf(), self.root.clone()));
 
-        for (name, dir, root) in search_paths {
+        for (_, dir, _) in search_paths {
             for ext in &extensions {
                 let candidate = dir.join(format!("{}.{}", module_base, ext));
 
-                // compare the relative module name for
-                if let Ok(rel_path) = candidate.strip_prefix(&root) {
-                    let module_name = format!(
-                        "{}.{}",
-                        name,
-                        &rel_path
-                            .with_extension("")
-                            .to_string_lossy()
-                            .replace("/", ".")
-                    );
-                    if candidate.exists() {
-                        debug!(
-                            "Resolved module '{}' to {}",
-                            module_name,
-                            candidate.display()
-                        );
-
-                        return Ok(candidate);
-                    }
+                if candidate.exists() {
+                    return Ok(candidate);
                 }
             }
         }

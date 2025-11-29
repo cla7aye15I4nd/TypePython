@@ -882,61 +882,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn generate_call(
-        &mut self,
-        func: PyValue<'ctx>,
-        args: &[Expression],
-    ) -> Result<PyValue<'ctx>, String> {
-        let function = func.get_function()?.function;
-
-        let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
-        for arg in args {
-            arg_values.push(self.evaluate_expression(arg)?.value().into());
-        }
-
-        let call_site = self
-            .builder
-            .build_call(function, &arg_values, "call")
-            .unwrap();
-
-        // Check if the called function has a non-void return type
-        let returns_value = function.get_type().get_return_type().is_some();
-
-        // TODO: We should get the actual return type from function metadata
-        // For now, we infer from the LLVM return value (not ideal but maintains compatibility)
-        if returns_value {
-            use inkwell::values::AnyValue;
-            let any_val = call_site.as_any_value_enum();
-            match any_val {
-                inkwell::values::AnyValueEnum::IntValue(iv) => {
-                    let ir_val: BasicValueEnum = iv.into();
-                    // Check if it's a bool (i1) or int (i64)
-                    if iv.get_type().get_bit_width() == 1 {
-                        Ok(PyValue::bool(ir_val))
-                    } else {
-                        Ok(PyValue::int(ir_val))
-                    }
-                }
-                inkwell::values::AnyValueEnum::FloatValue(fv) => Ok(PyValue::float(fv.into())),
-                inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(PyValue::bytes(pv.into())),
-                _ => Ok(PyValue::none(
-                    self.context
-                        .ptr_type(inkwell::AddressSpace::default())
-                        .const_null()
-                        .into(),
-                )),
-            }
-        } else {
-            // Function returns void - return None
-            Ok(PyValue::none(
-                self.context
-                    .ptr_type(inkwell::AddressSpace::default())
-                    .const_null()
-                    .into(),
-            ))
-        }
-    }
-
     /// Helper to extract int result from a call site
     fn extract_int_call_result(
         &self,

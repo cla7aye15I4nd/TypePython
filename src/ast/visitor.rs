@@ -125,40 +125,4 @@ pub trait Visitor {
 
     /// Visit expression statement
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error>;
-
-    /// Visit list literal
-    fn visit_list(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;
-
-    /// Visit tuple literal
-    fn visit_tuple(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;
-
-    /// Visit dict literal
-    fn visit_dict(&mut self, pairs: &[(Expression, Expression)]) -> Result<(), Self::Error>;
-
-    /// Visit set literal
-    fn visit_set(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;
-
-    /// Visit unary operation
-    fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error>;
-
-    /// Visit function call
-    fn visit_call(&mut self, func: &Expression, args: &[Expression]) -> Result<(), Self::Error>;
-
-    /// Visit attribute access
-    fn visit_attribute(&mut self, object: &Expression, attr: &str) -> Result<(), Self::Error>;
-
-    /// Visit subscript operation
-    fn visit_subscript(
-        &mut self,
-        object: &Expression,
-        index: &Expression,
-    ) -> Result<(), Self::Error>;
-
-    /// Visit slice operation
-    fn visit_slice(
-        &mut self,
-        start: &Option<Box<Expression>>,
-        stop: &Option<Box<Expression>>,
-        step: &Option<Box<Expression>>,
-    ) -> Result<(), Self::Error>;
 }

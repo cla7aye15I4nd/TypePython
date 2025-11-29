@@ -42,11 +42,6 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_var_decl_impl(name, var_type, value)
     }
 
-    fn visit_import(&mut self, _import: &Import) -> Result<(), Self::Error> {
-        // Imports are handled at module level, no code gen needed
-        Ok(())
-    }
-
     fn visit_class(&mut self, _class: &Class) -> Result<(), Self::Error> {
         todo!("Classes")
     }
@@ -115,54 +110,8 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_expr_statement_impl(expr)
     }
 
-    // Expression literal methods use default no-op implementations from the trait
-    // since CodeGen uses evaluate_expression() instead of visit_expression()
-
-    fn visit_list(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        todo!("List literals")
-    }
-
-    fn visit_tuple(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        todo!("Tuple literals")
-    }
-
-    fn visit_dict(&mut self, _pairs: &[(Expression, Expression)]) -> Result<(), Self::Error> {
-        todo!("Dict literals")
-    }
-
-    fn visit_set(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
-        todo!("Set literals")
-    }
-
-    fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error> {
-        self.generate_unary_op(op, operand)?;
+    fn visit_import(&mut self, _import: &Import) -> Result<(), Self::Error> {
+        // Imports are handled at program level, no action needed here
         Ok(())
-    }
-
-    fn visit_call(&mut self, func: &Expression, args: &[Expression]) -> Result<(), Self::Error> {
-        let func_value = self.evaluate_expression(func)?;
-        self.generate_call(func_value, args)?;
-        Ok(())
-    }
-
-    fn visit_attribute(&mut self, _object: &Expression, _attr: &str) -> Result<(), Self::Error> {
-        todo!("Attribute access")
-    }
-
-    fn visit_subscript(
-        &mut self,
-        _object: &Expression,
-        _index: &Expression,
-    ) -> Result<(), Self::Error> {
-        todo!("Subscript operation")
-    }
-
-    fn visit_slice(
-        &mut self,
-        _start: &Option<Box<Expression>>,
-        _stop: &Option<Box<Expression>>,
-        _step: &Option<Box<Expression>>,
-    ) -> Result<(), Self::Error> {
-        todo!("Slice operation")
     }
 }

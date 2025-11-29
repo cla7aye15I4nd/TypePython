@@ -3,7 +3,6 @@ use crate::codegen::builtins::get_builtin_object_path;
 use crate::codegen::CodeGen;
 use crate::module::ModuleRegistry;
 use inkwell::context::Context;
-use log::debug;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -20,8 +19,6 @@ pub struct CompileOptions {
 /// Link multiple object files together into an executable using LTO
 pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result<(), String> {
     let clang = crate::module::get_clang_path();
-
-    debug!("Linking object files with LTO: {:?}", object_files);
 
     let mut cmd = std::process::Command::new(clang);
 
@@ -51,8 +48,6 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
         ));
     }
 
-    debug!("Successfully linked with LTO to {}", output_path.display());
-
     Ok(())
 }
 
@@ -69,7 +64,6 @@ pub fn compile(
     _options: &CompileOptions,
 ) -> Result<(), String> {
     let context = Context::create();
-    debug!("Starting compilation pipeline");
 
     // ============================================================================
     // Step 1: Preprocess all modules - discover and register all modules via BFS
@@ -80,11 +74,6 @@ pub fn compile(
         source_path.parent().unwrap().to_path_buf(),
         source_path,
     )?;
-
-    debug!(
-        "Discovered and preprocessed {} modules",
-        module_registry.modules.len()
-    );
 
     // ============================================================================
     // Step 2: Compile all modules to LLVM IR and .o files
@@ -109,7 +98,6 @@ pub fn compile(
             .ok_or_else(|| format!("Program not found for module '{}'", module_name))?;
 
         // For Python modules, compile to LLVM IR
-        debug!("Compiling module '{}' to LLVM IR", module_name);
 
         // Build global variables map from module's imported modules
         let module_info = module_value.module_info();
@@ -142,29 +130,15 @@ pub fn compile(
         object_files.push(obj_path);
 
         // Log what we've done
-        debug!(
-            "Module '{}' uses builtin modules: {:?}",
-            module_name, codegen.used_builtin_modules
-        );
     }
 
     // ============================================================================
     // Step 3: Add only the builtin modules that are actually used
     // ============================================================================
 
-    debug!(
-        "Total used builtin modules across all code: {:?}",
-        all_used_builtins
-    );
-
     for builtin_module in &all_used_builtins {
         let builtin_obj_path = get_builtin_object_path(builtin_module);
         if builtin_obj_path.exists() {
-            debug!(
-                "Adding builtin module '{}' from {}",
-                builtin_module,
-                builtin_obj_path.display()
-            );
             object_files.push(builtin_obj_path);
         } else {
             return Err(format!(
@@ -178,18 +152,8 @@ pub fn compile(
     // ============================================================================
     // Step 4: Link all .o files into executable
     // ============================================================================
-    debug!(
-        "Linking {} object files ({} user modules, {} builtin modules)",
-        object_files.len(),
-        object_files.len() - all_used_builtins.len(),
-        all_used_builtins.len()
-    );
-    link_object_files(&object_files, output_path)?;
 
-    debug!(
-        "Compilation complete! Executable: {}",
-        output_path.display()
-    );
+    link_object_files(&object_files, output_path)?;
 
     Ok(())
 }

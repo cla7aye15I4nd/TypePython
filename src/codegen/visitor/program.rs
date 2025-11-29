@@ -11,6 +11,11 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         program: &Program,
     ) -> Result<BasicValueEnum<'ctx>, String> {
+        // Call visitor method for all imports for coverage
+        for import in &program.imports {
+            self.visit_import(import)?;
+        }
+
         // External functions are now lazily declared when called
 
         // First pass: Declare all functions (for mutual recursion support)
