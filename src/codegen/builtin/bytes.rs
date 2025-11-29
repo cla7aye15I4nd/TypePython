@@ -46,7 +46,6 @@ fn get_bytes_method_info(name: &str) -> Option<(&'static str, PyType)> {
 
         // Transform - return bytes
         "replace" => Some(("bytes_replace", PyType::Bytes)),
-        "reverse" => Some(("bytes_reverse", PyType::Bytes)),
 
         _ => None,
     }
