@@ -23,8 +23,9 @@ pub struct CodeGen<'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: Builder<'ctx>,
-    /// Variables: name -> (pointer, LLVM type for load, Python type)
-    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, PyType)>,
+    /// Variables: name -> (pointer, LLVM type for load, Python type variant discriminant)
+    /// We store the Type from AST since PyValue requires an LLVM value
+    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, Type)>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
     pub(crate) module_name: String,
@@ -182,12 +183,13 @@ impl<'ctx> CodeGen<'ctx> {
                 // Check if index is a slice expression
                 if let Expression::Slice { start, stop, step } = index.as_ref() {
                     match &obj.ty {
-                        PyType::Bytes(_) => {
+                        PyType::Bytes => {
+                            let obj_val = obj.value;
                             // bytes[start:stop:step] returns bytes
                             let len_fn = self.get_or_declare_builtin_function("bytes_len");
                             let len_call = self
                                 .builder
-                                .build_call(len_fn, &[obj.value.into()], "len")
+                                .build_call(len_fn, &[obj_val.into()], "len")
                                 .unwrap();
                             let len = self.extract_int_call_result(len_call)?;
 
@@ -236,7 +238,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     .build_call(
                                         slice_fn,
                                         &[
-                                            obj.value.into(),
+                                            obj_val.into(),
                                             start_val.value.into(),
                                             stop_val.value.into(),
                                             step_val.value.into(),
@@ -267,7 +269,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     .build_call(
                                         slice_fn,
                                         &[
-                                            obj.value.into(),
+                                            obj_val.into(),
                                             start_val.value.into(),
                                             stop_val.value.into(),
                                         ],
@@ -285,7 +287,7 @@ impl<'ctx> CodeGen<'ctx> {
                 } else {
                     let idx = self.evaluate_expression(index)?;
                     match &obj.ty {
-                        PyType::Bytes(_) => {
+                        PyType::Bytes => {
                             // bytes[index] returns an int (the byte value at that index)
                             let getitem_fn = self.get_or_declare_builtin_function("bytes_getitem");
                             let call = self
@@ -680,11 +682,11 @@ impl<'ctx> CodeGen<'ctx> {
         val: &PyValue<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
         match &val.ty {
-            PyType::Bool(_) => {
+            PyType::Bool => {
                 // Already a bool
                 Ok(val.value.into_int_value())
             }
-            PyType::Int(_) => {
+            PyType::Int => {
                 // Non-zero is true
                 let int_val = val.value.into_int_value();
                 let zero = int_val.get_type().const_zero();
@@ -693,7 +695,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, int_val, zero, "to_bool")
                     .unwrap())
             }
-            PyType::Float(_) => {
+            PyType::Float => {
                 let float_val = val.value.into_float_value();
                 let zero = self.context.f64_type().const_zero();
                 Ok(self
@@ -701,11 +703,11 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
                     .unwrap())
             }
-            PyType::None(_) => {
+            PyType::None => {
                 // None is always falsy
                 Ok(self.context.bool_type().const_zero())
             }
-            PyType::Bytes(_) => {
+            PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
                 let ptr_val = val.value.into_pointer_value();
                 let len_fn = self.get_or_declare_builtin_function("bytes_len");
@@ -790,19 +792,18 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Use the type from PyValue - no inference needed!
         let cg = CgCtx::new(self.context, &self.builder, &self.module);
-        let result = val.ty.unary_op(&cg, op, val.value)?;
+        let result = val.unary_op(&cg, op)?;
 
-        // Determine result type
-        let result_ty = self.unary_op_result_type(op, &val.ty);
-        Ok(PyValue::new(result, result_ty))
-    }
-
-    /// Determine the result type of a unary operation
-    fn unary_op_result_type(&self, op: &UnaryOp, operand_type: &PyType) -> PyType {
-        use crate::types::BoolType;
+        // Determine result type (Not always returns Bool, others preserve type)
         match op {
-            UnaryOp::Not => PyType::Bool(BoolType),
-            _ => operand_type.clone(),
+            UnaryOp::Not => Ok(PyValue::bool(result)),
+            _ => match &val.ty {
+                PyType::Int => Ok(PyValue::int(result)),
+                PyType::Float => Ok(PyValue::float(result)),
+                PyType::Bool => Ok(PyValue::bool(result)),
+                PyType::Bytes => Ok(PyValue::bytes(result)),
+                PyType::None => Ok(PyValue::none(result)),
+            },
         }
     }
 
@@ -904,9 +905,9 @@ impl<'ctx> CodeGen<'ctx> {
             let val = self.evaluate_expression(arg)?;
 
             // Use the type from PyValue - no inference needed!
-            let print_fn_name = val.ty.print_function_name();
+            let print_fn_name = val.print_function_name();
             let print_fn = self.get_or_declare_builtin_function(print_fn_name);
-            val.ty.print(&self.builder, print_fn, val.value)?;
+            val.print(&self.builder, print_fn)?;
 
             // Print space between arguments (but not after the last one)
             if i < args.len() - 1 {
@@ -981,12 +982,12 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Check if both operands have the same type (use phi approach)
         // or different types (coerce to float)
-        let same_type = std::mem::discriminant(&a.ty) == std::mem::discriminant(&b.ty);
+        let same_type = a.same_type(b);
 
         if same_type {
             // Same type: use select instruction directly on original values
             let condition = match &a.ty {
-                PyType::Int(_) => {
+                PyType::Int => {
                     let pred = if is_min {
                         IntPredicate::SLT
                     } else {
@@ -1001,7 +1002,7 @@ impl<'ctx> CodeGen<'ctx> {
                         )
                         .unwrap()
                 }
-                PyType::Float(_) => {
+                PyType::Float => {
                     let pred = if is_min {
                         FloatPredicate::OLT
                     } else {
@@ -1016,7 +1017,7 @@ impl<'ctx> CodeGen<'ctx> {
                         )
                         .unwrap()
                 }
-                PyType::Bool(_) => {
+                PyType::Bool => {
                     // Bools are compared as ints (False=0, True=1)
                     let a_int = self
                         .builder
@@ -1051,7 +1052,13 @@ impl<'ctx> CodeGen<'ctx> {
                 .build_select(condition, a.value, b.value, "minmax_select")
                 .unwrap();
 
-            Ok(PyValue::new(select_result, a.ty.clone()))
+            // Return the same type as input
+            match &a.ty {
+                PyType::Int => Ok(PyValue::int(select_result)),
+                PyType::Float => Ok(PyValue::float(select_result)),
+                PyType::Bool => Ok(PyValue::bool(select_result)),
+                _ => unreachable!(),
+            }
         } else {
             // Different types: coerce to float for comparison and result
             // This is necessary because we can't have a single LLVM value with
@@ -1059,12 +1066,12 @@ impl<'ctx> CodeGen<'ctx> {
             let float_type = self.context.f64_type();
 
             let a_float = match &a.ty {
-                PyType::Float(_) => a.value.into_float_value(),
-                PyType::Int(_) => self
+                PyType::Float => a.value.into_float_value(),
+                PyType::Int => self
                     .builder
                     .build_signed_int_to_float(a.value.into_int_value(), float_type, "itof")
                     .unwrap(),
-                PyType::Bool(_) => {
+                PyType::Bool => {
                     let int_val = self
                         .builder
                         .build_int_z_extend(
@@ -1081,12 +1088,12 @@ impl<'ctx> CodeGen<'ctx> {
             };
 
             let b_float = match &b.ty {
-                PyType::Float(_) => b.value.into_float_value(),
-                PyType::Int(_) => self
+                PyType::Float => b.value.into_float_value(),
+                PyType::Int => self
                     .builder
                     .build_signed_int_to_float(b.value.into_int_value(), float_type, "itof")
                     .unwrap(),
-                PyType::Bool(_) => {
+                PyType::Bool => {
                     let int_val = self
                         .builder
                         .build_int_z_extend(
@@ -1135,7 +1142,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 let val = self.evaluate_expression(&args[0])?;
                 let result = match &val.ty {
-                    PyType::Int(_) => {
+                    PyType::Int => {
                         let abs_fn = self.get_or_declare_builtin_function("abs_int");
                         let call = self
                             .builder
@@ -1143,7 +1150,7 @@ impl<'ctx> CodeGen<'ctx> {
                             .unwrap();
                         self.extract_int_call_result(call)?
                     }
-                    PyType::Float(_) => {
+                    PyType::Float => {
                         let abs_fn = self.get_or_declare_builtin_function("abs_float");
                         let call = self
                             .builder
@@ -1151,7 +1158,7 @@ impl<'ctx> CodeGen<'ctx> {
                             .unwrap();
                         self.extract_float_call_result(call)?
                     }
-                    PyType::Bool(_) => {
+                    PyType::Bool => {
                         // abs(bool) -> int (0 or 1)
                         let int_val = self
                             .builder
@@ -1177,8 +1184,8 @@ impl<'ctx> CodeGen<'ctx> {
                 if args.len() == 1 {
                     // round(x) - returns int
                     let result = match &val.ty {
-                        PyType::Int(_) => val, // Already an int
-                        PyType::Float(_) => {
+                        PyType::Int => val, // Already an int
+                        PyType::Float => {
                             let round_fn = self.get_or_declare_builtin_function("round_float");
                             let call = self
                                 .builder
@@ -1186,7 +1193,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 .unwrap();
                             self.extract_int_call_result(call)?
                         }
-                        PyType::Bool(_) => {
+                        PyType::Bool => {
                             let int_val = self
                                 .builder
                                 .build_int_z_extend(
@@ -1204,8 +1211,8 @@ impl<'ctx> CodeGen<'ctx> {
                     // round(x, ndigits) - returns float
                     let ndigits = self.evaluate_expression(&args[1])?;
                     let ndigits_int = match &ndigits.ty {
-                        PyType::Int(_) => ndigits.value,
-                        PyType::Bool(_) => self
+                        PyType::Int => ndigits.value,
+                        PyType::Bool => self
                             .builder
                             .build_int_z_extend(
                                 ndigits.value.into_int_value(),
@@ -1218,8 +1225,8 @@ impl<'ctx> CodeGen<'ctx> {
                     };
 
                     let val_float = match &val.ty {
-                        PyType::Float(_) => val.value,
-                        PyType::Int(_) => self
+                        PyType::Float => val.value,
+                        PyType::Int => self
                             .builder
                             .build_signed_int_to_float(
                                 val.value.into_int_value(),
@@ -1228,7 +1235,7 @@ impl<'ctx> CodeGen<'ctx> {
                             )
                             .unwrap()
                             .into(),
-                        PyType::Bool(_) => {
+                        PyType::Bool => {
                             let int_val = self
                                 .builder
                                 .build_int_z_extend(
@@ -1293,8 +1300,8 @@ impl<'ctx> CodeGen<'ctx> {
 
                     // All arguments must be integers for modular exponentiation
                     let base_int = match &base.ty {
-                        PyType::Int(_) => base.value,
-                        PyType::Bool(_) => self
+                        PyType::Int => base.value,
+                        PyType::Bool => self
                             .builder
                             .build_int_z_extend(
                                 base.value.into_int_value(),
@@ -1306,8 +1313,8 @@ impl<'ctx> CodeGen<'ctx> {
                         _ => return Err("pow() with modulo requires integer arguments".to_string()),
                     };
                     let exp_int = match &exp.ty {
-                        PyType::Int(_) => exp.value,
-                        PyType::Bool(_) => self
+                        PyType::Int => exp.value,
+                        PyType::Bool => self
                             .builder
                             .build_int_z_extend(
                                 exp.value.into_int_value(),
@@ -1319,8 +1326,8 @@ impl<'ctx> CodeGen<'ctx> {
                         _ => return Err("pow() with modulo requires integer arguments".to_string()),
                     };
                     let mod_int = match &modulo.ty {
-                        PyType::Int(_) => modulo.value,
-                        PyType::Bool(_) => self
+                        PyType::Int => modulo.value,
+                        PyType::Bool => self
                             .builder
                             .build_int_z_extend(
                                 modulo.value.into_int_value(),
@@ -1356,7 +1363,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 let val = self.evaluate_expression(&args[0])?;
                 let result = match &val.ty {
-                    PyType::Bytes(_) => {
+                    PyType::Bytes => {
                         let len_fn = self.get_or_declare_builtin_function("bytes_len");
                         let call = self
                             .builder

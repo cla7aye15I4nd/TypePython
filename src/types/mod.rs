@@ -1,17 +1,65 @@
 //! Type system for TypePython
 //!
 //! This module provides Python types with code generation support.
+//! Each type is implemented in its own file with its codegen operations.
 
-mod bool;
-mod bytes;
-pub mod codegen;
-mod float;
-mod int;
-mod none;
+pub mod bool;
+pub mod bytes;
+pub mod float;
+pub mod int;
+pub mod none;
+pub mod traits;
+pub mod value;
 
-pub use self::bool::BoolType;
-pub use bytes::BytesType;
-pub use codegen::{CgCtx, PyType, PyValue};
-pub use float::FloatType;
-pub use int::IntType;
-pub use none::NoneType;
+pub use value::{CgCtx, PyType, PyValue};
+
+// Re-export type wrappers
+pub use bool::PyBool;
+pub use bytes::PyBytes;
+pub use float::PyFloat;
+pub use int::PyInt;
+pub use none::PyNone;
+
+// Re-export traits
+pub use traits::{
+    // Arithmetic
+    Addable,
+    // Composite
+    Arithmetic,
+    // Bitwise
+    BitAndable,
+    BitNegatable,
+    BitOrable,
+    BitXorable,
+    Bitwise,
+    Comparable,
+    // Sequence
+    Concatenatable,
+    Divisible,
+    // Comparison
+    EqualityComparable,
+    FloorDivisible,
+    IdentityComparable,
+    LeftShiftable,
+    // Logical
+    LogicalAndable,
+    LogicalNegatable,
+    LogicalOrable,
+    // Membership
+    MembershipTestable,
+    Modulo,
+    Multipliable,
+    // Unary
+    Negatable,
+    OrderComparable,
+    Powable,
+    // Other
+    Printable,
+    Repeatable,
+    RightShiftable,
+    Sequence,
+    Subtractable,
+    ToBool,
+    UnaryOps,
+    UnaryPlusable,
+};

@@ -2,7 +2,7 @@
 use super::super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::PyType;
+
 use inkwell::values::BasicValueEnum;
 
 impl<'ctx> CodeGen<'ctx> {
@@ -61,9 +61,10 @@ impl<'ctx> CodeGen<'ctx> {
             let alloca = self.create_entry_block_alloca(&func.name, &param.name, &param.param_type);
             self.builder.build_store(alloca, param_value).unwrap();
             let llvm_type = self.type_to_llvm(&param.param_type);
-            let py_type = PyType::from_ast_type(&param.param_type)?;
-            self.variables
-                .insert(param.name.clone(), (alloca, llvm_type, py_type));
+            self.variables.insert(
+                param.name.clone(),
+                (alloca, llvm_type, param.param_type.clone()),
+            );
         }
 
         Ok(())

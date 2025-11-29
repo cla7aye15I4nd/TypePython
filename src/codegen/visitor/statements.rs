@@ -1,7 +1,7 @@
 /// Statement visitor implementation for code generation
 use super::super::CodeGen;
 use crate::ast::*;
-use crate::types::{CgCtx, PyType, PyValue};
+use crate::types::{CgCtx, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_decl_impl(
@@ -24,9 +24,8 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.builder.build_store(alloca, coerced_val).unwrap();
         let llvm_type = self.type_to_llvm(var_type);
-        let py_type = PyType::from_ast_type(var_type)?;
         self.variables
-            .insert(name.to_string(), (alloca, llvm_type, py_type));
+            .insert(name.to_string(), (alloca, llvm_type, var_type.clone()));
         Ok(())
     }
 
@@ -63,7 +62,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<(), String> {
         match target {
             AssignTarget::Var(name) => {
-                let (var, load_type, py_type) = self
+                let (var, load_type, ast_type) = self
                     .variables
                     .get(name)
                     .ok_or_else(|| format!("Variable {} not found", name))?
@@ -71,7 +70,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Load current value with its known type
                 let current_ir = self.builder.build_load(load_type, var, name).unwrap();
-                let current = PyValue::new(current_ir, py_type.clone());
+                let current = PyValue::from_ast_type(&ast_type, current_ir)?;
 
                 // Evaluate RHS
                 let rhs = self.evaluate_expression(value)?;
