@@ -601,10 +601,6 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
         Rule::factor_expr => build_factor_expr(pair),
         Rule::power_expr => build_power_expr(pair),
         Rule::postfix_expr => build_postfix_expr(pair),
-        Rule::primary => {
-            let inner = pair.into_inner().next().unwrap();
-            build_expression(inner)
-        }
         Rule::atom => build_atom(pair),
         _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
     }

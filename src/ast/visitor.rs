@@ -9,25 +9,7 @@ pub trait Visitor {
     type Error;
 
     /// Visit a program node
-    fn visit_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error> {
-        // Visit imports
-        for import in &program.imports {
-            self.visit_import(import)?;
-        }
-        // Visit classes
-        for class in &program.classes {
-            self.visit_class(class)?;
-        }
-        // Visit functions
-        for function in &program.functions {
-            self.visit_function(function)?;
-        }
-        // Visit statements
-        for statement in &program.statements {
-            self.visit_statement(statement)?;
-        }
-        self.finish_program(program)
-    }
+    fn visit_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error>;
 
     /// Called after visiting all nodes in a program
     fn finish_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error>;

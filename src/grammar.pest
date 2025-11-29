@@ -315,9 +315,6 @@ slice_expr = {
     expression? ~ COLON ~ expression? ~ (COLON ~ expression?)?
 }
 
-// Primary expressions (highest precedence)
-primary = { postfix_expr }
-
 arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)? }
 
 // Atoms (highest precedence)
