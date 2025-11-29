@@ -31,14 +31,6 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(self.context.i32_type().const_zero().into())
     }
 
-    pub(crate) fn finish_program_impl(
-        &mut self,
-        _program: &Program,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        // This is called by the default implementation but we handle everything in visit_program
-        Ok(self.context.i32_type().const_zero().into())
-    }
-
     pub(crate) fn enter_function_impl(&mut self, func: &Function) -> Result<(), String> {
         // Get the already-declared function
         let mangled_name = self.mangle_function_name(&self.module_name, &func.name);

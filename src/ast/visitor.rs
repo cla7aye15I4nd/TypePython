@@ -11,9 +11,6 @@ pub trait Visitor {
     /// Visit a program node
     fn visit_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error>;
 
-    /// Called after visiting all nodes in a program
-    fn finish_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error>;
-
     /// Visit an import statement
     fn visit_import(&mut self, import: &Import) -> Result<(), Self::Error>;
 
@@ -140,14 +137,6 @@ pub trait Visitor {
 
     /// Visit set literal
     fn visit_set(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;
-
-    /// Visit binary operation
-    fn visit_binop(
-        &mut self,
-        op: &BinaryOp,
-        left: &Expression,
-        right: &Expression,
-    ) -> Result<(), Self::Error>;
 
     /// Visit unary operation
     fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error>;

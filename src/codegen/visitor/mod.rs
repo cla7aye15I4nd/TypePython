@@ -23,10 +23,6 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_program_impl(program)
     }
 
-    fn finish_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error> {
-        self.finish_program_impl(program)
-    }
-
     // Function-level methods
     fn enter_function(&mut self, func: &Function) -> Result<(), Self::Error> {
         self.enter_function_impl(func)
@@ -136,16 +132,6 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
 
     fn visit_set(&mut self, _elements: &[Expression]) -> Result<(), Self::Error> {
         todo!("Set literals")
-    }
-
-    fn visit_binop(
-        &mut self,
-        op: &BinaryOp,
-        left: &Expression,
-        right: &Expression,
-    ) -> Result<(), Self::Error> {
-        self.generate_binary_op(op, left, right)?;
-        Ok(())
     }
 
     fn visit_unaryop(&mut self, op: &UnaryOp, operand: &Expression) -> Result<(), Self::Error> {
