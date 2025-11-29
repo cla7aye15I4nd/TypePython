@@ -176,13 +176,13 @@ impl<'ctx> CodeGen<'ctx> {
                             .const_null()
                             .into(),
                     )),
-                    PyType::Int => self.extract_int_call_result(call_site),
+                    PyType::Int => Ok(self.extract_int_call_result(call_site)),
                     PyType::Float => self.extract_float_call_result(call_site),
                     PyType::Bool => self.extract_bool_call_result(call_site),
-                    PyType::Bytes => self.extract_bytes_call_result(call_site),
+                    PyType::Bytes => Ok(self.extract_bytes_call_result(call_site)),
                     PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
                         // Container types return pointers
-                        let ptr_val = self.extract_ptr_call_result(call_site)?;
+                        let ptr_val = self.extract_ptr_call_result(call_site);
                         Ok(PyValue::new(ptr_val.value(), return_type.clone(), None))
                     }
                     _ => Err(format!("Unsupported return type: {:?}", return_type)),
@@ -727,7 +727,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(len_fn, &[ptr_val.into()], "bytes_len")
                     .unwrap();
                 let len = self
-                    .extract_int_call_result(len_call)?
+                    .extract_int_call_result(len_call)
                     .value()
                     .into_int_value();
                 let zero = len.get_type().const_zero();
@@ -749,7 +749,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(len_fn, &[ptr_val.into()], "list_len")
                     .unwrap();
                 let len = self
-                    .extract_int_call_result(len_call)?
+                    .extract_int_call_result(len_call)
                     .value()
                     .into_int_value();
                 let zero = len.get_type().const_zero();
@@ -767,7 +767,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(len_fn, &[ptr_val.into()], "dict_len")
                     .unwrap();
                 let len = self
-                    .extract_int_call_result(len_call)?
+                    .extract_int_call_result(len_call)
                     .value()
                     .into_int_value();
                 let zero = len.get_type().const_zero();
@@ -785,7 +785,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(len_fn, &[ptr_val.into()], "set_len")
                     .unwrap();
                 let len = self
-                    .extract_int_call_result(len_call)?
+                    .extract_int_call_result(len_call)
                     .value()
                     .into_int_value();
                 let zero = len.get_type().const_zero();
@@ -883,15 +883,14 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Helper to extract int result from a call site
+    /// This function is infallible because the type system guarantees the call returns an int
     fn extract_int_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
+    ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
-        match call_site.as_any_value_enum() {
-            inkwell::values::AnyValueEnum::IntValue(iv) => Ok(PyValue::int(iv.into())),
-            _ => Err("Expected int return value".to_string()),
-        }
+        let iv = call_site.as_any_value_enum().into_int_value();
+        PyValue::int(iv.into())
     }
 
     /// Helper to extract float result from a call site
@@ -932,30 +931,26 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Helper to extract bytes (pointer) result from a call site
+    /// This function is infallible because the type system guarantees the call returns a pointer
     fn extract_bytes_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
+    ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
-        match call_site.as_any_value_enum() {
-            inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(PyValue::bytes(pv.into())),
-            _ => Err("Expected bytes return value".to_string()),
-        }
+        let pv = call_site.as_any_value_enum().into_pointer_value();
+        PyValue::bytes(pv.into())
     }
 
     /// Helper to extract pointer result from a call site (for container types)
+    /// This function is infallible because the type system guarantees the call returns a pointer
     pub(crate) fn extract_ptr_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
+    ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
-        match call_site.as_any_value_enum() {
-            inkwell::values::AnyValueEnum::PointerValue(pv) => {
-                // Return as int type - caller will wrap with proper container type
-                Ok(PyValue::int(pv.into()))
-            }
-            _ => Err("Expected pointer return value".to_string()),
-        }
+        let pv = call_site.as_any_value_enum().into_pointer_value();
+        // Return as int type - caller will wrap with proper container type
+        PyValue::int(pv.into())
     }
 
     pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {

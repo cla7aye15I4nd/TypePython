@@ -24,7 +24,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(abs_fn, &[val.value().into()], "abs")
                     .unwrap();
-                Ok(self.extract_int_call_result(call)?)
+                Ok(self.extract_int_call_result(call))
             }
             PyType::Float => {
                 let abs_fn = self.get_or_declare_c_builtin("abs_float");
@@ -59,7 +59,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_call(round_fn, &[val.value().into()], "round")
                         .unwrap();
-                    Ok(self.extract_int_call_result(call)?)
+                    Ok(self.extract_int_call_result(call))
                 }
                 _ => Err(format!("round() not supported for type {:?}", val.ty)),
             }
@@ -94,7 +94,7 @@ impl<'ctx> CodeGen<'ctx> {
                             "round",
                         )
                         .unwrap();
-                    Ok(self.extract_int_call_result(call)?)
+                    Ok(self.extract_int_call_result(call))
                 }
                 _ => Err(format!("round() not supported for type {:?}", val.ty)),
             }
@@ -182,6 +182,94 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(PyValue::float(result.into_float_value().into()))
                 }
+                PyType::Bytes => {
+                    // Compare bytes by length
+                    let a_len = self.bytes_len(a.value())?.value().into_int_value();
+                    let b_len = self.bytes_len(b.value())?.value().into_int_value();
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    let cmp = self
+                        .builder
+                        .build_int_compare(pred, a_len, b_len, "cmp")
+                        .unwrap();
+                    let result = self
+                        .builder
+                        .build_select(cmp, a.value(), b.value(), "minmax")
+                        .unwrap();
+                    Ok(PyValue::bytes(result.into_pointer_value().into()))
+                }
+                PyType::List(_) => {
+                    // Compare lists by length
+                    let a_len = self.list_len(a.value())?.value().into_int_value();
+                    let b_len = self.list_len(b.value())?.value().into_int_value();
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    let cmp = self
+                        .builder
+                        .build_int_compare(pred, a_len, b_len, "cmp")
+                        .unwrap();
+                    let result = self
+                        .builder
+                        .build_select(cmp, a.value(), b.value(), "minmax")
+                        .unwrap();
+                    Ok(PyValue::new(
+                        result.into_pointer_value().into(),
+                        a.ty.clone(),
+                        None,
+                    ))
+                }
+                PyType::Dict(_, _) => {
+                    // Compare dicts by length
+                    let a_len = self.dict_len(a.value())?.value().into_int_value();
+                    let b_len = self.dict_len(b.value())?.value().into_int_value();
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    let cmp = self
+                        .builder
+                        .build_int_compare(pred, a_len, b_len, "cmp")
+                        .unwrap();
+                    let result = self
+                        .builder
+                        .build_select(cmp, a.value(), b.value(), "minmax")
+                        .unwrap();
+                    Ok(PyValue::new(
+                        result.into_pointer_value().into(),
+                        a.ty.clone(),
+                        None,
+                    ))
+                }
+                PyType::Set(_) => {
+                    // Compare sets by length
+                    let a_len = self.set_len(a.value())?.value().into_int_value();
+                    let b_len = self.set_len(b.value())?.value().into_int_value();
+                    let pred = if is_min {
+                        IntPredicate::SLT
+                    } else {
+                        IntPredicate::SGT
+                    };
+                    let cmp = self
+                        .builder
+                        .build_int_compare(pred, a_len, b_len, "cmp")
+                        .unwrap();
+                    let result = self
+                        .builder
+                        .build_select(cmp, a.value(), b.value(), "minmax")
+                        .unwrap();
+                    Ok(PyValue::new(
+                        result.into_pointer_value().into(),
+                        a.ty.clone(),
+                        None,
+                    ))
+                }
                 _ => Err(format!("min/max not supported for type {:?}", a.ty)),
             }
         } else {
@@ -255,7 +343,7 @@ impl<'ctx> CodeGen<'ctx> {
                     "pow",
                 )
                 .unwrap();
-            Ok(self.extract_int_call_result(call)?)
+            Ok(self.extract_int_call_result(call))
         } else if base.ty == PyType::Int && exp.ty == PyType::Int {
             // pow(int, int) - use integer power, returns int
             let pow_fn = self.get_or_declare_c_builtin("pow_int");
@@ -263,7 +351,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_call(pow_fn, &[base.value().into(), exp.value().into()], "pow")
                 .unwrap();
-            Ok(self.extract_int_call_result(call)?)
+            Ok(self.extract_int_call_result(call))
         } else {
             // pow(base, exp) - use floating point pow
             let base_float = self.coerce_to_float(&base)?;
@@ -300,7 +388,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(self.extract_int_call_result(call)?)
+                Ok(self.extract_int_call_result(call))
             }
             PyType::List(_) => {
                 let len_fn = self.get_or_declare_c_builtin("list_len");
@@ -308,7 +396,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(self.extract_int_call_result(call)?)
+                Ok(self.extract_int_call_result(call))
             }
             PyType::Dict(_, _) => {
                 let len_fn = self.get_or_declare_c_builtin("dict_len");
@@ -316,7 +404,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(self.extract_int_call_result(call)?)
+                Ok(self.extract_int_call_result(call))
             }
             PyType::Set(_) => {
                 let len_fn = self.get_or_declare_c_builtin("set_len");
@@ -324,7 +412,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(len_fn, &[val.value().into()], "len")
                     .unwrap();
-                Ok(self.extract_int_call_result(call)?)
+                Ok(self.extract_int_call_result(call))
             }
             _ => Err(format!("len() not supported for type {:?}", val.ty)),
         }

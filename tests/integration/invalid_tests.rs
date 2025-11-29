@@ -746,6 +746,52 @@ invalid_test!(test_bool_pos, "tests/fixtures/invalid/bool_pos.py");
 invalid_test!(test_bool_bitnot, "tests/fixtures/invalid/bool_bitnot.py");
 
 // ============================================================================
+// Constructor Tests
+// ============================================================================
+
+// dict() with arguments
+invalid_test!(
+    test_dict_constructor_with_args,
+    "tests/fixtures/invalid/dict_constructor_with_args.py"
+);
+
+// dict() with multiple arguments
+invalid_test!(
+    test_dict_constructor_multiple_args,
+    "tests/fixtures/invalid/dict_constructor_multiple_args.py"
+);
+
+// list() with arguments
+invalid_test!(
+    test_list_constructor_with_args,
+    "tests/fixtures/invalid/list_constructor_with_args.py"
+);
+
+// list() with multiple arguments
+invalid_test!(
+    test_list_constructor_multiple_args,
+    "tests/fixtures/invalid/list_constructor_multiple_args.py"
+);
+
+// set() with multiple arguments
+invalid_test!(
+    test_set_constructor_multiple_args,
+    "tests/fixtures/invalid/set_constructor_multiple_args.py"
+);
+
+// set() with wrong type argument
+invalid_test!(
+    test_set_constructor_wrong_type,
+    "tests/fixtures/invalid/set_constructor_wrong_type.py"
+);
+
+// set() with list argument (not supported)
+invalid_test!(
+    test_set_constructor_list_arg,
+    "tests/fixtures/invalid/set_constructor_list_arg.py"
+);
+
+// ============================================================================
 // Phase 2: Type Error Tests
 // ============================================================================
 

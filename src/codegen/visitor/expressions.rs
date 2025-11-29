@@ -109,7 +109,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(list_new_fn, &[capacity.into()], "list_new")
             .unwrap();
-        let list_ptr = self.extract_ptr_call_result(call_site)?.value();
+        let list_ptr = self.extract_ptr_call_result(call_site).value();
 
         // Infer element type from first element (or default to Int for empty list)
         let elem_type = if elements.is_empty() {
@@ -151,7 +151,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(dict_new_fn, &[], "dict_new")
             .unwrap();
-        let dict_ptr = self.extract_ptr_call_result(call_site)?.value();
+        let dict_ptr = self.extract_ptr_call_result(call_site).value();
 
         // Infer key/value types from first pair (or default to Int for empty dict)
         let (key_type, val_type) = if pairs.is_empty() {
@@ -196,7 +196,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Create a new empty set
         let set_new_fn = self.get_or_declare_c_builtin("set_new");
         let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
-        let set_ptr = self.extract_ptr_call_result(call_site)?.value();
+        let set_ptr = self.extract_ptr_call_result(call_site).value();
 
         // Infer element type from first element (or default to Int for empty set)
         let elem_type = if elements.is_empty() {

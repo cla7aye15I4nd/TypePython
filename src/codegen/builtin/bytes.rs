@@ -95,7 +95,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "bytes_getitem",
             )
             .unwrap();
-        self.extract_int_call_result(call)
+        Ok(self.extract_int_call_result(call))
     }
 
     // ========================================================================
@@ -109,7 +109,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(len_fn, &[bytes_val.into()], "bytes_len")
             .unwrap();
-        self.extract_int_call_result(call)
+        Ok(self.extract_int_call_result(call))
     }
 
     /// Slice bytes without step: bytes[start:stop] -> bytes
@@ -128,7 +128,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "bytes_slice",
             )
             .unwrap();
-        self.extract_bytes_call_result(call)
+        Ok(self.extract_bytes_call_result(call))
     }
 
     /// Slice bytes with step: bytes[start:stop:step] -> bytes
@@ -148,6 +148,6 @@ impl<'ctx> CodeGen<'ctx> {
                 "bytes_slice_step",
             )
             .unwrap();
-        self.extract_bytes_call_result(call)
+        Ok(self.extract_bytes_call_result(call))
     }
 }

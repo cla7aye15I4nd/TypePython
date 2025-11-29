@@ -73,6 +73,20 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     // ========================================================================
+    // Helper operations
+    // ========================================================================
+
+    /// Get the length of a set
+    pub fn set_len(&mut self, set_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
+        let len_fn = self.get_or_declare_c_builtin("set_len");
+        let call = self
+            .builder
+            .build_call(len_fn, &[set_val.into()], "set_len")
+            .unwrap();
+        Ok(self.extract_int_call_result(call))
+    }
+
+    // ========================================================================
     // set() builtin function
     // ========================================================================
 
@@ -84,7 +98,7 @@ impl<'ctx> CodeGen<'ctx> {
             // Create empty set with default int element type
             let set_new_fn = self.get_or_declare_c_builtin("set_new");
             let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
-            let set_ptr = self.extract_ptr_call_result(call_site)?;
+            let set_ptr = self.extract_ptr_call_result(call_site);
 
             return Ok(PyValue::new(
                 set_ptr.value(),
@@ -107,7 +121,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_call(set_copy_fn, &[arg_val.value().into()], "set_copy")
                 .unwrap();
-            let set_ptr = self.extract_ptr_call_result(call_site)?;
+            let set_ptr = self.extract_ptr_call_result(call_site);
 
             return Ok(PyValue::new(
                 set_ptr.value(),

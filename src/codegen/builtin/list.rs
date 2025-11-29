@@ -84,7 +84,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(getitem_fn, &[list_val.into(), index.into()], "list_getitem")
             .unwrap();
-        let result = self.extract_int_call_result(call)?;
+        let result = self.extract_int_call_result(call);
         // For now, all elements are stored as i64
         // TODO: Handle different element types properly
         Ok(PyValue::new(result.value(), elem_type.clone(), None))
@@ -119,7 +119,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(len_fn, &[list_val.into()], "list_len")
             .unwrap();
-        self.extract_int_call_result(call)
+        Ok(self.extract_int_call_result(call))
     }
 
     /// Slice list without step: list[start:stop] -> list
@@ -139,7 +139,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "list_slice",
             )
             .unwrap();
-        let result = self.extract_ptr_call_result(call)?;
+        let result = self.extract_ptr_call_result(call);
         Ok(PyValue::new(
             result.value(),
             PyType::List(Box::new(elem_type.clone())),
@@ -165,7 +165,7 @@ impl<'ctx> CodeGen<'ctx> {
                 "list_slice_step",
             )
             .unwrap();
-        let result = self.extract_ptr_call_result(call)?;
+        let result = self.extract_ptr_call_result(call);
         Ok(PyValue::new(
             result.value(),
             PyType::List(Box::new(elem_type.clone())),
@@ -192,7 +192,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_call(list_new_fn, &[], "list_new")
             .unwrap();
-        let list_ptr = self.extract_ptr_call_result(call_site)?;
+        let list_ptr = self.extract_ptr_call_result(call_site);
 
         Ok(PyValue::new(
             list_ptr.value(),

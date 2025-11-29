@@ -54,6 +54,9 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Bool => "print_bool",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
+            PyType::List(_) => "print_list",
+            PyType::Dict(_, _) => "print_dict",
+            PyType::Set(_) => "print_set",
             _ => "print_int", // fallback
         }
     }

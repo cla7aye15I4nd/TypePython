@@ -668,3 +668,9 @@ test_case!(
     test_control_flow_nested_ifs,
     "tests/fixtures/valid/advanced/control_flow/nested_ifs.py"
 );
+
+// Constructor tests
+test_case!(
+    test_constructors_valid,
+    "tests/fixtures/valid/basic/test_constructors_valid.py"
+);
