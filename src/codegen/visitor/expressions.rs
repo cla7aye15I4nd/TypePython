@@ -46,12 +46,10 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {
-        let (var, load_type, ast_type) = self
+        let var = self
             .variables
             .get(name)
-            .ok_or_else(|| format!("Variable {} not found", name))?
-            .clone();
-        let ir_val = self.builder.build_load(load_type, var, name).unwrap();
-        PyValue::from_ast_type(&ast_type, ir_val)
+            .ok_or_else(|| format!("Variable {} not found", name))?;
+        Ok(var.load(&self.builder, name))
     }
 }

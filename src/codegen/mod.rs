@@ -23,9 +23,8 @@ pub struct CodeGen<'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: Builder<'ctx>,
-    /// Variables: name -> (pointer, LLVM type for load, Python type variant discriminant)
-    /// We store the Type from AST since PyValue requires an LLVM value
-    pub(crate) variables: HashMap<String, (PointerValue<'ctx>, BasicTypeEnum<'ctx>, Type)>,
+    /// Variables: name -> PyValue (addressable values with ptr, llvm_type, and Python type)
+    pub(crate) variables: HashMap<String, PyValue<'ctx>>,
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
     pub(crate) module_name: String,

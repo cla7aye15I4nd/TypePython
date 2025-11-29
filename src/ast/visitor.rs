@@ -129,64 +129,6 @@ pub trait Visitor {
     /// Visit expression statement
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error>;
 
-    /// Visit an expression (returns Some value for evaluation)
-    fn visit_expression(&mut self, expr: &Expression) -> Result<(), Self::Error> {
-        match expr {
-            Expression::IntLit(val) => self.visit_int_lit(*val),
-            Expression::FloatLit(val) => self.visit_float_lit(*val),
-            Expression::StrLit(val) => self.visit_str_lit(val),
-            Expression::BytesLit(val) => self.visit_bytes_lit(val),
-            Expression::BoolLit(val) => self.visit_bool_lit(*val),
-            Expression::NoneLit => self.visit_none_lit(),
-            Expression::Var(name) => self.visit_var(name),
-            Expression::List(elements) => self.visit_list(elements),
-            Expression::Tuple(elements) => self.visit_tuple(elements),
-            Expression::Dict(pairs) => self.visit_dict(pairs),
-            Expression::Set(elements) => self.visit_set(elements),
-            Expression::BinOp { op, left, right } => self.visit_binop(op, left, right),
-            Expression::UnaryOp { op, operand } => self.visit_unaryop(op, operand),
-            Expression::Call { func, args } => self.visit_call(func, args),
-            Expression::Attribute { object, attr } => self.visit_attribute(object, attr),
-            Expression::Subscript { object, index } => self.visit_subscript(object, index),
-            Expression::Slice { start, stop, step } => self.visit_slice(start, stop, step),
-        }
-    }
-
-    /// Visit integer literal (default: no-op, used only when visit_expression is called)
-    fn visit_int_lit(&mut self, _val: i64) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit float literal (default: no-op, used only when visit_expression is called)
-    fn visit_float_lit(&mut self, _val: f64) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit string literal (default: no-op, used only when visit_expression is called)
-    fn visit_str_lit(&mut self, _val: &str) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit bytes literal (default: no-op, used only when visit_expression is called)
-    fn visit_bytes_lit(&mut self, _val: &str) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit boolean literal (default: no-op, used only when visit_expression is called)
-    fn visit_bool_lit(&mut self, _val: bool) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit None literal (default: no-op, used only when visit_expression is called)
-    fn visit_none_lit(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    /// Visit variable reference (default: no-op, used only when visit_expression is called)
-    fn visit_var(&mut self, _name: &str) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
     /// Visit list literal
     fn visit_list(&mut self, elements: &[Expression]) -> Result<(), Self::Error>;
 

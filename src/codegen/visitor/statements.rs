@@ -24,8 +24,9 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.builder.build_store(alloca, coerced_val).unwrap();
         let llvm_type = self.type_to_llvm(var_type);
-        self.variables
-            .insert(name.to_string(), (alloca, llvm_type, var_type.clone()));
+        // Create an addressable PyValue for the variable
+        let var = PyValue::from_ast_type_addressable(var_type, coerced_val, alloca, llvm_type)?;
+        self.variables.insert(name.to_string(), var);
         Ok(())
     }
 
@@ -36,13 +37,13 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<(), String> {
         match target {
             AssignTarget::Var(name) => {
-                let (var, _, _) = self
+                let var = self
                     .variables
                     .get(name)
                     .ok_or_else(|| format!("Variable {} not found", name))?
                     .clone();
                 let val = self.evaluate_expression(value)?;
-                self.builder.build_store(var, val.value).unwrap();
+                var.store_value(&self.builder, &val)?;
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
@@ -62,15 +63,14 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<(), String> {
         match target {
             AssignTarget::Var(name) => {
-                let (var, load_type, ast_type) = self
+                let var = self
                     .variables
                     .get(name)
                     .ok_or_else(|| format!("Variable {} not found", name))?
                     .clone();
 
-                // Load current value with its known type
-                let current_ir = self.builder.build_load(load_type, var, name).unwrap();
-                let current = PyValue::from_ast_type(&ast_type, current_ir)?;
+                // Load current value from the addressable PyValue
+                let current = var.load(&self.builder, name);
 
                 // Evaluate RHS
                 let rhs = self.evaluate_expression(value)?;
@@ -95,8 +95,8 @@ impl<'ctx> CodeGen<'ctx> {
                 let cg = CgCtx::new(self.context, &self.builder, &self.module);
                 let result = current.binary_op(&cg, &bin_op, &rhs)?;
 
-                // Store result
-                self.builder.build_store(var, result.value).unwrap();
+                // Store result to the addressable variable
+                var.store_value(&self.builder, &result)?;
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {
