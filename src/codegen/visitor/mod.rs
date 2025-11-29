@@ -140,24 +140,9 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     }
 
     fn visit_call(&mut self, func: &Expression, args: &[Expression]) -> Result<(), Self::Error> {
-        match func {
-            Expression::Var(name) => {
-                self.generate_call(name, args)?;
-                Ok(())
-            }
-            Expression::Attribute { object, attr } => {
-                if let Expression::Var(module_name) = object.as_ref() {
-                    let qualified_name = format!("{}.{}", module_name, attr);
-                    self.generate_call(&qualified_name, args)?;
-                    Ok(())
-                } else {
-                    Err("Only simple module.function() calls are supported".to_string())
-                }
-            }
-            _ => Err(
-                "Only simple function calls and module.function() calls are supported".to_string(),
-            ),
-        }
+        let func_value = self.evaluate_expression(func)?;
+        self.generate_call(func_value, args)?;
+        Ok(())
     }
 
     fn visit_attribute(&mut self, _object: &Expression, _attr: &str) -> Result<(), Self::Error> {

@@ -83,7 +83,7 @@ pub fn compile(
 
     debug!(
         "Discovered and preprocessed {} modules",
-        module_registry.module_data.len()
+        module_registry.modules.len()
     );
 
     // ============================================================================
@@ -102,34 +102,26 @@ pub fn compile(
     let mut all_used_builtins: HashSet<String> = HashSet::new();
 
     // Compile each module
-    for (module_name, program, imported_symbols) in module_registry.module_data.values() {
+    for (module_name, module_value) in module_registry.modules.iter() {
+        let program = module_registry
+            .programs
+            .get(module_name)
+            .ok_or_else(|| format!("Program not found for module '{}'", module_name))?;
+
         // For Python modules, compile to LLVM IR
         debug!("Compiling module '{}' to LLVM IR", module_name);
 
-        // Build symbol map and module data map for lazy function declaration
-        let mut imported_symbols_map = HashMap::new();
-        let mut module_data_map = HashMap::new();
-
-        for (local_name, imported_symbol) in imported_symbols.iter() {
-            if let crate::module::ImportedSymbol::Module(real_module_name) = imported_symbol {
-                // Add to symbols map for name mangling
-                imported_symbols_map.insert(local_name.clone(), real_module_name.clone());
-
-                // Find the imported module's program and add to module_data
-                if let Some((_, other_program, _)) = module_registry
-                    .module_data
-                    .values()
-                    .find(|(other_module_name, _, _)| other_module_name == real_module_name)
-                {
-                    module_data_map.insert(real_module_name.clone(), other_program.clone());
-                }
-            }
-        }
+        // Build global variables map from module's imported modules
+        let module_info = module_value.module_info();
+        let global_variables: HashMap<String, crate::types::PyValue> = module_info
+            .members
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         // Generate LLVM IR for this module
         let mut codegen = CodeGen::new(&context, module_name);
-        codegen.set_imported_symbols(imported_symbols_map);
-        codegen.set_module_data(module_data_map);
+        codegen.set_global_variables(global_variables);
         codegen.generate(program)?;
 
         // Collect used builtin modules from this codegen

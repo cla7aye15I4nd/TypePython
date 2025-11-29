@@ -10,7 +10,7 @@ mod int_ops;
 mod none_ops;
 mod value;
 
-pub use value::{CgCtx, FunctionInfo, ModuleInfo, PyType, PyValue, PyValueInner};
+pub use value::{CgCtx, FunctionInfo, MacroKind, ModuleInfo, PyType, PyValue, PyValueInner};
 
 // ============================================================================
 // Helper Functions (used by type operation modules)

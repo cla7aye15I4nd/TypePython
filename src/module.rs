@@ -7,15 +7,6 @@ use std::path::{Path, PathBuf};
 use crate::ast::Program;
 use crate::Parser;
 
-/// Represents an imported symbol (module or function)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ImportedSymbol {
-    /// An imported module with its real module name
-    Module(String),
-    /// An imported function with its real function name - for future use
-    Function(String),
-}
-
 /// Get the clang executable path
 pub fn get_clang_path() -> String {
     let llvm_prefix =
@@ -29,30 +20,31 @@ pub fn get_builtin_library_dir() -> Option<PathBuf> {
     std::env::var("TYPEPYTHON_RUNTIME").map(PathBuf::from).ok()
 }
 
-/// Type alias for preprocessed module data: (module_name, program, imported_symbols)
-type PreprocessedModule = (String, Program, HashMap<String, ImportedSymbol>);
-
 /// Module registry manages all compiled modules
 pub struct ModuleRegistry<'ctx> {
     /// LLVM context (shared across all modules)
-    _context: &'ctx Context,
+    #[allow(dead_code)]
+    context: &'ctx Context,
     /// Root paths for all module
     root: PathBuf,
-    /// Preprocessed module data: map of file paths to (module_name, program, imported_symbols)
-    pub module_data: HashMap<PathBuf, PreprocessedModule>,
+    /// Module values: module_name -> PyValue (Module type with ModuleInfo)
+    pub modules: HashMap<String, crate::types::PyValue<'ctx>>,
+    /// AST programs: module_name -> Program (for codegen to look up function definitions)
+    pub programs: HashMap<String, Program>,
 }
 
 impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry and preprocess all modules starting from entry_path
     pub fn new(context: &'ctx Context, root: PathBuf, entry_path: &Path) -> Result<Self, String> {
         let mut registry = ModuleRegistry {
-            _context: context,
+            context,
             root,
-            module_data: HashMap::new(),
+            modules: HashMap::new(),
+            programs: HashMap::new(),
         };
 
         // Automatically preprocess all modules
-        registry.module_data = registry.preprocess_modules(entry_path)?;
+        registry.preprocess_modules(entry_path)?;
 
         Ok(registry)
     }
@@ -91,20 +83,18 @@ impl<'ctx> ModuleRegistry<'ctx> {
     }
 
     /// Preprocess all modules using BFS starting from entry file
-    /// Discovers all imported modules, generates module names, and builds symbol maps
-    /// Returns a map of file paths to their (module_name, program, imported_symbols)
+    /// Discovers all imported modules, generates module names, and builds PyValue modules
     ///
     /// Note: C builtin modules are no longer automatically loaded here.
     /// They are compiled at build time and linked selectively based on usage.
-    pub fn preprocess_modules(
-        &self,
-        entry_path: &Path,
-    ) -> Result<HashMap<PathBuf, PreprocessedModule>, String> {
+    pub fn preprocess_modules(&mut self, entry_path: &Path) -> Result<(), String> {
+        use crate::types::{ModuleInfo, PyValue};
         use crate::{LangParser, Rule};
 
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
-        let mut module_data = HashMap::new();
+        // Temporary storage for import relationships: module_name -> Vec<(local_name, imported_module_name)>
+        let mut import_map: HashMap<String, Vec<(String, String)>> = HashMap::new();
 
         // Add entry module to queue
         queue.push_back(entry_path.to_path_buf());
@@ -130,7 +120,7 @@ impl<'ctx> ModuleRegistry<'ctx> {
             }
         }
 
-        // BFS through all modules
+        // BFS through all modules - first pass: collect all modules and their programs
         while let Some(current_path) = queue.pop_front() {
             // Skip if already visited
             let path_key = current_path.to_string_lossy().to_string();
@@ -150,16 +140,19 @@ impl<'ctx> ModuleRegistry<'ctx> {
                     current_path.display()
                 );
                 // C files have no AST program or imports, but we still register them
-                // Use empty program and symbol map as placeholders (will be compiled directly to .o)
                 let empty_program = Program {
                     imports: vec![],
                     classes: vec![],
                     functions: vec![],
                     statements: vec![],
                 };
-                module_data.insert(
-                    current_path.clone(),
-                    (module_name, empty_program, HashMap::new()),
+                self.programs.insert(module_name.clone(), empty_program);
+                self.modules.insert(
+                    module_name.clone(),
+                    PyValue::module(ModuleInfo {
+                        name: module_name,
+                        members: HashMap::new(),
+                    }),
                 );
                 continue;
             }
@@ -180,10 +173,8 @@ impl<'ctx> ModuleRegistry<'ctx> {
                 current_path.display()
             );
 
-            // Build symbol map for this module's imports
-            let mut imported_symbols = HashMap::new();
-
-            // Add this module's imports to the queue
+            // Collect imports for second pass
+            let mut imports = Vec::new();
             for import in &program.imports {
                 // Resolve import path
                 let import_path =
@@ -200,27 +191,70 @@ impl<'ctx> ModuleRegistry<'ctx> {
                     .ok_or_else(|| "Empty import path".to_string())?
                     .clone();
 
-                // Add to symbol map (local_name -> real module name)
-                imported_symbols.insert(local_name, ImportedSymbol::Module(import_module_name));
-
+                imports.push((local_name, import_module_name));
                 queue.push_back(import_path);
             }
 
-            debug!(
-                "Module '{}' imports {} symbols",
-                module_name,
-                imported_symbols.len()
-            );
+            debug!("Module '{}' imports {} symbols", module_name, imports.len());
 
-            // Store module data
-            module_data.insert(
-                current_path.clone(),
-                (module_name, program, imported_symbols),
+            // Store program and create module (members will be populated in second pass)
+            self.programs.insert(module_name.clone(), program);
+            self.modules.insert(
+                module_name.clone(),
+                PyValue::module(ModuleInfo {
+                    name: module_name.clone(),
+                    members: HashMap::new(),
+                }),
             );
+            import_map.insert(module_name, imports);
         }
 
-        debug!("Preprocessed {} modules total", module_data.len());
-        Ok(module_data)
+        // Second pass: Add functions to each module's members FIRST
+        // This must happen before import resolution so imported modules have their functions
+        for module_name in import_map.keys() {
+            if let Some(program) = self.programs.get(module_name) {
+                let functions_to_add: Vec<_> = program
+                    .functions
+                    .iter()
+                    .map(|func| {
+                        let mangled_name = Self::mangle_function_name(module_name, &func.name);
+                        let func_info =
+                            crate::types::FunctionInfo::from_ast(self.context, &mangled_name, func);
+                        (func.name.clone(), PyValue::function(func_info))
+                    })
+                    .collect();
+
+                if let Some(module) = self.modules.get_mut(module_name) {
+                    for (func_name, func_value) in functions_to_add {
+                        module.add_member(func_name, func_value).ok();
+                    }
+                }
+            }
+        }
+
+        // Third pass: Add imported modules to each module's members
+        // Now all modules have their functions populated
+        for (module_name, imports) in import_map {
+            for (local_name, imported_module_name) in imports {
+                if let Some(imported_module) = self.modules.get(&imported_module_name).cloned() {
+                    if let Some(module) = self.modules.get_mut(&module_name) {
+                        module.add_member(local_name, imported_module).ok();
+                    }
+                }
+            }
+        }
+
+        debug!("Preprocessed {} modules total", self.modules.len());
+        Ok(())
+    }
+
+    /// Mangle function name with module name
+    fn mangle_function_name(module_name: &str, function_name: &str) -> String {
+        let clean_module = module_name
+            .replace(".", "_")
+            .replace("<", "")
+            .replace(">", "");
+        format!("{}_{}", clean_module, function_name)
     }
 
     /// Resolve a module path to a file path

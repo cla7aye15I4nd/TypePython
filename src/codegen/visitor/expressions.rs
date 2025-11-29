@@ -46,10 +46,45 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {
-        let var = self
-            .variables
-            .get(name)
-            .ok_or_else(|| format!("Variable {} not found", name))?;
-        Ok(var.load(&self.builder, name))
+        // First check local variables (stack allocations)
+        if let Some(var) = self.variables.get(name) {
+            return Ok(var.load(&self.builder, name));
+        }
+
+        // Check if it's a function in the current LLVM module (local functions)
+        // This must come before global_variables because global_variables contains
+        // placeholder functions from preprocessing
+        let mangled_name = self.mangle_function_name(&self.module_name, name);
+        if let Some(function) = self.module.get_function(&mangled_name) {
+            // Get type info from global_variables if available (for correct return type)
+            let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
+                if let Ok(info) = global.get_function() {
+                    (info.param_types.clone(), info.return_type.clone())
+                } else {
+                    (vec![], crate::types::PyType::None)
+                }
+            } else {
+                (vec![], crate::types::PyType::None)
+            };
+
+            return Ok(PyValue::function(crate::types::FunctionInfo {
+                mangled_name,
+                function,
+                param_types,
+                return_type,
+            }));
+        }
+
+        // Then check global variables (imported modules)
+        if let Some(global) = self.global_variables.get(name) {
+            return Ok(global.clone());
+        }
+
+        // Check if it's a builtin function
+        if let Some(func_value) = self.get_builtin_function(name) {
+            return Ok(func_value);
+        }
+
+        Err(format!("Variable {} not found", name))
     }
 }

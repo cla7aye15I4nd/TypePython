@@ -33,16 +33,117 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
 }
 
 /// Function metadata for compile-time function references
+/// Note: The FunctionValue can become invalid if the underlying module is dropped.
+/// Use `declare_in_module` to create a valid FunctionValue in a target module.
 #[derive(Clone, Debug)]
 pub struct FunctionInfo<'ctx> {
     /// The mangled function name (module_function)
     pub mangled_name: String,
-    /// The LLVM function value
+    /// The LLVM function value (may be from a placeholder module, use with caution)
     pub function: FunctionValue<'ctx>,
     /// Parameter types
     pub param_types: Vec<PyType>,
     /// Return type
     pub return_type: PyType,
+}
+
+impl<'ctx> FunctionInfo<'ctx> {
+    /// Create a FunctionInfo from an AST function definition
+    /// Creates a placeholder function in a temporary module for type info
+    /// WARNING: The FunctionValue is from a temporary module and should not be used directly.
+    /// Use `declare_in_module` to create a valid FunctionValue in the target module.
+    pub fn from_ast(
+        context: &'ctx inkwell::context::Context,
+        mangled_name: &str,
+        func: &crate::ast::Function,
+    ) -> Self {
+        use inkwell::types::{BasicMetadataTypeEnum, BasicType};
+
+        // Create a placeholder module for this function declaration
+        // NOTE: This placeholder module will be dropped, making the FunctionValue invalid!
+        // We keep it only to satisfy the struct requirements, but we use param_types for actual declaration.
+        let placeholder_module = context.create_module("__placeholder__");
+
+        // Convert parameter types
+        let param_types: Vec<PyType> = func
+            .params
+            .iter()
+            .filter_map(|p| PyType::from_ast_type(&p.param_type).ok())
+            .collect();
+
+        let return_type = PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
+
+        // Build LLVM param types
+        let llvm_param_types: Vec<BasicMetadataTypeEnum> = param_types
+            .iter()
+            .map(|p| Self::pytype_to_llvm(context, p).into())
+            .collect();
+
+        // Build function type
+        let fn_type = match return_type {
+            PyType::None => context.void_type().fn_type(&llvm_param_types, false),
+            _ => {
+                let ret_type = Self::pytype_to_llvm(context, &return_type);
+                ret_type.fn_type(&llvm_param_types, false)
+            }
+        };
+
+        let function = placeholder_module.add_function(mangled_name, fn_type, None);
+
+        FunctionInfo {
+            mangled_name: mangled_name.to_string(),
+            function,
+            param_types,
+            return_type,
+        }
+    }
+
+    /// Declare this function in a target module, returning a valid FunctionValue
+    pub fn declare_in_module(
+        &self,
+        context: &'ctx inkwell::context::Context,
+        module: &inkwell::module::Module<'ctx>,
+    ) -> FunctionValue<'ctx> {
+        use inkwell::types::{BasicMetadataTypeEnum, BasicType};
+
+        // Check if already declared
+        if let Some(f) = module.get_function(&self.mangled_name) {
+            return f;
+        }
+
+        // Build LLVM param types from PyType
+        let llvm_param_types: Vec<BasicMetadataTypeEnum> = self
+            .param_types
+            .iter()
+            .map(|t| Self::pytype_to_llvm(context, t).into())
+            .collect();
+
+        // Build function type
+        let fn_type = match &self.return_type {
+            PyType::None => context.void_type().fn_type(&llvm_param_types, false),
+            _ => {
+                let ret_type = Self::pytype_to_llvm(context, &self.return_type);
+                ret_type.fn_type(&llvm_param_types, false)
+            }
+        };
+
+        module.add_function(&self.mangled_name, fn_type, None)
+    }
+
+    /// Convert PyType to LLVM BasicTypeEnum
+    fn pytype_to_llvm(
+        context: &'ctx inkwell::context::Context,
+        ty: &PyType,
+    ) -> inkwell::types::BasicTypeEnum<'ctx> {
+        match ty {
+            PyType::Int => context.i64_type().into(),
+            PyType::Float => context.f64_type().into(),
+            PyType::Bool => context.bool_type().into(),
+            PyType::Bytes => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::None => context.i32_type().into(), // void represented as i32 for now
+            _ => context.i64_type().into(),            // fallback for Function/Module
+        }
+    }
 }
 
 /// Module metadata containing its members (functions and submodules)
@@ -53,6 +154,18 @@ pub struct ModuleInfo<'ctx> {
     /// Members: functions and submodules accessible via this module
     /// Maps local name -> PyValue (which can be Function or Module)
     pub members: HashMap<String, PyValue<'ctx>>,
+}
+
+/// Builtin macro kinds - these expand at call time with special handling
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MacroKind {
+    Print,
+    Abs,
+    Round,
+    Min,
+    Max,
+    Pow,
+    Len,
 }
 
 /// Python type enum - represents the type without an LLVM value
@@ -67,6 +180,9 @@ pub enum PyType {
     // Compile-time types (have special LLVM values)
     Function,
     Module,
+    /// Macro function - expands at call time with special handling
+    /// Used for builtins like print, min, max that need type-based dispatch
+    Macro,
 }
 
 impl PyType {
@@ -97,6 +213,7 @@ impl PyType {
             PyType::None => "None",
             PyType::Function => "Function",
             PyType::Module => "Module",
+            PyType::Macro => "Macro",
         }
     }
 
@@ -108,9 +225,9 @@ impl PyType {
         )
     }
 
-    /// Check if this is a compile-time type (Module or Function)
+    /// Check if this is a compile-time type (Module, Function, or Macro)
     pub fn is_compile_time(&self) -> bool {
-        matches!(self, PyType::Function | PyType::Module)
+        matches!(self, PyType::Function | PyType::Module | PyType::Macro)
     }
 }
 
@@ -126,6 +243,8 @@ pub enum PyValueInner<'ctx> {
     Function(FunctionInfo<'ctx>),
     /// Compile-time module reference
     Module(ModuleInfo<'ctx>),
+    /// Macro function that expands at call time (e.g., print, min, max)
+    Macro(MacroKind),
 }
 
 /// A Python value paired with its type information.
@@ -195,6 +314,14 @@ impl<'ctx> PyValue<'ctx> {
         Self {
             ty: PyType::Module,
             inner: PyValueInner::Module(info),
+        }
+    }
+
+    /// Create a macro function value (expands at call time)
+    pub fn macro_fn(kind: MacroKind) -> Self {
+        Self {
+            ty: PyType::Macro,
+            inner: PyValueInner::Macro(kind),
         }
     }
 
@@ -338,6 +465,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::None => super::none_ops::binary_op(self, cg, op, rhs),
             PyType::Function => Err("Binary operations not supported on functions".to_string()),
             PyType::Module => Err("Binary operations not supported on modules".to_string()),
+            PyType::Macro => Err("Binary operations not supported on macros".to_string()),
         }
     }
 
@@ -359,6 +487,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::None => super::none_ops::unary_op(self, cg, op),
             PyType::Function => Err("Unary operations not supported on functions".to_string()),
             PyType::Module => Err("Unary operations not supported on modules".to_string()),
+            PyType::Macro => Err("Unary operations not supported on macros".to_string()),
         }
     }
 
@@ -376,6 +505,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::None => "print_none",
             PyType::Function => "print_function",
             PyType::Module => "print_module",
+            PyType::Macro => "print_macro",
         }
     }
 
@@ -414,6 +544,9 @@ impl<'ctx> PyValue<'ctx> {
             }
             PyType::Module => {
                 return Err("Cannot print module".to_string());
+            }
+            PyType::Macro => {
+                return Err("Cannot print macro".to_string());
             }
         }
         Ok(())
@@ -479,6 +612,10 @@ impl<'ctx> PyValue<'ctx> {
                 // Modules are always truthy
                 Ok(cg.ctx.bool_type().const_int(1, false).into())
             }
+            PyType::Macro => {
+                // Macros are always truthy
+                Ok(cg.ctx.bool_type().const_int(1, false).into())
+            }
         }
     }
 
@@ -510,10 +647,18 @@ impl<'ctx> PyValue<'ctx> {
     }
 
     /// Get the LLVM FunctionValue for calling (function types only)
-    pub fn get_function_value(&self) -> Result<FunctionValue<'ctx>, String> {
+    pub fn get_function(&self) -> Result<FunctionInfo<'ctx>, String> {
         match &self.inner {
-            PyValueInner::Function(info) => Ok(info.function),
+            PyValueInner::Function(info) => Ok(info.clone()),
             _ => Err(format!("Expected function, got {:?}", self.ty)),
+        }
+    }
+
+    /// Get the macro kind (macro types only)
+    pub fn get_macro_kind(&self) -> Result<MacroKind, String> {
+        match &self.inner {
+            PyValueInner::Macro(kind) => Ok(*kind),
+            _ => Err(format!("Expected macro, got {:?}", self.ty)),
         }
     }
 }
@@ -533,6 +678,9 @@ impl std::fmt::Debug for PyValue<'_> {
             }
             PyValueInner::Module(info) => {
                 write!(f, "PyValue::Module({})", info.name)
+            }
+            PyValueInner::Macro(kind) => {
+                write!(f, "PyValue::Macro({:?})", kind)
             }
         }
     }

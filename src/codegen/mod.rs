@@ -1,3 +1,4 @@
+pub mod builtin;
 pub mod builtins;
 pub mod types;
 mod visitor;
@@ -24,15 +25,14 @@ pub struct CodeGen<'ctx> {
     pub(crate) context: &'ctx Context,
     pub(crate) module: Module<'ctx>,
     pub(crate) builder: Builder<'ctx>,
-    /// Variables: name -> PyValue (addressable values with ptr, llvm_type, and Python type)
+    /// Local variables: name -> PyValue (addressable values with ptr, llvm_type, and Python type)
     pub(crate) variables: HashMap<String, PyValue<'ctx>>,
+    /// Global variables: imported modules and functions as PyValue
+    pub(crate) global_variables: HashMap<String, PyValue<'ctx>>,
+    /// Programs for all modules (for lazy function declaration)
     pub(crate) current_function: Option<FunctionValue<'ctx>>,
     pub(crate) strings: HashMap<String, u64>,
     pub(crate) module_name: String,
-    /// Map of imported symbols: local_name -> real_module_name (for name mangling)
-    pub(crate) imported_symbols: HashMap<String, String>,
-    /// Map of module_name -> Program for lazy function declaration
-    pub(crate) module_data: HashMap<String, Program>,
     /// Stack of loop contexts for break/continue statements
     pub(crate) loop_stack: Vec<LoopContext<'ctx>>,
     /// Set of builtin modules that have been used (for selective linking)
@@ -72,18 +72,18 @@ impl<'ctx> CodeGen<'ctx> {
             module,
             builder,
             variables: HashMap::new(),
+            global_variables: HashMap::new(),
             current_function: None,
             strings: HashMap::new(),
             module_name: module_name.to_string(),
-            imported_symbols: HashMap::new(),
-            module_data: HashMap::new(),
             loop_stack: Vec::new(),
             used_builtin_modules: HashSet::new(),
         }
     }
 
-    pub fn set_imported_symbols(&mut self, imported_symbols: HashMap<String, String>) {
-        self.imported_symbols = imported_symbols;
+    /// Set global variables (imported modules) for this codegen instance
+    pub fn set_global_variables(&mut self, globals: HashMap<String, PyValue<'ctx>>) {
+        self.global_variables = globals;
     }
 
     /// Mangle function name with module name
@@ -97,10 +97,6 @@ impl<'ctx> CodeGen<'ctx> {
         format!("{}_{}", clean_module, function_name)
     }
 
-    pub fn set_module_data(&mut self, module_data: HashMap<String, Program>) {
-        self.module_data = module_data;
-    }
-
     pub fn get_module(&self) -> &Module<'ctx> {
         &self.module
     }
@@ -110,7 +106,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.visit_program(program)?;
 
         // Scan the module for builtin function usages and update used_builtin_modules
-        // This captures usages from type operations that don't go through get_or_declare_builtin_function
+        // This captures usages from type operations that don't go through get_or_declare_c_builtin
         self.scan_for_builtin_usages();
 
         Ok(())
@@ -144,22 +140,42 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::BinOp { op, left, right } => self.generate_binary_op(op, left, right),
             Expression::UnaryOp { op, operand } => self.generate_unary_op(op, operand),
             Expression::Call { func, args } => {
-                match func.as_ref() {
-                    // Simple function call: function_name()
-                    Expression::Var(name) => self.generate_call(name, args),
-                    // Qualified call: module.function()
-                    Expression::Attribute { object, attr } => {
-                        if let Expression::Var(module_name) = object.as_ref() {
-                            let qualified_name = format!("{}.{}", module_name, attr);
-                            self.generate_call(&qualified_name, args)
-                        } else {
-                            Err("Only simple module.function() calls are supported".to_string())
-                        }
-                    }
-                    _ => Err(
-                        "Only simple function calls and module.function() calls are supported"
-                            .to_string(),
-                    ),
+                // Evaluate the function expression first
+                let func_val = self.evaluate_expression(func)?;
+
+                // Check if it's a macro (builtin with special expansion)
+                if func_val.ty == PyType::Macro {
+                    return self.expand_macro(&func_val, args);
+                }
+
+                // Regular function call
+                let function_info = func_val.get_function()?;
+                let function = function_info.function;
+                let return_type = function_info.return_type;
+
+                let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                for arg in args {
+                    arg_values.push(self.evaluate_expression(arg)?.value().into());
+                }
+
+                let call_site = self
+                    .builder
+                    .build_call(function, &arg_values, "call")
+                    .unwrap();
+
+                // Use the return type from func_value metadata
+                match return_type {
+                    PyType::None => Ok(PyValue::none(
+                        self.context
+                            .ptr_type(inkwell::AddressSpace::default())
+                            .const_null()
+                            .into(),
+                    )),
+                    PyType::Int => self.extract_int_call_result(call_site),
+                    PyType::Float => self.extract_float_call_result(call_site),
+                    PyType::Bool => self.extract_bool_call_result(call_site),
+                    PyType::Bytes => self.extract_bytes_call_result(call_site),
+                    _ => Err(format!("Unsupported return type: {:?}", return_type)),
                 }
             }
             Expression::List(_) => {
@@ -174,8 +190,34 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::Set(_) => {
                 todo!("Set literals")
             }
-            Expression::Attribute { .. } => {
-                todo!("Attribute access")
+            Expression::Attribute { object, attr } => {
+                let obj = self.evaluate_expression(object)?;
+                match &obj.ty {
+                    PyType::Module => {
+                        // Get member from module
+                        let member = obj.get_member(attr)?;
+
+                        // If it's a function, ensure it's declared in our module
+                        if let PyType::Function = &member.ty {
+                            let func_info = member.get_function()?;
+                            // Declare the function in our module using PyType info
+                            let function = func_info.declare_in_module(self.context, &self.module);
+                            // Return a new FunctionInfo with the correct function reference
+                            Ok(PyValue::function(types::FunctionInfo {
+                                mangled_name: func_info.mangled_name,
+                                function,
+                                param_types: func_info.param_types,
+                                return_type: func_info.return_type,
+                            }))
+                        } else {
+                            Ok(member)
+                        }
+                    }
+                    _ => Err(format!(
+                        "Attribute access not supported for type {:?}",
+                        obj.ty
+                    )),
+                }
             }
             Expression::Subscript { object, index } => {
                 let obj = self.evaluate_expression(object)?;
@@ -186,7 +228,7 @@ impl<'ctx> CodeGen<'ctx> {
                         PyType::Bytes => {
                             let obj_val = obj.value();
                             // bytes[start:stop:step] returns bytes
-                            let len_fn = self.get_or_declare_builtin_function("bytes_len");
+                            let len_fn = self.get_or_declare_c_builtin("bytes_len");
                             let len_call = self
                                 .builder
                                 .build_call(len_fn, &[obj_val.into()], "len")
@@ -231,8 +273,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     )
                                 };
 
-                                let slice_fn =
-                                    self.get_or_declare_builtin_function("bytes_slice_step");
+                                let slice_fn = self.get_or_declare_c_builtin("bytes_slice_step");
                                 let call = self
                                     .builder
                                     .build_call(
@@ -263,7 +304,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     len
                                 };
 
-                                let slice_fn = self.get_or_declare_builtin_function("bytes_slice");
+                                let slice_fn = self.get_or_declare_c_builtin("bytes_slice");
                                 let call = self
                                     .builder
                                     .build_call(
@@ -289,7 +330,7 @@ impl<'ctx> CodeGen<'ctx> {
                     match &obj.ty {
                         PyType::Bytes => {
                             // bytes[index] returns an int (the byte value at that index)
-                            let getitem_fn = self.get_or_declare_builtin_function("bytes_getitem");
+                            let getitem_fn = self.get_or_declare_c_builtin("bytes_getitem");
                             let call = self
                                 .builder
                                 .build_call(
@@ -311,87 +352,6 @@ impl<'ctx> CodeGen<'ctx> {
                 Err("Slice expression must be used inside subscript".to_string())
             }
         }
-    }
-
-    /// Get or declare a builtin function from the builtin modules
-    /// Uses the auto-generated builtin table to look up function signatures
-    /// and tracks which builtin modules are used for selective linking
-    pub(crate) fn get_or_declare_builtin_function(&mut self, name: &str) -> FunctionValue<'ctx> {
-        // Look up the builtin function in the generated table
-        let builtin = builtins::BUILTIN_TABLE
-            .get(name)
-            .unwrap_or_else(|| panic!("Unknown builtin function: {}", name));
-
-        // Track which builtin module this function belongs to
-        self.used_builtin_modules.insert(builtin.module.to_string());
-
-        // Check if already declared (use the symbol name, which is the actual C function name)
-        if let Some(func) = self.module.get_function(builtin.symbol) {
-            return func;
-        }
-
-        // Declare the function using the signature from the table
-        let fn_type = builtin.to_llvm_fn_type(self.context);
-        self.module.add_function(builtin.symbol, fn_type, None)
-    }
-
-    /// Lazily declare an external function when needed
-    /// Looks up the function in module_data and declares it if not already declared
-    fn get_or_declare_external_function(
-        &mut self,
-        module_name: &str,
-        function_name: &str,
-    ) -> Result<FunctionValue<'ctx>, String> {
-        let mangled_name = self.mangle_function_name(module_name, function_name);
-
-        // If already declared, return it
-        if let Some(func) = self.module.get_function(&mangled_name) {
-            return Ok(func);
-        }
-
-        // Look up the function definition in module_data
-        let program = self
-            .module_data
-            .get(module_name)
-            .ok_or_else(|| format!("Module '{}' not found in module_data", module_name))?;
-
-        let func_def = program
-            .functions
-            .iter()
-            .find(|f| f.name == function_name)
-            .ok_or_else(|| {
-                format!(
-                    "Function '{}' not found in module '{}'",
-                    function_name, module_name
-                )
-            })?;
-
-        // Declare the function
-        let param_types: Vec<BasicMetadataTypeEnum> = func_def
-            .params
-            .iter()
-            .map(|p| self.type_to_llvm(&p.param_type).into())
-            .collect();
-
-        let fn_type = match func_def.return_type {
-            Type::None => self.context.void_type().fn_type(&param_types, false),
-            _ => {
-                let return_type = self.type_to_llvm(&func_def.return_type);
-                return_type.fn_type(&param_types, false)
-            }
-        };
-
-        let function = self.module.add_function(&mangled_name, fn_type, None);
-
-        // Set parameter names
-        for (i, param) in func_def.params.iter().enumerate() {
-            function
-                .get_nth_param(i as u32)
-                .unwrap()
-                .set_name(&param.name);
-        }
-
-        Ok(function)
     }
 
     pub(crate) fn declare_function(
@@ -710,7 +670,7 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = self.get_or_declare_builtin_function("bytes_len");
+                let len_fn = self.get_or_declare_c_builtin("bytes_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "bytes_len")
@@ -725,8 +685,8 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap())
             }
-            PyType::Function | PyType::Module => {
-                // Functions and modules are always truthy
+            PyType::Function | PyType::Module | PyType::Macro => {
+                // Functions, modules, and macros are always truthy
                 Ok(self.context.bool_type().const_int(1, false))
             }
         }
@@ -807,51 +767,19 @@ impl<'ctx> CodeGen<'ctx> {
                 PyType::Bool => Ok(PyValue::bool(result)),
                 PyType::Bytes => Ok(PyValue::bytes(result)),
                 PyType::None => Ok(PyValue::none(result)),
-                PyType::Function | PyType::Module => {
-                    Err("Unary operations not supported on functions or modules".to_string())
-                }
+                PyType::Function | PyType::Module | PyType::Macro => Err(
+                    "Unary operations not supported on functions, modules or macros".to_string(),
+                ),
             },
         }
     }
 
     pub(crate) fn generate_call(
         &mut self,
-        name: &str,
+        func: PyValue<'ctx>,
         args: &[Expression],
     ) -> Result<PyValue<'ctx>, String> {
-        // Handle print() specially - convert to printf calls
-        if name == "print" {
-            return self.generate_print_call(args);
-        }
-
-        // Handle Python built-in math functions
-        if let Some(result) = self.try_generate_builtin_math_call(name, args)? {
-            return Ok(result);
-        }
-
-        // Determine the module and function name, then lazily declare if needed
-        let function = if name.contains('.') {
-            // Qualified call: module.function
-            let parts: Vec<&str> = name.split('.').collect();
-            let module_local_name = parts[0];
-            let function_name = parts[1];
-
-            // Look up the real module name from imported symbols
-            let real_module_name = self
-                .imported_symbols
-                .get(module_local_name)
-                .ok_or_else(|| format!("Module {} not found in imports", module_local_name))?
-                .clone();
-
-            // Lazily declare the external function
-            self.get_or_declare_external_function(&real_module_name, function_name)?
-        } else {
-            // Unqualified call: function - use current module name
-            let mangled_name = self.mangle_function_name(&self.module_name, name);
-            self.module
-                .get_function(&mangled_name)
-                .ok_or_else(|| format!("Function {} (mangled: {}) not found", name, mangled_name))?
-        };
+        let function = func.get_function()?.function;
 
         let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
         for arg in args {
@@ -901,43 +829,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    pub(crate) fn generate_print_call(
-        &mut self,
-        args: &[Expression],
-    ) -> Result<PyValue<'ctx>, String> {
-        let print_space = self.get_or_declare_builtin_function("print_space");
-        let print_newline = self.get_or_declare_builtin_function("print_newline");
-
-        for (i, arg) in args.iter().enumerate() {
-            let val = self.evaluate_expression(arg)?;
-
-            // Use the type from PyValue - no inference needed!
-            let print_fn_name = val.print_function_name();
-            let print_fn = self.get_or_declare_builtin_function(print_fn_name);
-            val.print(&self.builder, print_fn)?;
-
-            // Print space between arguments (but not after the last one)
-            if i < args.len() - 1 {
-                self.builder
-                    .build_call(print_space, &[], "print_space")
-                    .unwrap();
-            }
-        }
-
-        // Print newline at the end
-        self.builder
-            .build_call(print_newline, &[], "print_newline")
-            .unwrap();
-
-        // print() returns None
-        Ok(PyValue::none(
-            self.context
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into(),
-        ))
-    }
-
     /// Helper to extract int result from a call site
     fn extract_int_call_result(
         &self,
@@ -962,6 +853,24 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Helper to extract bool result from a call site
+    fn extract_bool_call_result(
+        &self,
+        call_site: inkwell::values::CallSiteValue<'ctx>,
+    ) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+        match call_site.as_any_value_enum() {
+            inkwell::values::AnyValueEnum::IntValue(iv) => {
+                if iv.get_type().get_bit_width() == 1 {
+                    Ok(PyValue::bool(iv.into()))
+                } else {
+                    Err("Expected bool (i1) return value".to_string())
+                }
+            }
+            _ => Err("Expected bool return value".to_string()),
+        }
+    }
+
     /// Helper to extract bytes (pointer) result from a call site
     fn extract_bytes_call_result(
         &self,
@@ -971,419 +880,6 @@ impl<'ctx> CodeGen<'ctx> {
         match call_site.as_any_value_enum() {
             inkwell::values::AnyValueEnum::PointerValue(pv) => Ok(PyValue::bytes(pv.into())),
             _ => Err("Expected bytes return value".to_string()),
-        }
-    }
-
-    /// Generate min/max selection that preserves original value types
-    /// Python's min()/max() returns the actual original object, not a coerced value.
-    /// For example: max(5, 3.0) returns 5 (int), not 5.0 (float)
-    /// is_min: true for min(), false for max()
-    fn generate_minmax_select(
-        &mut self,
-        a: &PyValue<'ctx>,
-        b: &PyValue<'ctx>,
-        is_min: bool,
-    ) -> Result<PyValue<'ctx>, String> {
-        use inkwell::FloatPredicate;
-        use inkwell::IntPredicate;
-
-        // Check if both operands have the same type (use phi approach)
-        // or different types (coerce to float)
-        let same_type = a.same_type(b);
-
-        if same_type {
-            // Same type: use select instruction directly on original values
-            let condition = match &a.ty {
-                PyType::Int => {
-                    let pred = if is_min {
-                        IntPredicate::SLT
-                    } else {
-                        IntPredicate::SGT
-                    };
-                    self.builder
-                        .build_int_compare(
-                            pred,
-                            a.value().into_int_value(),
-                            b.value().into_int_value(),
-                            "cmp",
-                        )
-                        .unwrap()
-                }
-                PyType::Float => {
-                    let pred = if is_min {
-                        FloatPredicate::OLT
-                    } else {
-                        FloatPredicate::OGT
-                    };
-                    self.builder
-                        .build_float_compare(
-                            pred,
-                            a.value().into_float_value(),
-                            b.value().into_float_value(),
-                            "cmp",
-                        )
-                        .unwrap()
-                }
-                PyType::Bool => {
-                    // Bools are compared as ints (False=0, True=1)
-                    let a_int = self
-                        .builder
-                        .build_int_z_extend(
-                            a.value().into_int_value(),
-                            self.context.i64_type(),
-                            "btoi",
-                        )
-                        .unwrap();
-                    let b_int = self
-                        .builder
-                        .build_int_z_extend(
-                            b.value().into_int_value(),
-                            self.context.i64_type(),
-                            "btoi",
-                        )
-                        .unwrap();
-                    let pred = if is_min {
-                        IntPredicate::SLT
-                    } else {
-                        IntPredicate::SGT
-                    };
-                    self.builder
-                        .build_int_compare(pred, a_int, b_int, "cmp")
-                        .unwrap()
-                }
-                _ => return Err("min()/max() arguments must be numbers".to_string()),
-            };
-
-            let select_result = self
-                .builder
-                .build_select(condition, a.value(), b.value(), "minmax_select")
-                .unwrap();
-
-            // Return the same type as input
-            match &a.ty {
-                PyType::Int => Ok(PyValue::int(select_result)),
-                PyType::Float => Ok(PyValue::float(select_result)),
-                PyType::Bool => Ok(PyValue::bool(select_result)),
-                _ => unreachable!(),
-            }
-        } else {
-            // Different types: coerce to float for comparison and result
-            // This is necessary because we can't have a single LLVM value with
-            // runtime-dependent type. The result will always be float.
-            let float_type = self.context.f64_type();
-
-            let a_float = match &a.ty {
-                PyType::Float => a.value().into_float_value(),
-                PyType::Int => self
-                    .builder
-                    .build_signed_int_to_float(a.value().into_int_value(), float_type, "itof")
-                    .unwrap(),
-                PyType::Bool => {
-                    let int_val = self
-                        .builder
-                        .build_int_z_extend(
-                            a.value().into_int_value(),
-                            self.context.i64_type(),
-                            "btoi",
-                        )
-                        .unwrap();
-                    self.builder
-                        .build_signed_int_to_float(int_val, float_type, "itof")
-                        .unwrap()
-                }
-                _ => return Err("min()/max() arguments must be numbers".to_string()),
-            };
-
-            let b_float = match &b.ty {
-                PyType::Float => b.value().into_float_value(),
-                PyType::Int => self
-                    .builder
-                    .build_signed_int_to_float(b.value().into_int_value(), float_type, "itof")
-                    .unwrap(),
-                PyType::Bool => {
-                    let int_val = self
-                        .builder
-                        .build_int_z_extend(
-                            b.value().into_int_value(),
-                            self.context.i64_type(),
-                            "btoi",
-                        )
-                        .unwrap();
-                    self.builder
-                        .build_signed_int_to_float(int_val, float_type, "itof")
-                        .unwrap()
-                }
-                _ => return Err("min()/max() arguments must be numbers".to_string()),
-            };
-
-            let pred = if is_min {
-                FloatPredicate::OLT
-            } else {
-                FloatPredicate::OGT
-            };
-            let condition = self
-                .builder
-                .build_float_compare(pred, a_float, b_float, "cmp")
-                .unwrap();
-
-            let select_result = self
-                .builder
-                .build_select(condition, a_float, b_float, "minmax_select")
-                .unwrap();
-
-            Ok(PyValue::float(select_result))
-        }
-    }
-
-    /// Try to generate code for Python built-in math functions
-    /// Returns Some(result) if the function is a builtin, None if it should be handled as a regular call
-    fn try_generate_builtin_math_call(
-        &mut self,
-        name: &str,
-        args: &[Expression],
-    ) -> Result<Option<PyValue<'ctx>>, String> {
-        match name {
-            "abs" => {
-                if args.len() != 1 {
-                    return Err("abs() takes exactly one argument".to_string());
-                }
-                let val = self.evaluate_expression(&args[0])?;
-                let result = match &val.ty {
-                    PyType::Int => {
-                        let abs_fn = self.get_or_declare_builtin_function("abs_int");
-                        let call = self
-                            .builder
-                            .build_call(abs_fn, &[val.value().into()], "abs")
-                            .unwrap();
-                        self.extract_int_call_result(call)?
-                    }
-                    PyType::Float => {
-                        let abs_fn = self.get_or_declare_builtin_function("abs_float");
-                        let call = self
-                            .builder
-                            .build_call(abs_fn, &[val.value().into()], "abs")
-                            .unwrap();
-                        self.extract_float_call_result(call)?
-                    }
-                    PyType::Bool => {
-                        // abs(bool) -> int (0 or 1)
-                        let int_val = self
-                            .builder
-                            .build_int_z_extend(
-                                val.value().into_int_value(),
-                                self.context.i64_type(),
-                                "btoi",
-                            )
-                            .unwrap();
-                        PyValue::int(int_val.into())
-                    }
-                    _ => return Err("abs() argument must be a number".to_string()),
-                };
-                Ok(Some(result))
-            }
-
-            "round" => {
-                if args.is_empty() || args.len() > 2 {
-                    return Err("round() takes 1 or 2 arguments".to_string());
-                }
-                let val = self.evaluate_expression(&args[0])?;
-
-                if args.len() == 1 {
-                    // round(x) - returns int
-                    let result = match &val.ty {
-                        PyType::Int => val, // Already an int
-                        PyType::Float => {
-                            let round_fn = self.get_or_declare_builtin_function("round_float");
-                            let call = self
-                                .builder
-                                .build_call(round_fn, &[val.value().into()], "round")
-                                .unwrap();
-                            self.extract_int_call_result(call)?
-                        }
-                        PyType::Bool => {
-                            let int_val = self
-                                .builder
-                                .build_int_z_extend(
-                                    val.value().into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap();
-                            PyValue::int(int_val.into())
-                        }
-                        _ => return Err("round() argument must be a number".to_string()),
-                    };
-                    Ok(Some(result))
-                } else {
-                    // round(x, ndigits) - returns float
-                    let ndigits = self.evaluate_expression(&args[1])?;
-                    let ndigits_int = match &ndigits.ty {
-                        PyType::Int => ndigits.value(),
-                        PyType::Bool => self
-                            .builder
-                            .build_int_z_extend(
-                                ndigits.value().into_int_value(),
-                                self.context.i64_type(),
-                                "btoi",
-                            )
-                            .unwrap()
-                            .into(),
-                        _ => return Err("round() ndigits must be an integer".to_string()),
-                    };
-
-                    let val_float = match &val.ty {
-                        PyType::Float => val.value(),
-                        PyType::Int => self
-                            .builder
-                            .build_signed_int_to_float(
-                                val.value().into_int_value(),
-                                self.context.f64_type(),
-                                "itof",
-                            )
-                            .unwrap()
-                            .into(),
-                        PyType::Bool => {
-                            let int_val = self
-                                .builder
-                                .build_int_z_extend(
-                                    val.value().into_int_value(),
-                                    self.context.i64_type(),
-                                    "btoi",
-                                )
-                                .unwrap();
-                            self.builder
-                                .build_signed_int_to_float(int_val, self.context.f64_type(), "itof")
-                                .unwrap()
-                                .into()
-                        }
-                        _ => return Err("round() argument must be a number".to_string()),
-                    };
-
-                    let round_fn = self.get_or_declare_builtin_function("round_float_ndigits");
-                    let call = self
-                        .builder
-                        .build_call(round_fn, &[val_float.into(), ndigits_int.into()], "round")
-                        .unwrap();
-                    Ok(Some(self.extract_float_call_result(call)?))
-                }
-            }
-
-            "min" => {
-                if args.len() != 2 {
-                    return Err("min() currently supports exactly 2 arguments".to_string());
-                }
-                let a = self.evaluate_expression(&args[0])?;
-                let b = self.evaluate_expression(&args[1])?;
-
-                // Python's min() returns the actual original object, not a coerced value
-                // We need to compare values but return the original typed value
-                let result = self.generate_minmax_select(&a, &b, true)?;
-                Ok(Some(result))
-            }
-
-            "max" => {
-                if args.len() != 2 {
-                    return Err("max() currently supports exactly 2 arguments".to_string());
-                }
-                let a = self.evaluate_expression(&args[0])?;
-                let b = self.evaluate_expression(&args[1])?;
-
-                // Python's max() returns the actual original object, not a coerced value
-                // We need to compare values but return the original typed value
-                let result = self.generate_minmax_select(&a, &b, false)?;
-                Ok(Some(result))
-            }
-
-            "pow" => {
-                if args.len() < 2 || args.len() > 3 {
-                    return Err("pow() takes 2 or 3 arguments".to_string());
-                }
-                let base = self.evaluate_expression(&args[0])?;
-                let exp = self.evaluate_expression(&args[1])?;
-
-                if args.len() == 3 {
-                    // pow(base, exp, mod) - modular exponentiation (integers only)
-                    let modulo = self.evaluate_expression(&args[2])?;
-
-                    // All arguments must be integers for modular exponentiation
-                    let base_int = match &base.ty {
-                        PyType::Int => base.value(),
-                        PyType::Bool => self
-                            .builder
-                            .build_int_z_extend(
-                                base.value().into_int_value(),
-                                self.context.i64_type(),
-                                "btoi",
-                            )
-                            .unwrap()
-                            .into(),
-                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
-                    };
-                    let exp_int = match &exp.ty {
-                        PyType::Int => exp.value(),
-                        PyType::Bool => self
-                            .builder
-                            .build_int_z_extend(
-                                exp.value().into_int_value(),
-                                self.context.i64_type(),
-                                "btoi",
-                            )
-                            .unwrap()
-                            .into(),
-                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
-                    };
-                    let mod_int = match &modulo.ty {
-                        PyType::Int => modulo.value(),
-                        PyType::Bool => self
-                            .builder
-                            .build_int_z_extend(
-                                modulo.value().into_int_value(),
-                                self.context.i64_type(),
-                                "btoi",
-                            )
-                            .unwrap()
-                            .into(),
-                        _ => return Err("pow() with modulo requires integer arguments".to_string()),
-                    };
-
-                    let pow_mod_fn = self.get_or_declare_builtin_function("pow_int_mod");
-                    let call = self
-                        .builder
-                        .build_call(
-                            pow_mod_fn,
-                            &[base_int.into(), exp_int.into(), mod_int.into()],
-                            "pow",
-                        )
-                        .unwrap();
-                    Ok(Some(self.extract_int_call_result(call)?))
-                } else {
-                    // pow(base, exp) - use the ** operator through the type system
-                    let cg = CgCtx::new(self.context, &self.builder, &self.module);
-                    let result = base.binary_op(&cg, &BinaryOp::Pow, &exp)?;
-                    Ok(Some(result))
-                }
-            }
-
-            "len" => {
-                if args.len() != 1 {
-                    return Err("len() takes exactly one argument".to_string());
-                }
-                let val = self.evaluate_expression(&args[0])?;
-                let result = match &val.ty {
-                    PyType::Bytes => {
-                        let len_fn = self.get_or_declare_builtin_function("bytes_len");
-                        let call = self
-                            .builder
-                            .build_call(len_fn, &[val.value().into()], "len")
-                            .unwrap();
-                        self.extract_int_call_result(call)?
-                    }
-                    _ => return Err("len() argument must be bytes".to_string()),
-                };
-                Ok(Some(result))
-            }
-
-            _ => Ok(None), // Not a builtin function
         }
     }
 
