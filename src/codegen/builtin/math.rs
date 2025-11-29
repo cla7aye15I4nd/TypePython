@@ -567,7 +567,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     phi.add_incoming(&[(&a_val.into_int_value(), then_bb), (&b_as_int, else_bb)]);
 
-                    Ok(PyValue::int(phi.as_basic_value().into()))
+                    Ok(PyValue::int(phi.as_basic_value()))
                 }
                 (PyType::Float, PyType::Int) => {
                     // If returning a (float), use float; if returning b (int), convert to float
