@@ -403,6 +403,12 @@ invalid_test!(
 // Cannot use unary - on Bytes
 invalid_test!(test_bytes_neg, "tests/fixtures/invalid/bytes_neg.py");
 
+// Cannot use unary + on Bytes
+invalid_test!(test_bytes_pos, "tests/fixtures/invalid/bytes_pos.py");
+
+// Cannot use bitwise NOT on Bytes
+invalid_test!(test_bytes_bitnot, "tests/fixtures/invalid/bytes_bitnot.py");
+
 // ============================================================================
 // None Type Mismatch Error Tests
 // ============================================================================
@@ -418,6 +424,12 @@ invalid_test!(test_none_mul_int, "tests/fixtures/invalid/none_mul_int.py");
 
 // Cannot use unary - on None
 invalid_test!(test_none_neg, "tests/fixtures/invalid/none_neg.py");
+
+// Cannot use unary + on None
+invalid_test!(test_none_pos, "tests/fixtures/invalid/none_pos.py");
+
+// Cannot use bitwise NOT on None
+invalid_test!(test_none_bitnot, "tests/fixtures/invalid/none_bitnot.py");
 
 // ============================================================================
 // Preprocessor Error Tests
@@ -444,6 +456,12 @@ invalid_test!(
 
 // Cannot use unary - on list
 invalid_test!(test_list_neg, "tests/fixtures/invalid/list_neg.py");
+
+// Cannot use unary + on list
+invalid_test!(test_list_pos, "tests/fixtures/invalid/list_pos.py");
+
+// Cannot use bitwise NOT on list
+invalid_test!(test_list_bitnot, "tests/fixtures/invalid/list_bitnot.py");
 
 // Cannot subtract list from list
 invalid_test!(
@@ -482,6 +500,12 @@ invalid_test!(test_set_lt_int, "tests/fixtures/invalid/set_lt_int.py");
 // Cannot use unary - on set
 invalid_test!(test_set_neg, "tests/fixtures/invalid/set_neg.py");
 
+// Cannot use unary + on set
+invalid_test!(test_set_pos, "tests/fixtures/invalid/set_pos.py");
+
+// Cannot use bitwise NOT on set
+invalid_test!(test_set_bitnot, "tests/fixtures/invalid/set_bitnot.py");
+
 // Cannot add set to set
 invalid_test!(test_set_add_set, "tests/fixtures/invalid/set_add_set.py");
 
@@ -503,6 +527,75 @@ invalid_test!(
 
 // Cannot use unary - on dict
 invalid_test!(test_dict_neg, "tests/fixtures/invalid/dict_neg.py");
+
+// Cannot use unary + on dict
+invalid_test!(test_dict_pos, "tests/fixtures/invalid/dict_pos.py");
+
+// ============================================================================
+// Subscript/Slice Error Tests
+// ============================================================================
+
+// Set does not support subscript
+invalid_test!(
+    test_set_subscript,
+    "tests/fixtures/invalid/set_subscript.py"
+);
+
+// Float does not support subscript
+invalid_test!(
+    test_float_subscript,
+    "tests/fixtures/invalid/float_subscript.py"
+);
+
+// Bool does not support subscript
+invalid_test!(
+    test_bool_subscript,
+    "tests/fixtures/invalid/bool_subscript.py"
+);
+
+// Float does not support slice
+invalid_test!(test_float_slice, "tests/fixtures/invalid/float_slice.py");
+
+// Set does not support slice
+invalid_test!(test_set_slice, "tests/fixtures/invalid/set_slice.py");
+
+// Dict does not support slice
+invalid_test!(test_dict_slice, "tests/fixtures/invalid/dict_slice.py");
+
+// ============================================================================
+// Attribute Access Error Tests (Extended)
+// ============================================================================
+
+// Float does not support attribute access
+invalid_test!(
+    test_float_attribute,
+    "tests/fixtures/invalid/float_attribute.py"
+);
+
+// Bool does not support attribute access
+invalid_test!(
+    test_bool_attribute,
+    "tests/fixtures/invalid/bool_attribute.py"
+);
+
+// None does not support attribute access
+invalid_test!(
+    test_none_attribute,
+    "tests/fixtures/invalid/none_attribute.py"
+);
+
+// ============================================================================
+// Set Extended Comparison Error Tests
+// ============================================================================
+
+// Cannot compare set with Int using <=
+invalid_test!(test_set_le_int, "tests/fixtures/invalid/set_le_int.py");
+
+// Cannot compare set with Int using >
+invalid_test!(test_set_gt_int, "tests/fixtures/invalid/set_gt_int.py");
+
+// Cannot compare set with Int using >=
+invalid_test!(test_set_ge_int, "tests/fixtures/invalid/set_ge_int.py");
 
 // ============================================================================
 // Phase 2: Type Error Tests
