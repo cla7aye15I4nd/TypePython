@@ -4,4 +4,8 @@
 b0_oct_int = oct(1)
 b1_oct_bool = oct(True)
 
+# Print all variables
+print("b0_oct_int:", b0_oct_int)
+print("b1_oct_bool:", b1_oct_bool)
+
 print("oct() tests passed!")

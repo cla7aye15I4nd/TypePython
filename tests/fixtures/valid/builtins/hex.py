@@ -4,4 +4,8 @@
 b0_hex_int = hex(1)
 b1_hex_bool = hex(True)
 
+# Print all variables
+print("b0_hex_int:", b0_hex_int)
+print("b1_hex_bool:", b1_hex_bool)
+
 print("hex() tests passed!")

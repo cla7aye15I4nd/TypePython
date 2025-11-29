@@ -35,13 +35,21 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<(), String> {
         match target {
             AssignTarget::Var(name) => {
-                let var = self
-                    .variables
-                    .get(name)
-                    .ok_or_else(|| format!("Variable {} not found", name))?
-                    .clone();
+                // First evaluate the value to get its type
                 let val = self.evaluate_expression(value)?;
-                var.store_value(&self.builder, &val)?;
+
+                // Check if variable exists
+                if let Some(var) = self.variables.get(name).cloned() {
+                    // Variable exists, store to it
+                    var.store_value(&self.builder, &val)?;
+                } else {
+                    // Variable doesn't exist, create it with inferred type
+                    let llvm_type = self.pytype_to_llvm(&val.ty);
+                    let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
+                    self.builder.build_store(alloca, val.value()).unwrap();
+                    let var = PyValue::new(val.value(), val.ty.clone(), Some(alloca));
+                    self.variables.insert(name.to_string(), var);
+                }
                 Ok(())
             }
             AssignTarget::Attribute { .. } => {

@@ -5,4 +5,9 @@ b0_float_int = float(1)
 b1_float_float = float(1.0)
 b2_float_bool = float(True)
 
+# Print all variables
+print("b0_float_int:", b0_float_int)
+print("b1_float_float:", b1_float_float)
+print("b2_float_bool:", b2_float_bool)
+
 print("float() tests passed!")

@@ -190,27 +190,147 @@ impl<'ctx> CodeGen<'ctx> {
     // list() builtin function
     // ========================================================================
 
-    /// Generate list() builtin call - creates an empty list
+    /// Generate list() builtin call
     /// list() -> empty list[int] (default element type)
+    /// list(str) -> list of character ordinal values
+    /// list(bytes) -> list of byte values
+    /// list(list) -> copy of list
+    /// list(set) -> list of set elements
+    /// list(dict) -> list of dict keys
     pub fn generate_list_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
-        if !args.is_empty() {
-            return Err(
-                "list() takes no arguments (use list literal [1, 2, 3] instead)".to_string(),
-            );
+        if args.is_empty() {
+            // Create empty list with default int element type
+            let list_new_fn = self.get_or_declare_c_builtin("list_new");
+            let call_site = self
+                .builder
+                .build_call(list_new_fn, &[], "list_new")
+                .unwrap();
+            let list_ptr = self.extract_ptr_call_result(call_site);
+
+            return Ok(PyValue::new(
+                list_ptr.value(),
+                PyType::List(Box::new(PyType::Int)),
+                None,
+            ));
         }
 
-        // Create empty list with default int element type
-        let list_new_fn = self.get_or_declare_c_builtin("list_new");
-        let call_site = self
-            .builder
-            .build_call(list_new_fn, &[], "list_new")
-            .unwrap();
-        let list_ptr = self.extract_ptr_call_result(call_site);
+        if args.len() != 1 {
+            return Err("list() takes at most 1 argument".to_string());
+        }
 
-        Ok(PyValue::new(
-            list_ptr.value(),
-            PyType::List(Box::new(PyType::Int)),
-            None,
-        ))
+        // Generate the argument value
+        let arg_val = self.evaluate_expression(&args[0])?;
+
+        match &arg_val.ty {
+            PyType::List(elem_type) => {
+                // Copy existing list
+                let list_from_list_fn = self.get_or_declare_c_builtin("list_from_list");
+                let call_site = self
+                    .builder
+                    .build_call(
+                        list_from_list_fn,
+                        &[arg_val.value().into()],
+                        "list_from_list",
+                    )
+                    .unwrap();
+                let list_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    list_ptr.value(),
+                    PyType::List(elem_type.clone()),
+                    None,
+                ))
+            }
+            PyType::Str => {
+                // list("hello") -> ['h', 'e', 'l', 'l', 'o'] (single-char strings)
+                let list_from_str_fn = self.get_or_declare_c_builtin("str_list_from_str");
+                let call_site = self
+                    .builder
+                    .build_call(
+                        list_from_str_fn,
+                        &[arg_val.value().into()],
+                        "str_list_from_str",
+                    )
+                    .unwrap();
+                let list_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    list_ptr.value(),
+                    PyType::List(Box::new(PyType::Str)),
+                    None,
+                ))
+            }
+            PyType::Bytes => {
+                // list(b"hello") -> [104, 101, 108, 108, 111] (byte values)
+                let list_from_bytes_fn = self.get_or_declare_c_builtin("list_from_bytes");
+                let call_site = self
+                    .builder
+                    .build_call(
+                        list_from_bytes_fn,
+                        &[arg_val.value().into()],
+                        "list_from_bytes",
+                    )
+                    .unwrap();
+                let list_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    list_ptr.value(),
+                    PyType::List(Box::new(PyType::Int)),
+                    None,
+                ))
+            }
+            PyType::Set(elem_type) => {
+                // list({1, 2, 3}) -> [1, 2, 3]
+                let list_from_set_fn = self.get_or_declare_c_builtin("list_from_set");
+                let call_site = self
+                    .builder
+                    .build_call(list_from_set_fn, &[arg_val.value().into()], "list_from_set")
+                    .unwrap();
+                let list_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    list_ptr.value(),
+                    PyType::List(elem_type.clone()),
+                    None,
+                ))
+            }
+            PyType::Dict(key_type, _) => {
+                // list({"a": 1}) -> ["a"] (list of keys)
+                // For string-keyed dicts, use str_list_from_str_dict
+                if matches!(key_type.as_ref(), PyType::Str) {
+                    let list_from_dict_fn = self.get_or_declare_c_builtin("str_list_from_str_dict");
+                    let call_site = self
+                        .builder
+                        .build_call(
+                            list_from_dict_fn,
+                            &[arg_val.value().into()],
+                            "str_list_from_str_dict",
+                        )
+                        .unwrap();
+                    let list_ptr = self.extract_ptr_call_result(call_site);
+                    Ok(PyValue::new(
+                        list_ptr.value(),
+                        PyType::List(Box::new(PyType::Str)),
+                        None,
+                    ))
+                } else {
+                    let list_from_dict_fn = self.get_or_declare_c_builtin("list_from_dict");
+                    let call_site = self
+                        .builder
+                        .build_call(
+                            list_from_dict_fn,
+                            &[arg_val.value().into()],
+                            "list_from_dict",
+                        )
+                        .unwrap();
+                    let list_ptr = self.extract_ptr_call_result(call_site);
+                    Ok(PyValue::new(
+                        list_ptr.value(),
+                        PyType::List(key_type.clone()),
+                        None,
+                    ))
+                }
+            }
+            _ => Err(format!(
+                "list() argument must be an iterable, got {:?}",
+                arg_val.ty
+            )),
+        }
     }
 }

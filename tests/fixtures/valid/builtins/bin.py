@@ -4,4 +4,8 @@
 b0_bin_int = bin(1)
 b1_bin_bool = bin(True)
 
+# Print all variables
+print("b0_bin_int:", b0_bin_int)
+print("b1_bin_bool:", b1_bin_bool)
+
 print("bin() tests passed!")

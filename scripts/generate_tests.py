@@ -80,9 +80,8 @@ BUILTIN_FUNCS = {
     "sorted": (sorted, 1, 1, "sorted"),
     "reversed": (reversed, 1, 1, "reversed"),
     "list": (list, 1, 1, "list conversion"),
-    "tuple": (tuple, 1, 1, "tuple conversion"),
     "set": (set, 1, 1, "set conversion"),
-    # Unsupported: frozenset, iter, any, all, enumerate
+    # Unsupported: frozenset, tuple, iter, any, all, enumerate
     "sum": (sum, 1, 1, "sum"),
 
     # Two argument functions
@@ -153,6 +152,14 @@ def get_result_type(left_type: str, right_type: str, op: str) -> str:
         return "bool"
     if op == "div":
         return "float"
+    # Handle string/bytes multiplication with int: result is str/bytes
+    if op == "mul":
+        if left_type == "str" or right_type == "str":
+            return "str"
+        if left_type == "bytes" or right_type == "bytes":
+            return "bytes"
+        if left_type == "list" or right_type == "list":
+            return get_type_annotation("list")
     if left_type == "float" or right_type == "float":
         return "float"
     if left_type == right_type:
@@ -292,6 +299,7 @@ def process_operators():
         "",
     ]
     valid_idx = 0
+    binary_var_names = []
 
     print("Processing binary operators...")
 
@@ -299,6 +307,8 @@ def process_operators():
         for right_type, (_, _, right_val) in TYPES.items():
             for op, (_, _, op_func) in BINARY_OPS.items():
                 if is_binary_op_valid(left_val, right_val, op_func):
+                    var_name = f"v{valid_idx}_{left_type}_{op}_{right_type}"
+                    binary_var_names.append(var_name)
                     valid_lines.append(generate_valid_line(left_type, right_type, op, valid_idx))
                     valid_idx += 1
                 else:
@@ -319,9 +329,12 @@ def process_operators():
     print("\nProcessing unary operators...")
 
     unary_idx = 0
+    unary_var_names = []
     for type_name, (_, _, val) in TYPES.items():
         for op, (_, _, op_func) in UNARY_OPS.items():
             if is_unary_op_valid(val, op_func):
+                var_name = f"u{unary_idx}_{type_name}_{op}"
+                unary_var_names.append(var_name)
                 valid_lines.extend(generate_valid_unary_line(type_name, op, unary_idx))
                 unary_idx += 1
             else:
@@ -335,6 +348,13 @@ def process_operators():
                     invalid_generated += 1
                     print(f"  Generated: {filename}")
 
+    valid_lines.append("")
+    valid_lines.append("# ===== PRINT ALL VARIABLES =====")
+    valid_lines.append("")
+    for var_name in binary_var_names:
+        valid_lines.append(f'print("{var_name}:", {var_name})')
+    for var_name in unary_var_names:
+        valid_lines.append(f'print("{var_name}:", {var_name})')
     valid_lines.append("")
     valid_lines.append('print("All valid operator tests passed!")')
     valid_lines.append("")
@@ -374,6 +394,7 @@ def process_builtins():
             "",
         ]
         valid_idx = 0
+        var_names = []
 
         for num_args in range(min_args, max_args + 1):
             # Generate all type combinations for this number of arguments
@@ -384,6 +405,9 @@ def process_builtins():
                 test_code = code_line + "\n"
 
                 if is_code_valid(test_code):
+                    type_str = "_".join(type_combo)
+                    var_name = f"b{valid_idx}_{func_name}_{type_str}"
+                    var_names.append(var_name)
                     valid_lines.append(code_line)
                     valid_idx += 1
                 else:
@@ -399,6 +423,10 @@ def process_builtins():
 
         # Write valid file for this function if there are any valid calls
         if valid_idx > 0:
+            valid_lines.append("")
+            valid_lines.append("# Print all variables")
+            for var_name in var_names:
+                valid_lines.append(f'print("{var_name}:", {var_name})')
             valid_lines.append("")
             valid_lines.append(f'print("{func_name}() tests passed!")')
             valid_lines.append("")

@@ -54,6 +54,30 @@ pub fn binary_op<'a, 'ctx>(
                     "strrepeat_str",
                 )))
             }
+            PyType::Bool => {
+                // Coerce Bool to Int and repeat
+                let repeat_count = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strrepeat_str");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        repeat_fn,
+                        &[lhs_ptr.into(), repeat_count.into()],
+                        "str_repeat",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "strrepeat_str",
+                )))
+            }
             _ => Err(format!("Cannot multiply Str by {:?}", rhs.ty)),
         },
 
@@ -202,6 +226,96 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
+            PyType::List(elem_type) => {
+                if matches!(elem_type.as_ref(), PyType::Str) {
+                    // str in list[str] - call list_contains_str
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "list_contains_str");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "list_contains_str",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "list_contains_str");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    Ok(PyValue::bool(bool_val.into()))
+                } else {
+                    // str in list[non-str] - always False (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                }
+            }
+            PyType::Dict(key_type, _) => {
+                if matches!(key_type.as_ref(), PyType::Str) {
+                    // str in dict[str, *] - call str_dict_contains
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "str_dict_contains");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "str_dict_contains",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "str_dict_contains");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    Ok(PyValue::bool(bool_val.into()))
+                } else {
+                    // str in dict[non-str, *] - always False (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                }
+            }
+            PyType::Set(elem_type) => {
+                if matches!(elem_type.as_ref(), PyType::Str) {
+                    // str in set[str] - call str_set_contains
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "str_set_contains");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "str_set_contains",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "str_set_contains");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    Ok(PyValue::bool(bool_val.into()))
+                } else {
+                    // str in set[non-str] - always False (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                }
+            }
             _ => Err(format!("Cannot use 'in' with Str and {:?}", rhs.ty)),
         },
         BinaryOp::NotIn => match &rhs.ty {
@@ -224,7 +338,112 @@ pub fn binary_op<'a, 'ctx>(
                 let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
                 Ok(PyValue::bool(negated.into()))
             }
+            PyType::List(elem_type) => {
+                if matches!(elem_type.as_ref(), PyType::Str) {
+                    // str not in list[str] - call list_contains_str then negate
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "list_contains_str");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "list_contains_str",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "list_contains_str");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
+                    Ok(PyValue::bool(negated.into()))
+                } else {
+                    // str not in list[non-str] - always True (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                }
+            }
+            PyType::Dict(key_type, _) => {
+                if matches!(key_type.as_ref(), PyType::Str) {
+                    // str not in dict[str, *] - call str_dict_contains then negate
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "str_dict_contains");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "str_dict_contains",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "str_dict_contains");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
+                    Ok(PyValue::bool(negated.into()))
+                } else {
+                    // str not in dict[non-str, *] - always True (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                }
+            }
+            PyType::Set(elem_type) => {
+                if matches!(elem_type.as_ref(), PyType::Str) {
+                    // str not in set[str] - call str_set_contains then negate
+                    let contains_fn =
+                        super::get_or_declare_builtin(cg.module, cg.ctx, "str_set_contains");
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_ptr.into()],
+                            "str_set_contains",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "str_set_contains");
+                    let zero = cg.ctx.i64_type().const_zero();
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            inkwell::IntPredicate::NE,
+                            result.into_int_value(),
+                            zero,
+                            "tobool",
+                        )
+                        .unwrap();
+                    let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
+                    Ok(PyValue::bool(negated.into()))
+                } else {
+                    // str not in set[non-str] - always True (type mismatch)
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                }
+            }
             _ => Err(format!("Cannot use 'not in' with Str and {:?}", rhs.ty)),
+        },
+
+        // Modulo (string formatting) - only supported for bytes, list, dict (returns original string)
+        BinaryOp::Mod => match &rhs.ty {
+            PyType::Bytes | PyType::List(_) | PyType::Dict(_, _) => {
+                // No-op: return the original string (no actual format substitution)
+                Ok(lhs.clone())
+            }
+            _ => Err(format!(
+                "String formatting with % is not supported for {:?}",
+                rhs.ty
+            )),
         },
 
         _ => Err(format!("Operator {:?} not supported for str type", op)),

@@ -46,11 +46,11 @@ v39_int_lt_bool: bool = 1 < True
 v40_int_le_bool: bool = 1 <= True
 v41_int_gt_bool: bool = 1 > True
 v42_int_ge_bool: bool = 1 >= True
-v43_int_mul_str: int = 1 * "hello"
-v44_int_mul_bytes: int = 1 * b"hello"
+v43_int_mul_str: str = 1 * "hello"
+v44_int_mul_bytes: bytes = 1 * b"hello"
 v45_int_in_bytes: bool = 1 in b"hello"
 v46_int_notin_bytes: bool = 1 not in b"hello"
-v47_int_mul_list: int = 1 * [1, 2, 3]
+v47_int_mul_list: list[int] = 1 * [1, 2, 3]
 v48_int_in_list: bool = 1 in [1, 2, 3]
 v49_int_notin_list: bool = 1 not in [1, 2, 3]
 v50_int_in_dict: bool = 1 in {"a": 1}
@@ -123,27 +123,27 @@ v116_bool_lt_float: bool = True < 1.0
 v117_bool_le_float: bool = True <= 1.0
 v118_bool_gt_float: bool = True > 1.0
 v119_bool_ge_float: bool = True >= 1.0
-v120_bool_add_bool: bool = True + True
-v121_bool_sub_bool: bool = True - True
-v122_bool_mul_bool: bool = True * True
+v120_bool_add_bool: int = True + True
+v121_bool_sub_bool: int = True - True
+v122_bool_mul_bool: int = True * True
 v123_bool_div_bool: float = True / True
-v124_bool_floordiv_bool: bool = True // True
-v125_bool_mod_bool: bool = True % True
-v126_bool_pow_bool: bool = True ** True
+v124_bool_floordiv_bool: int = True // True
+v125_bool_mod_bool: int = True % True
+v126_bool_pow_bool: int = True ** True
 v127_bool_bitand_bool: bool = True & True
 v128_bool_bitor_bool: bool = True | True
 v129_bool_bitxor_bool: bool = True ^ True
-v130_bool_lshift_bool: bool = True << True
-v131_bool_rshift_bool: bool = True >> True
+v130_bool_lshift_bool: int = True << True
+v131_bool_rshift_bool: int = True >> True
 v132_bool_lt_bool: bool = True < True
 v133_bool_le_bool: bool = True <= True
 v134_bool_gt_bool: bool = True > True
 v135_bool_ge_bool: bool = True >= True
-v136_bool_mul_str: bool = True * "hello"
-v137_bool_mul_bytes: bool = True * b"hello"
+v136_bool_mul_str: str = True * "hello"
+v137_bool_mul_bytes: bytes = True * b"hello"
 v138_bool_in_bytes: bool = True in b"hello"
 v139_bool_notin_bytes: bool = True not in b"hello"
-v140_bool_mul_list: bool = True * [1, 2, 3]
+v140_bool_mul_list: list[int] = True * [1, 2, 3]
 v141_bool_in_list: bool = True in [1, 2, 3]
 v142_bool_notin_list: bool = True not in [1, 2, 3]
 v143_bool_in_dict: bool = True in {"a": 1}
@@ -228,5 +228,228 @@ u5_bool_neg: int = -True
 u6_bool_pos: int = +True
 u7_bool_bitnot_val: bool = True
 u7_bool_bitnot: int = ~u7_bool_bitnot_val
+
+# ===== PRINT ALL VARIABLES =====
+
+print("v0_int_add_int:", v0_int_add_int)
+print("v1_int_sub_int:", v1_int_sub_int)
+print("v2_int_mul_int:", v2_int_mul_int)
+print("v3_int_div_int:", v3_int_div_int)
+print("v4_int_floordiv_int:", v4_int_floordiv_int)
+print("v5_int_mod_int:", v5_int_mod_int)
+print("v6_int_pow_int:", v6_int_pow_int)
+print("v7_int_bitand_int:", v7_int_bitand_int)
+print("v8_int_bitor_int:", v8_int_bitor_int)
+print("v9_int_bitxor_int:", v9_int_bitxor_int)
+print("v10_int_lshift_int:", v10_int_lshift_int)
+print("v11_int_rshift_int:", v11_int_rshift_int)
+print("v12_int_lt_int:", v12_int_lt_int)
+print("v13_int_le_int:", v13_int_le_int)
+print("v14_int_gt_int:", v14_int_gt_int)
+print("v15_int_ge_int:", v15_int_ge_int)
+print("v16_int_add_float:", v16_int_add_float)
+print("v17_int_sub_float:", v17_int_sub_float)
+print("v18_int_mul_float:", v18_int_mul_float)
+print("v19_int_div_float:", v19_int_div_float)
+print("v20_int_floordiv_float:", v20_int_floordiv_float)
+print("v21_int_mod_float:", v21_int_mod_float)
+print("v22_int_pow_float:", v22_int_pow_float)
+print("v23_int_lt_float:", v23_int_lt_float)
+print("v24_int_le_float:", v24_int_le_float)
+print("v25_int_gt_float:", v25_int_gt_float)
+print("v26_int_ge_float:", v26_int_ge_float)
+print("v27_int_add_bool:", v27_int_add_bool)
+print("v28_int_sub_bool:", v28_int_sub_bool)
+print("v29_int_mul_bool:", v29_int_mul_bool)
+print("v30_int_div_bool:", v30_int_div_bool)
+print("v31_int_floordiv_bool:", v31_int_floordiv_bool)
+print("v32_int_mod_bool:", v32_int_mod_bool)
+print("v33_int_pow_bool:", v33_int_pow_bool)
+print("v34_int_bitand_bool:", v34_int_bitand_bool)
+print("v35_int_bitor_bool:", v35_int_bitor_bool)
+print("v36_int_bitxor_bool:", v36_int_bitxor_bool)
+print("v37_int_lshift_bool:", v37_int_lshift_bool)
+print("v38_int_rshift_bool:", v38_int_rshift_bool)
+print("v39_int_lt_bool:", v39_int_lt_bool)
+print("v40_int_le_bool:", v40_int_le_bool)
+print("v41_int_gt_bool:", v41_int_gt_bool)
+print("v42_int_ge_bool:", v42_int_ge_bool)
+print("v43_int_mul_str:", v43_int_mul_str)
+print("v44_int_mul_bytes:", v44_int_mul_bytes)
+print("v45_int_in_bytes:", v45_int_in_bytes)
+print("v46_int_notin_bytes:", v46_int_notin_bytes)
+print("v47_int_mul_list:", v47_int_mul_list)
+print("v48_int_in_list:", v48_int_in_list)
+print("v49_int_notin_list:", v49_int_notin_list)
+print("v50_int_in_dict:", v50_int_in_dict)
+print("v51_int_notin_dict:", v51_int_notin_dict)
+print("v52_int_in_set:", v52_int_in_set)
+print("v53_int_notin_set:", v53_int_notin_set)
+print("v54_float_add_int:", v54_float_add_int)
+print("v55_float_sub_int:", v55_float_sub_int)
+print("v56_float_mul_int:", v56_float_mul_int)
+print("v57_float_div_int:", v57_float_div_int)
+print("v58_float_floordiv_int:", v58_float_floordiv_int)
+print("v59_float_mod_int:", v59_float_mod_int)
+print("v60_float_pow_int:", v60_float_pow_int)
+print("v61_float_lt_int:", v61_float_lt_int)
+print("v62_float_le_int:", v62_float_le_int)
+print("v63_float_gt_int:", v63_float_gt_int)
+print("v64_float_ge_int:", v64_float_ge_int)
+print("v65_float_add_float:", v65_float_add_float)
+print("v66_float_sub_float:", v66_float_sub_float)
+print("v67_float_mul_float:", v67_float_mul_float)
+print("v68_float_div_float:", v68_float_div_float)
+print("v69_float_floordiv_float:", v69_float_floordiv_float)
+print("v70_float_mod_float:", v70_float_mod_float)
+print("v71_float_pow_float:", v71_float_pow_float)
+print("v72_float_lt_float:", v72_float_lt_float)
+print("v73_float_le_float:", v73_float_le_float)
+print("v74_float_gt_float:", v74_float_gt_float)
+print("v75_float_ge_float:", v75_float_ge_float)
+print("v76_float_add_bool:", v76_float_add_bool)
+print("v77_float_sub_bool:", v77_float_sub_bool)
+print("v78_float_mul_bool:", v78_float_mul_bool)
+print("v79_float_div_bool:", v79_float_div_bool)
+print("v80_float_floordiv_bool:", v80_float_floordiv_bool)
+print("v81_float_mod_bool:", v81_float_mod_bool)
+print("v82_float_pow_bool:", v82_float_pow_bool)
+print("v83_float_lt_bool:", v83_float_lt_bool)
+print("v84_float_le_bool:", v84_float_le_bool)
+print("v85_float_gt_bool:", v85_float_gt_bool)
+print("v86_float_ge_bool:", v86_float_ge_bool)
+print("v87_float_in_list:", v87_float_in_list)
+print("v88_float_notin_list:", v88_float_notin_list)
+print("v89_float_in_dict:", v89_float_in_dict)
+print("v90_float_notin_dict:", v90_float_notin_dict)
+print("v91_float_in_set:", v91_float_in_set)
+print("v92_float_notin_set:", v92_float_notin_set)
+print("v93_bool_add_int:", v93_bool_add_int)
+print("v94_bool_sub_int:", v94_bool_sub_int)
+print("v95_bool_mul_int:", v95_bool_mul_int)
+print("v96_bool_div_int:", v96_bool_div_int)
+print("v97_bool_floordiv_int:", v97_bool_floordiv_int)
+print("v98_bool_mod_int:", v98_bool_mod_int)
+print("v99_bool_pow_int:", v99_bool_pow_int)
+print("v100_bool_bitand_int:", v100_bool_bitand_int)
+print("v101_bool_bitor_int:", v101_bool_bitor_int)
+print("v102_bool_bitxor_int:", v102_bool_bitxor_int)
+print("v103_bool_lshift_int:", v103_bool_lshift_int)
+print("v104_bool_rshift_int:", v104_bool_rshift_int)
+print("v105_bool_lt_int:", v105_bool_lt_int)
+print("v106_bool_le_int:", v106_bool_le_int)
+print("v107_bool_gt_int:", v107_bool_gt_int)
+print("v108_bool_ge_int:", v108_bool_ge_int)
+print("v109_bool_add_float:", v109_bool_add_float)
+print("v110_bool_sub_float:", v110_bool_sub_float)
+print("v111_bool_mul_float:", v111_bool_mul_float)
+print("v112_bool_div_float:", v112_bool_div_float)
+print("v113_bool_floordiv_float:", v113_bool_floordiv_float)
+print("v114_bool_mod_float:", v114_bool_mod_float)
+print("v115_bool_pow_float:", v115_bool_pow_float)
+print("v116_bool_lt_float:", v116_bool_lt_float)
+print("v117_bool_le_float:", v117_bool_le_float)
+print("v118_bool_gt_float:", v118_bool_gt_float)
+print("v119_bool_ge_float:", v119_bool_ge_float)
+print("v120_bool_add_bool:", v120_bool_add_bool)
+print("v121_bool_sub_bool:", v121_bool_sub_bool)
+print("v122_bool_mul_bool:", v122_bool_mul_bool)
+print("v123_bool_div_bool:", v123_bool_div_bool)
+print("v124_bool_floordiv_bool:", v124_bool_floordiv_bool)
+print("v125_bool_mod_bool:", v125_bool_mod_bool)
+print("v126_bool_pow_bool:", v126_bool_pow_bool)
+print("v127_bool_bitand_bool:", v127_bool_bitand_bool)
+print("v128_bool_bitor_bool:", v128_bool_bitor_bool)
+print("v129_bool_bitxor_bool:", v129_bool_bitxor_bool)
+print("v130_bool_lshift_bool:", v130_bool_lshift_bool)
+print("v131_bool_rshift_bool:", v131_bool_rshift_bool)
+print("v132_bool_lt_bool:", v132_bool_lt_bool)
+print("v133_bool_le_bool:", v133_bool_le_bool)
+print("v134_bool_gt_bool:", v134_bool_gt_bool)
+print("v135_bool_ge_bool:", v135_bool_ge_bool)
+print("v136_bool_mul_str:", v136_bool_mul_str)
+print("v137_bool_mul_bytes:", v137_bool_mul_bytes)
+print("v138_bool_in_bytes:", v138_bool_in_bytes)
+print("v139_bool_notin_bytes:", v139_bool_notin_bytes)
+print("v140_bool_mul_list:", v140_bool_mul_list)
+print("v141_bool_in_list:", v141_bool_in_list)
+print("v142_bool_notin_list:", v142_bool_notin_list)
+print("v143_bool_in_dict:", v143_bool_in_dict)
+print("v144_bool_notin_dict:", v144_bool_notin_dict)
+print("v145_bool_in_set:", v145_bool_in_set)
+print("v146_bool_notin_set:", v146_bool_notin_set)
+print("v147_str_mul_int:", v147_str_mul_int)
+print("v148_str_mul_bool:", v148_str_mul_bool)
+print("v149_str_add_str:", v149_str_add_str)
+print("v150_str_lt_str:", v150_str_lt_str)
+print("v151_str_le_str:", v151_str_le_str)
+print("v152_str_gt_str:", v152_str_gt_str)
+print("v153_str_ge_str:", v153_str_ge_str)
+print("v154_str_in_str:", v154_str_in_str)
+print("v155_str_notin_str:", v155_str_notin_str)
+print("v156_str_mod_bytes:", v156_str_mod_bytes)
+print("v157_str_mod_list:", v157_str_mod_list)
+print("v158_str_in_list:", v158_str_in_list)
+print("v159_str_notin_list:", v159_str_notin_list)
+print("v160_str_mod_dict:", v160_str_mod_dict)
+print("v161_str_in_dict:", v161_str_in_dict)
+print("v162_str_notin_dict:", v162_str_notin_dict)
+print("v163_str_in_set:", v163_str_in_set)
+print("v164_str_notin_set:", v164_str_notin_set)
+print("v165_bytes_mul_int:", v165_bytes_mul_int)
+print("v166_bytes_mul_bool:", v166_bytes_mul_bool)
+print("v167_bytes_add_bytes:", v167_bytes_add_bytes)
+print("v168_bytes_lt_bytes:", v168_bytes_lt_bytes)
+print("v169_bytes_le_bytes:", v169_bytes_le_bytes)
+print("v170_bytes_gt_bytes:", v170_bytes_gt_bytes)
+print("v171_bytes_ge_bytes:", v171_bytes_ge_bytes)
+print("v172_bytes_in_bytes:", v172_bytes_in_bytes)
+print("v173_bytes_notin_bytes:", v173_bytes_notin_bytes)
+print("v174_bytes_mod_list:", v174_bytes_mod_list)
+print("v175_bytes_in_list:", v175_bytes_in_list)
+print("v176_bytes_notin_list:", v176_bytes_notin_list)
+print("v177_bytes_mod_dict:", v177_bytes_mod_dict)
+print("v178_bytes_in_dict:", v178_bytes_in_dict)
+print("v179_bytes_notin_dict:", v179_bytes_notin_dict)
+print("v180_bytes_in_set:", v180_bytes_in_set)
+print("v181_bytes_notin_set:", v181_bytes_notin_set)
+print("v182_list_mul_int:", v182_list_mul_int)
+print("v183_list_mul_bool:", v183_list_mul_bool)
+print("v184_list_add_list:", v184_list_add_list)
+print("v185_list_lt_list:", v185_list_lt_list)
+print("v186_list_le_list:", v186_list_le_list)
+print("v187_list_gt_list:", v187_list_gt_list)
+print("v188_list_ge_list:", v188_list_ge_list)
+print("v189_list_in_list:", v189_list_in_list)
+print("v190_list_notin_list:", v190_list_notin_list)
+print("v191_dict_in_list:", v191_dict_in_list)
+print("v192_dict_notin_list:", v192_dict_notin_list)
+print("v193_dict_bitor_dict:", v193_dict_bitor_dict)
+print("v194_set_in_list:", v194_set_in_list)
+print("v195_set_notin_list:", v195_set_notin_list)
+print("v196_set_sub_set:", v196_set_sub_set)
+print("v197_set_bitand_set:", v197_set_bitand_set)
+print("v198_set_bitor_set:", v198_set_bitor_set)
+print("v199_set_bitxor_set:", v199_set_bitxor_set)
+print("v200_set_lt_set:", v200_set_lt_set)
+print("v201_set_le_set:", v201_set_le_set)
+print("v202_set_gt_set:", v202_set_gt_set)
+print("v203_set_ge_set:", v203_set_ge_set)
+print("v204_set_in_set:", v204_set_in_set)
+print("v205_set_notin_set:", v205_set_notin_set)
+print("v206_none_in_list:", v206_none_in_list)
+print("v207_none_notin_list:", v207_none_notin_list)
+print("v208_none_in_dict:", v208_none_in_dict)
+print("v209_none_notin_dict:", v209_none_notin_dict)
+print("v210_none_in_set:", v210_none_in_set)
+print("v211_none_notin_set:", v211_none_notin_set)
+print("u0_int_neg:", u0_int_neg)
+print("u1_int_pos:", u1_int_pos)
+print("u2_int_bitnot:", u2_int_bitnot)
+print("u3_float_neg:", u3_float_neg)
+print("u4_float_pos:", u4_float_pos)
+print("u5_bool_neg:", u5_bool_neg)
+print("u6_bool_pos:", u6_bool_pos)
+print("u7_bool_bitnot:", u7_bool_bitnot)
 
 print("All valid operator tests passed!")

@@ -265,6 +265,23 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot compare set with {:?}", rhs.ty)),
         },
 
+        // Membership: set in list/set - checking if the set is an element
+        // For int sets/lists, this is always False
+        BinaryOp::In => match &rhs.ty {
+            PyType::List(_) | PyType::Set(_) => {
+                // set in list/set - always False (sets can't be elements of int collections)
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+            }
+            _ => Err(format!("Cannot use 'in' with set and {:?}", rhs.ty)),
+        },
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::List(_) | PyType::Set(_) => {
+                // set not in list/set - always True
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with set and {:?}", rhs.ty)),
+        },
+
         _ => Err(format!("Operator {:?} not supported on set", op)),
     }
 }

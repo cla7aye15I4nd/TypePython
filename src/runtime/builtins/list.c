@@ -20,6 +20,13 @@ typedef struct {
     int64_t* data;     // Pointer to element array (separate allocation)
 } PyList;
 
+// String list - stores char* pointers instead of int64_t
+typedef struct {
+    int64_t len;       // Current number of elements
+    int64_t capacity;  // Allocated capacity
+    char** data;       // Pointer to string pointer array
+} PyStrList;
+
 #define INITIAL_CAPACITY 8
 
 // ============================================================================
@@ -265,6 +272,17 @@ int64_t list_contains(PyList* list, int64_t value) {
     return list_index(list, value) >= 0 ? 1 : 0;
 }
 
+// Check if list contains float value (compares float to int values)
+// Python: 1.0 in [1, 2, 3] == True because 1.0 == 1
+int64_t list_contains_float(PyList* list, double value) {
+    if (list == NULL) return 0;
+    // List contains int64_t values, compare float to int
+    for (int64_t i = 0; i < list->len; i++) {
+        if ((double)list->data[i] == value) return 1;
+    }
+    return 0;
+}
+
 // ============================================================================
 // List Slicing
 // ============================================================================
@@ -484,10 +502,155 @@ void print_list_float(PyList* list) {
         double* data = (double*)list->data;
         for (int64_t i = 0; i < list->len; i++) {
             if (i > 0) printf(", ");
-            printf("%g", data[i]);
+            // Print with .0 suffix for whole numbers like Python
+            double val = data[i];
+            if (val == (int64_t)val && val >= -9007199254740992.0 && val <= 9007199254740992.0) {
+                printf("%.1f", val);
+            } else {
+                printf("%g", val);
+            }
         }
     }
     printf("]");
+}
+
+// Print tuple of ints (divmod for int/int returns this)
+void print_tuple_int(PyList* list) {
+    printf("(");
+    if (list != NULL) {
+        for (int64_t i = 0; i < list->len; i++) {
+            if (i > 0) printf(", ");
+            printf("%ld", list->data[i]);
+        }
+    }
+    printf(")");
+}
+
+// Print tuple of floats (divmod with floats returns this)
+void print_tuple_float(PyList* list) {
+    printf("(");
+    if (list != NULL) {
+        double* data = (double*)list->data;
+        for (int64_t i = 0; i < list->len; i++) {
+            if (i > 0) printf(", ");
+            // Print with .0 suffix for whole numbers like Python
+            double val = data[i];
+            if (val == (int64_t)val && val >= -9007199254740992.0 && val <= 9007199254740992.0) {
+                printf("%.1f", val);
+            } else {
+                printf("%g", val);
+            }
+        }
+    }
+    printf(")");
+}
+
+// ============================================================================
+// String List (PyStrList) Functions
+// ============================================================================
+
+// Allocate a new string list
+static PyStrList* str_list_alloc(int64_t capacity) {
+    if (capacity < INITIAL_CAPACITY) {
+        capacity = INITIAL_CAPACITY;
+    }
+    PyStrList* list = (PyStrList*)malloc(sizeof(PyStrList));
+    if (list == NULL) return NULL;
+    list->data = (char**)malloc(capacity * sizeof(char*));
+    if (list->data == NULL) {
+        free(list);
+        return NULL;
+    }
+    list->len = 0;
+    list->capacity = capacity;
+    return list;
+}
+
+// Create a new empty string list
+PyStrList* str_list_new(void) {
+    return str_list_alloc(INITIAL_CAPACITY);
+}
+
+// Create string list from a string (each char becomes a single-char string)
+PyStrList* str_list_from_str(const char* s) {
+    if (s == NULL) return str_list_new();
+
+    size_t len = strlen(s);
+    PyStrList* result = str_list_alloc((int64_t)len);
+    if (result == NULL) return NULL;
+
+    for (size_t i = 0; i < len; i++) {
+        // Create a single-character string for each char
+        char* single = (char*)malloc(2);
+        if (single == NULL) {
+            // Clean up on failure
+            for (size_t j = 0; j < i; j++) {
+                free(result->data[j]);
+            }
+            free(result->data);
+            free(result);
+            return NULL;
+        }
+        single[0] = s[i];
+        single[1] = '\0';
+        result->data[i] = single;
+    }
+    result->len = (int64_t)len;
+
+    return result;
+}
+
+// Get length of string list
+int64_t str_list_len(PyStrList* list) {
+    if (list == NULL) return 0;
+    return list->len;
+}
+
+// Print string list: ['h', 'e', 'l', 'l', 'o']
+void print_str_list(PyStrList* list) {
+    printf("[");
+    if (list != NULL) {
+        for (int64_t i = 0; i < list->len; i++) {
+            if (i > 0) printf(", ");
+            printf("'%s'", list->data[i] ? list->data[i] : "");
+        }
+    }
+    printf("]");
+}
+
+// Sort string list (alphabetically)
+PyStrList* str_list_sorted(PyStrList* list) {
+    if (list == NULL) return str_list_new();
+
+    PyStrList* result = str_list_alloc(list->len);
+    if (result == NULL) return NULL;
+
+    // Copy string pointers (shallow copy for now - they're single chars)
+    for (int64_t i = 0; i < list->len; i++) {
+        size_t slen = strlen(list->data[i]);
+        result->data[i] = (char*)malloc(slen + 1);
+        if (result->data[i] == NULL) {
+            for (int64_t j = 0; j < i; j++) free(result->data[j]);
+            free(result->data);
+            free(result);
+            return NULL;
+        }
+        strcpy(result->data[i], list->data[i]);
+    }
+    result->len = list->len;
+
+    // Simple bubble sort for strings
+    for (int64_t i = 0; i < result->len - 1; i++) {
+        for (int64_t j = 0; j < result->len - i - 1; j++) {
+            if (strcmp(result->data[j], result->data[j+1]) > 0) {
+                char* tmp = result->data[j];
+                result->data[j] = result->data[j+1];
+                result->data[j+1] = tmp;
+            }
+        }
+    }
+
+    return result;
 }
 
 // ============================================================================
@@ -587,6 +750,166 @@ PyList* divmod_float(double a, double b) {
     data[0] = q;
     data[1] = r;
     result->len = 2;
+
+    return result;
+}
+
+// ============================================================================
+// List Construction from Iterables
+// ============================================================================
+
+// Forward declarations for set
+#define SET_OCCUPIED_FWD 1
+typedef struct {
+    int64_t key;
+    uint8_t state;
+} SetEntryFwd;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    SetEntryFwd* entries;
+} PySetFwd;
+
+// Forward declarations for dict (int keys)
+#define DICT_OCCUPIED_FWD 1
+typedef struct {
+    int64_t key;
+    int64_t value;
+    uint8_t state;
+} DictEntryFwd;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    DictEntryFwd* entries;
+} PyDictFwd;
+
+// Forward declarations for str dict (string keys)
+typedef struct {
+    char* key;
+    int64_t value;
+    uint8_t state;
+} StrDictEntryFwd;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    StrDictEntryFwd* entries;
+} PyStrDictFwd;
+
+// Create list from another list (copy)
+PyList* list_from_list(PyList* src) {
+    if (src == NULL) return list_new();
+
+    PyList* result = list_with_capacity(src->len);
+    if (result == NULL) return NULL;
+
+    memcpy(result->data, src->data, src->len * sizeof(int64_t));
+    result->len = src->len;
+
+    return result;
+}
+
+// Create list from string (each character becomes its ordinal value)
+PyList* list_from_str(const char* s) {
+    if (s == NULL) return list_new();
+
+    size_t len = strlen(s);
+    PyList* result = list_with_capacity((int64_t)len);
+    if (result == NULL) return NULL;
+
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    result->len = (int64_t)len;
+
+    return result;
+}
+
+// Create list from bytes (each byte becomes its value)
+PyList* list_from_bytes(const char* s) {
+    if (s == NULL) return list_new();
+
+    size_t len = strlen(s);
+    PyList* result = list_with_capacity((int64_t)len);
+    if (result == NULL) return NULL;
+
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    result->len = (int64_t)len;
+
+    return result;
+}
+
+// Comparison for sorting int64_t
+static int cmp_int64_for_list(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Create list from set (sorted for consistent output)
+PyList* list_from_set(PySetFwd* set) {
+    if (set == NULL) return list_new();
+
+    PyList* result = list_with_capacity(set->len);
+    if (result == NULL) return NULL;
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < set->capacity && j < set->len; i++) {
+        if (set->entries[i].state == SET_OCCUPIED_FWD) {
+            result->data[j++] = set->entries[i].key;
+        }
+    }
+    result->len = j;
+
+    // Sort for consistent output matching Python's iteration order for small ints
+    qsort(result->data, result->len, sizeof(int64_t), cmp_int64_for_list);
+
+    return result;
+}
+
+// Create list from dict (list of keys) - for int-keyed dicts
+PyList* list_from_dict(PyDictFwd* dict) {
+    if (dict == NULL) return list_new();
+
+    PyList* result = list_with_capacity(dict->len);
+    if (result == NULL) return NULL;
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_FWD) {
+            result->data[j++] = dict->entries[i].key;
+        }
+    }
+    result->len = j;
+
+    return result;
+}
+
+// Create string list from str dict (list of string keys)
+PyStrList* str_list_from_str_dict(PyStrDictFwd* dict) {
+    if (dict == NULL) return str_list_new();
+
+    PyStrList* result = str_list_alloc(dict->len);
+    if (result == NULL) return NULL;
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_FWD) {
+            result->data[j] = strdup(dict->entries[i].key);
+            if (result->data[j] == NULL) {
+                // Clean up on failure
+                for (int64_t k = 0; k < j; k++) free(result->data[k]);
+                free(result->data);
+                free(result);
+                return NULL;
+            }
+            j++;
+        }
+    }
+    result->len = j;
 
     return result;
 }

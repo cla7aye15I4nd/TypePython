@@ -5,4 +5,9 @@ b0_sum_bytes = sum(b"hello")
 b1_sum_list = sum([1, 2, 3])
 b2_sum_set = sum({1, 2, 3})
 
+# Print all variables
+print("b0_sum_bytes:", b0_sum_bytes)
+print("b1_sum_list:", b1_sum_list)
+print("b2_sum_set:", b2_sum_set)
+
 print("sum() tests passed!")

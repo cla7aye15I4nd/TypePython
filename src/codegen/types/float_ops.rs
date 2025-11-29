@@ -29,6 +29,21 @@ pub fn binary_op<'a, 'ctx>(
                     "itof",
                 )
                 .unwrap()),
+            PyType::Bool => {
+                // Bool is i1, zero-extend to i64 then convert to float
+                let int_val = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                Ok(cg
+                    .builder
+                    .build_signed_int_to_float(int_val, cg.ctx.f64_type(), "btof")
+                    .unwrap())
+            }
             _ => Err(format!("Cannot coerce {:?} to float", rhs.ty)),
         }
     };
@@ -191,10 +206,48 @@ pub fn binary_op<'a, 'ctx>(
         | BinaryOp::BitAnd
         | BinaryOp::LShift
         | BinaryOp::RShift => Err(format!("Bitwise operator {:?} not supported on floats", op)),
-        BinaryOp::In | BinaryOp::NotIn => Err(format!(
-            "Membership operator {:?} requires container support",
-            op
-        )),
+        BinaryOp::In | BinaryOp::NotIn => {
+            // Float in list/dict/set
+            let (fn_name, label) = match &rhs.ty {
+                PyType::List(_) => ("list_contains_float", "list_contains"),
+                PyType::Dict(_, _) => ("dict_contains_float", "dict_contains"),
+                PyType::Set(_) => ("set_contains_float", "set_contains"),
+                _ => {
+                    return Err(format!(
+                        "Membership operator {:?} not supported for float in {:?}",
+                        op, rhs.ty
+                    ))
+                }
+            };
+            let contains_fn = super::get_or_declare_builtin(cg.module, cg.ctx, fn_name);
+            let call = cg
+                .builder
+                .build_call(
+                    contains_fn,
+                    &[rhs.runtime_value().into(), lhs_float.into()],
+                    label,
+                )
+                .unwrap();
+            let result_i64 = super::extract_int_result(call, fn_name);
+            // Convert i64 to i1 (bool): compare != 0
+            let zero = cg.ctx.i64_type().const_zero();
+            let bool_result = cg
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    result_i64.into_int_value(),
+                    zero,
+                    "tobool",
+                )
+                .unwrap();
+            if matches!(op, BinaryOp::NotIn) {
+                Ok(PyValue::bool(
+                    cg.builder.build_not(bool_result, "not").unwrap().into(),
+                ))
+            } else {
+                Ok(PyValue::bool(bool_result.into()))
+            }
+        }
     }
 }
 

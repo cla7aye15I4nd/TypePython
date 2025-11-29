@@ -50,12 +50,12 @@ DICT_TYPE  = { "dict" ~ kw_boundary }
 SET_TYPE   = { "set" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
-// Note: list, dict, set are NOT keywords - they are builtin function names
+// Note: list, dict, set, int, float, bool, str are NOT keywords - they are builtin function names
+// These can be used as both type annotations and function calls
 // The type syntax list[int], dict[k, v], set[t] is parsed specially in type contexts
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
-    DEL | AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
-    INT_TYPE | FLOAT_TYPE | BOOL_TYPE | STR_TYPE | BYTES_TYPE | NONE_TYPE
+    DEL | AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF
 }
 
 // Identifiers (must not be keywords)

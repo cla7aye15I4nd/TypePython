@@ -888,6 +888,10 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap())
             }
+            PyType::Tuple(_) => {
+                // Tuples from divmod are always non-empty, so truthy
+                Ok(self.context.bool_type().const_int(1, false))
+            }
         }
     }
 
@@ -960,6 +964,10 @@ impl<'ctx> CodeGen<'ctx> {
         // Determine result type (Not always returns Bool, others preserve type)
         match op {
             UnaryOp::Not => Ok(PyValue::bool(result)),
+            // For Neg, Pos, BitNot on Bool, result is Int (Python behavior)
+            UnaryOp::Neg | UnaryOp::Pos | UnaryOp::BitNot if matches!(val.ty, PyType::Bool) => {
+                Ok(PyValue::int(result))
+            }
             _ => match &val.ty {
                 PyType::Int => Ok(PyValue::int(result)),
                 PyType::Float => Ok(PyValue::float(result)),
@@ -967,7 +975,7 @@ impl<'ctx> CodeGen<'ctx> {
                 PyType::Str => Ok(PyValue::new_str(result)),
                 PyType::Bytes => Ok(PyValue::bytes(result)),
                 PyType::None => Ok(PyValue::none(result)),
-                PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) | PyType::Tuple(_) => {
                     Err("Unary operations not supported on container types".to_string())
                 }
                 PyType::Function | PyType::Module | PyType::Macro => Err(
@@ -1091,11 +1099,54 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    pub(crate) fn pytype_to_llvm(&self, ty: &PyType) -> BasicTypeEnum<'ctx> {
+        match ty {
+            PyType::Int => self.context.i64_type().into(),
+            PyType::Float => self.context.f64_type().into(),
+            PyType::Bool => self.context.bool_type().into(),
+            PyType::Str => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::Bytes => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::None => self.context.i32_type().into(),
+            PyType::List(_) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::Dict(_, _) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::Set(_) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::Tuple(_) => self
+                .context
+                .ptr_type(inkwell::AddressSpace::default())
+                .into(),
+            PyType::Function | PyType::Module | PyType::Macro => self.context.i64_type().into(),
+        }
+    }
+
     pub(crate) fn create_entry_block_alloca(
         &self,
         _fn_name: &str,
         var_name: &str,
         var_type: &Type,
+    ) -> PointerValue<'ctx> {
+        let llvm_type = self.type_to_llvm(var_type);
+        self.create_entry_block_alloca_with_type(var_name, llvm_type)
+    }
+
+    pub(crate) fn create_entry_block_alloca_with_type(
+        &self,
+        var_name: &str,
+        llvm_type: BasicTypeEnum<'ctx>,
     ) -> PointerValue<'ctx> {
         let builder = self.context.create_builder();
 
@@ -1110,7 +1161,6 @@ impl<'ctx> CodeGen<'ctx> {
             None => builder.position_at_end(entry),
         }
 
-        let llvm_type = self.type_to_llvm(var_type);
         builder.build_alloca(llvm_type, var_name).unwrap()
     }
 

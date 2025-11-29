@@ -11,4 +11,15 @@ b6_print_dict = print({"a": 1})
 b7_print_set = print({1, 2, 3})
 b8_print_none = print(None)
 
+# Print all variables
+print("b0_print_int:", b0_print_int)
+print("b1_print_float:", b1_print_float)
+print("b2_print_bool:", b2_print_bool)
+print("b3_print_str:", b3_print_str)
+print("b4_print_bytes:", b4_print_bytes)
+print("b5_print_list:", b5_print_list)
+print("b6_print_dict:", b6_print_dict)
+print("b7_print_set:", b7_print_set)
+print("b8_print_none:", b8_print_none)
+
 print("print() tests passed!")

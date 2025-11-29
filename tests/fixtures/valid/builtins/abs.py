@@ -5,4 +5,9 @@ b0_abs_int = abs(1)
 b1_abs_float = abs(1.0)
 b2_abs_bool = abs(True)
 
+# Print all variables
+print("b0_abs_int:", b0_abs_int)
+print("b1_abs_float:", b1_abs_float)
+print("b2_abs_bool:", b2_abs_bool)
+
 print("abs() tests passed!")

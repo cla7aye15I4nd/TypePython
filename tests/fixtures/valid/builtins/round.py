@@ -14,4 +14,18 @@ b9_round_bool_int = round(True, 1)
 b10_round_bool_bool = round(True, True)
 b11_round_bool_none = round(True, None)
 
+# Print all variables
+print("b0_round_int:", b0_round_int)
+print("b1_round_float:", b1_round_float)
+print("b2_round_bool:", b2_round_bool)
+print("b3_round_int_int:", b3_round_int_int)
+print("b4_round_int_bool:", b4_round_int_bool)
+print("b5_round_int_none:", b5_round_int_none)
+print("b6_round_float_int:", b6_round_float_int)
+print("b7_round_float_bool:", b7_round_float_bool)
+print("b8_round_float_none:", b8_round_float_none)
+print("b9_round_bool_int:", b9_round_bool_int)
+print("b10_round_bool_bool:", b10_round_bool_bool)
+print("b11_round_bool_none:", b11_round_bool_none)
+
 print("round() tests passed!")

@@ -155,6 +155,19 @@ int64_t set_contains(PySet* set, int64_t key) {
     return find_slot(set, key, 0) >= 0 ? 1 : 0;
 }
 
+// Check if float key exists (converts float to int for comparison)
+// Python: 1.0 in {1, 2, 3} == True because 1.0 == 1
+int64_t set_contains_float(PySet* set, double key) {
+    if (set == NULL) return 0;
+    // Convert float to int and search for that key
+    int64_t int_key = (int64_t)key;
+    // Only match if conversion is lossless
+    if ((double)int_key == key) {
+        return find_slot(set, int_key, 0) >= 0 ? 1 : 0;
+    }
+    return 0;
+}
+
 // Clear all items
 void set_clear(PySet* set) {
     if (set == NULL) return;
@@ -456,21 +469,181 @@ int64_t set_min(PySet* set) {
 // Print Support
 // ============================================================================
 
+// Comparison function for qsort
+static int cmp_int64(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
 void print_set(PySet* set) {
     if (set != NULL && set->len == 0) {
         printf("set()");
         return;
     }
     printf("{");
-    if (set != NULL) {
-        int first = 1;
+    if (set != NULL && set->len > 0) {
+        // Collect elements and sort them for consistent output
+        int64_t* elements = (int64_t*)malloc(set->len * sizeof(int64_t));
+        int64_t count = 0;
         for (int64_t i = 0; i < set->capacity; i++) {
             if (set->entries[i].state == SET_OCCUPIED) {
-                if (!first) printf(", ");
-                printf("%ld", set->entries[i].key);
-                first = 0;
+                elements[count++] = set->entries[i].key;
             }
         }
+        qsort(elements, count, sizeof(int64_t), cmp_int64);
+        for (int64_t i = 0; i < count; i++) {
+            if (i > 0) printf(", ");
+            printf("%ld", elements[i]);
+        }
+        free(elements);
+    }
+    printf("}");
+}
+
+// ============================================================================
+// String Set (PyStrSet) - stores string pointers instead of int64_t
+// ============================================================================
+
+typedef struct {
+    char* key;
+    uint8_t state;
+} StrSetEntry;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    StrSetEntry* entries;
+} PyStrSet;
+
+// Simple string hash function (djb2)
+static uint64_t hash_str(const char* str) {
+    uint64_t hash = 5381;
+    int c;
+    while ((c = *str++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
+
+static int64_t str_set_find_slot(PyStrSet* set, const char* key, int for_insert) {
+    uint64_t h = hash_str(key);
+    int64_t mask = set->capacity - 1;
+    int64_t index = h & mask;
+    int64_t first_deleted = -1;
+
+    for (int64_t i = 0; i < set->capacity; i++) {
+        StrSetEntry* entry = &set->entries[index];
+        if (entry->state == SET_EMPTY) {
+            return for_insert ? (first_deleted >= 0 ? first_deleted : index) : -1;
+        }
+        if (entry->state == SET_DELETED) {
+            if (first_deleted < 0) first_deleted = index;
+        } else if (strcmp(entry->key, key) == 0) {
+            return index;
+        }
+        index = (index + 1) & mask;
+    }
+    return for_insert ? (first_deleted >= 0 ? first_deleted : -1) : -1;
+}
+
+static void str_set_grow(PyStrSet* set) {
+    int64_t old_capacity = set->capacity;
+    StrSetEntry* old_entries = set->entries;
+
+    set->capacity *= 2;
+    set->entries = (StrSetEntry*)calloc(set->capacity, sizeof(StrSetEntry));
+    set->len = 0;
+
+    for (int64_t i = 0; i < old_capacity; i++) {
+        if (old_entries[i].state == SET_OCCUPIED) {
+            int64_t slot = str_set_find_slot(set, old_entries[i].key, 1);
+            set->entries[slot].key = old_entries[i].key;
+            set->entries[slot].state = SET_OCCUPIED;
+            set->len++;
+        }
+    }
+    free(old_entries);
+}
+
+PyStrSet* str_set_new(void) {
+    PyStrSet* set = (PyStrSet*)malloc(sizeof(PyStrSet));
+    if (set == NULL) return NULL;
+    set->capacity = INITIAL_CAPACITY;
+    set->len = 0;
+    set->entries = (StrSetEntry*)calloc(set->capacity, sizeof(StrSetEntry));
+    if (set->entries == NULL) {
+        free(set);
+        return NULL;
+    }
+    return set;
+}
+
+void str_set_add(PyStrSet* set, const char* key) {
+    if (set == NULL || key == NULL) return;
+
+    if ((double)set->len / set->capacity >= LOAD_FACTOR) {
+        str_set_grow(set);
+    }
+
+    int64_t slot = str_set_find_slot(set, key, 1);
+    if (slot < 0) return;
+
+    if (set->entries[slot].state != SET_OCCUPIED) {
+        set->entries[slot].key = strdup(key);
+        set->entries[slot].state = SET_OCCUPIED;
+        set->len++;
+    }
+}
+
+int64_t str_set_contains(PyStrSet* set, const char* key) {
+    if (set == NULL || key == NULL) return 0;
+    int64_t slot = str_set_find_slot(set, key, 0);
+    return slot >= 0 ? 1 : 0;
+}
+
+// Create string set from a string (unique characters)
+PyStrSet* str_set_from_str(const char* s) {
+    PyStrSet* result = str_set_new();
+    if (result == NULL || s == NULL) return result;
+
+    size_t len = strlen(s);
+    for (size_t i = 0; i < len; i++) {
+        char single[2] = { s[i], '\0' };
+        str_set_add(result, single);
+    }
+    return result;
+}
+
+// Comparison function for qsort (strings)
+static int cmp_str(const void* a, const void* b) {
+    return strcmp(*(const char**)a, *(const char**)b);
+}
+
+// Print string set: {'h', 'e', 'l', 'o'}
+void print_str_set(PyStrSet* set) {
+    if (set != NULL && set->len == 0) {
+        printf("set()");
+        return;
+    }
+    printf("{");
+    if (set != NULL && set->len > 0) {
+        // Collect and sort strings
+        char** elements = (char**)malloc(set->len * sizeof(char*));
+        int64_t count = 0;
+        for (int64_t i = 0; i < set->capacity; i++) {
+            if (set->entries[i].state == SET_OCCUPIED) {
+                elements[count++] = set->entries[i].key;
+            }
+        }
+        qsort(elements, count, sizeof(char*), cmp_str);
+        for (int64_t i = 0; i < count; i++) {
+            if (i > 0) printf(", ");
+            printf("'%s'", elements[i]);
+        }
+        free(elements);
     }
     printf("}");
 }
@@ -528,6 +701,94 @@ PyList* set_sorted(PySet* set) {
 
     // Sort
     qsort(result->data, result->len, sizeof(int64_t), compare_int64_set);
+
+    return result;
+}
+
+// ============================================================================
+// Set Construction from Iterables
+// ============================================================================
+
+// Forward declarations for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListFwd;
+
+// Forward declarations for dict
+#define DICT_OCCUPIED_FWD 1
+typedef struct {
+    int64_t key;
+    int64_t value;
+    uint8_t state;
+} DictEntryFwd;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    DictEntryFwd* entries;
+} PyDictFwd;
+
+// Create set from list (of ints)
+PySet* set_from_list(PyListFwd* list) {
+    if (list == NULL) return set_new();
+
+    PySet* result = set_new();
+    if (result == NULL) return NULL;
+
+    for (int64_t i = 0; i < list->len; i++) {
+        set_add(result, list->data[i]);
+    }
+
+    return result;
+}
+
+// Create set from string (each character becomes its ordinal value)
+PySet* set_from_str(const char* s) {
+    if (s == NULL) return set_new();
+
+    PySet* result = set_new();
+    if (result == NULL) return NULL;
+
+    // Use strlen directly (inline to avoid cross-module linking issues)
+    size_t len = strlen(s);
+    for (size_t i = 0; i < len; i++) {
+        // Add character ordinal value
+        set_add(result, (int64_t)(unsigned char)s[i]);
+    }
+
+    return result;
+}
+
+// Create set from bytes (each byte becomes its value)
+PySet* set_from_bytes(const char* s) {
+    if (s == NULL) return set_new();
+
+    PySet* result = set_new();
+    if (result == NULL) return NULL;
+
+    // Use strlen directly (inline to avoid cross-module linking issues)
+    size_t len = strlen(s);
+    for (size_t i = 0; i < len; i++) {
+        set_add(result, (int64_t)(unsigned char)s[i]);
+    }
+
+    return result;
+}
+
+// Create set from dict (uses int keys)
+PySet* set_from_dict(PyDictFwd* dict) {
+    if (dict == NULL) return set_new();
+
+    PySet* result = set_new();
+    if (result == NULL) return NULL;
+
+    // Iterate over all occupied slots in dict
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_FWD) {
+            set_add(result, dict->entries[i].key);
+        }
+    }
 
     return result;
 }

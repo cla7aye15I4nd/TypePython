@@ -93,6 +93,10 @@ impl<'ctx> CodeGen<'ctx> {
     /// Generate set() builtin call
     /// set() -> empty set[int] (default element type)
     /// set(existing_set) -> copy of existing_set
+    /// set(str) -> set of character ordinal values
+    /// set(bytes) -> set of byte values
+    /// set(list) -> set of list elements
+    /// set(dict) -> set of dict keys
     pub fn generate_set_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
         if args.is_empty() {
             // Create empty set with default int element type
@@ -114,25 +118,89 @@ impl<'ctx> CodeGen<'ctx> {
         // Generate the argument value
         let arg_val = self.evaluate_expression(&args[0])?;
 
-        // If argument is a set, create a copy
-        if let PyType::Set(elem_type) = &arg_val.ty {
-            let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
-            let call_site = self
-                .builder
-                .build_call(set_copy_fn, &[arg_val.value().into()], "set_copy")
-                .unwrap();
-            let set_ptr = self.extract_ptr_call_result(call_site);
-
-            return Ok(PyValue::new(
-                set_ptr.value(),
-                PyType::Set(elem_type.clone()),
-                None,
-            ));
+        match &arg_val.ty {
+            PyType::Set(elem_type) => {
+                // Copy existing set
+                let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
+                let call_site = self
+                    .builder
+                    .build_call(set_copy_fn, &[arg_val.value().into()], "set_copy")
+                    .unwrap();
+                let set_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    set_ptr.value(),
+                    PyType::Set(elem_type.clone()),
+                    None,
+                ))
+            }
+            PyType::Str => {
+                // set("hello") -> {'h', 'e', 'l', 'o'} (single-char strings)
+                let set_from_str_fn = self.get_or_declare_c_builtin("str_set_from_str");
+                let call_site = self
+                    .builder
+                    .build_call(
+                        set_from_str_fn,
+                        &[arg_val.value().into()],
+                        "str_set_from_str",
+                    )
+                    .unwrap();
+                let set_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    set_ptr.value(),
+                    PyType::Set(Box::new(PyType::Str)),
+                    None,
+                ))
+            }
+            PyType::Bytes => {
+                // set(b"hello") -> {104, 101, 108, 111} (byte values)
+                let set_from_bytes_fn = self.get_or_declare_c_builtin("set_from_bytes");
+                let call_site = self
+                    .builder
+                    .build_call(
+                        set_from_bytes_fn,
+                        &[arg_val.value().into()],
+                        "set_from_bytes",
+                    )
+                    .unwrap();
+                let set_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    set_ptr.value(),
+                    PyType::Set(Box::new(PyType::Int)),
+                    None,
+                ))
+            }
+            PyType::List(elem_type) => {
+                // set([1, 2, 3]) -> {1, 2, 3}
+                let set_from_list_fn = self.get_or_declare_c_builtin("set_from_list");
+                let call_site = self
+                    .builder
+                    .build_call(set_from_list_fn, &[arg_val.value().into()], "set_from_list")
+                    .unwrap();
+                let set_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    set_ptr.value(),
+                    PyType::Set(elem_type.clone()),
+                    None,
+                ))
+            }
+            PyType::Dict(key_type, _) => {
+                // set({"a": 1}) -> {"a"} (set of keys)
+                let set_from_dict_fn = self.get_or_declare_c_builtin("set_from_dict");
+                let call_site = self
+                    .builder
+                    .build_call(set_from_dict_fn, &[arg_val.value().into()], "set_from_dict")
+                    .unwrap();
+                let set_ptr = self.extract_ptr_call_result(call_site);
+                Ok(PyValue::new(
+                    set_ptr.value(),
+                    PyType::Set(key_type.clone()),
+                    None,
+                ))
+            }
+            _ => Err(format!(
+                "set() argument must be an iterable, got {:?}",
+                arg_val.ty
+            )),
         }
-
-        Err(format!(
-            "set() argument must be a set, got {:?}",
-            arg_val.ty
-        ))
     }
 }

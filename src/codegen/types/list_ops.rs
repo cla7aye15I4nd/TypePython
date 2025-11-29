@@ -65,6 +65,32 @@ pub fn binary_op<'a, 'ctx>(
                     None,
                 ))
             }
+            PyType::Bool => {
+                // Coerce Bool to Int and repeat
+                let repeat_count = cg
+                    .builder
+                    .build_int_z_extend(
+                        rhs.runtime_value().into_int_value(),
+                        cg.ctx.i64_type(),
+                        "btoi",
+                    )
+                    .unwrap();
+                let repeat_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_repeat");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        repeat_fn,
+                        &[lhs_ptr.into(), repeat_count.into()],
+                        "list_repeat",
+                    )
+                    .unwrap();
+                let result = extract_ptr_result(call_site, "list_repeat");
+                Ok(PyValue::new(
+                    result,
+                    PyType::List(Box::new(lhs_elem_type)),
+                    None,
+                ))
+            }
             _ => Err(format!("Cannot multiply list by {:?}", rhs.ty)),
         },
 
@@ -116,6 +142,117 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false).into())),
+        },
+
+        // List comparisons: [1, 2] < [1, 3], etc. (lexicographic)
+        BinaryOp::Lt => match &rhs.ty {
+            PyType::List(_) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let call_site = cg
+                    .builder
+                    .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_cmp");
+                // result < 0 means lhs < rhs
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SLT,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "list_lt",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare list with {:?}", rhs.ty)),
+        },
+        BinaryOp::Le => match &rhs.ty {
+            PyType::List(_) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let call_site = cg
+                    .builder
+                    .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_cmp");
+                // result <= 0 means lhs <= rhs
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SLE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "list_le",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare list with {:?}", rhs.ty)),
+        },
+        BinaryOp::Gt => match &rhs.ty {
+            PyType::List(_) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let call_site = cg
+                    .builder
+                    .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_cmp");
+                // result > 0 means lhs > rhs
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SGT,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "list_gt",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare list with {:?}", rhs.ty)),
+        },
+        BinaryOp::Ge => match &rhs.ty {
+            PyType::List(_) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let call_site = cg
+                    .builder
+                    .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
+                    .unwrap();
+                let result = extract_int_result(call_site, "list_cmp");
+                // result >= 0 means lhs >= rhs
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::SGE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "list_ge",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            _ => Err(format!("Cannot compare list with {:?}", rhs.ty)),
+        },
+
+        // Membership: list in list is checking if the left list is an element of the right list
+        // For homogeneous int lists, this is always False (can't have nested lists)
+        BinaryOp::In => match &rhs.ty {
+            PyType::List(_) => {
+                // list in list - always False for int lists (no nesting)
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+            }
+            _ => Err(format!("Cannot use 'in' with list and {:?}", rhs.ty)),
+        },
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::List(_) => {
+                // list not in list - always True for int lists (no nesting)
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with list and {:?}", rhs.ty)),
         },
 
         _ => Err(format!("Operator {:?} not supported on list", op)),

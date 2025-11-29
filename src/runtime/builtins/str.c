@@ -1052,6 +1052,22 @@ sds int_to_str(int64_t n) {
 sds float_to_str(double f) {
     char buf[64];
     snprintf(buf, sizeof(buf), "%g", f);
+    // Python always shows decimal point for floats: str(1.0) -> "1.0", not "1"
+    // Check if result contains '.' or 'e'/'E' (scientific notation)
+    int has_decimal = 0;
+    for (int i = 0; buf[i] != '\0'; i++) {
+        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+            has_decimal = 1;
+            break;
+        }
+    }
+    if (!has_decimal) {
+        // Append ".0" to make it look like a float
+        size_t len = strlen(buf);
+        buf[len] = '.';
+        buf[len+1] = '0';
+        buf[len+2] = '\0';
+    }
     return sdsnew(buf);
 }
 
@@ -1250,5 +1266,299 @@ sds str_reversed(const char* s) {
     return str_reverse(s);  // Already implemented above
 }
 
-// Sorted returns a list of characters - needs list operations
-// This will be handled by list_sorted on a converted list
+// Forward declaration for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListSort;
+
+// External list function
+extern PyListSort* list_with_capacity(int64_t capacity);
+
+// Helper for int comparison in qsort
+static int cmp_int64_sort(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Return sorted list of character ordinal values
+PyListSort* str_sorted(const char* s) {
+    if (s == NULL || strlen(s) == 0) {
+        PyListSort* result = list_with_capacity(0);
+        if (result) result->len = 0;
+        return result;
+    }
+
+    size_t len = strlen(s);
+    PyListSort* result = list_with_capacity((int64_t)len);
+    if (result == NULL) return NULL;
+
+    // Convert characters to ordinal values
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    result->len = (int64_t)len;
+
+    // Sort the ordinal values
+    qsort(result->data, len, sizeof(int64_t), cmp_int64_sort);
+
+    return result;
+}
+
+// ============================================================================
+// String Repetition
+// ============================================================================
+
+// Repeat string n times: "abc" * 3 -> "abcabcabc"
+sds str_repeat(const char* s, int64_t n) {
+    if (s == NULL || n <= 0) return sdsempty();
+
+    size_t len = strlen(s);
+    if (len == 0) return sdsempty();
+
+    sds result = sdsnewlen(NULL, len * n);
+    if (result == NULL) return sdsempty();
+
+    for (int64_t i = 0; i < n; i++) {
+        memcpy(result + (i * len), s, len);
+    }
+    result[len * n] = '\0';
+
+    return result;
+}
+
+// ============================================================================
+// Min/Max Functions
+// ============================================================================
+
+// Return minimum character in string (as single-char string)
+sds str_min(const char* s) {
+    size_t len = strlen(s);
+    if (len == 0) return sdsempty();  // Empty string
+
+    unsigned char min_char = (unsigned char)s[0];
+    for (size_t i = 1; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c < min_char) min_char = c;
+    }
+
+    char buf[2] = {min_char, '\0'};
+    return sdsnew(buf);
+}
+
+// Return maximum character in string (as single-char string)
+sds str_max(const char* s) {
+    size_t len = strlen(s);
+    if (len == 0) return sdsempty();  // Empty string
+
+    unsigned char max_char = (unsigned char)s[0];
+    for (size_t i = 1; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c > max_char) max_char = c;
+    }
+
+    char buf[2] = {max_char, '\0'};
+    return sdsnew(buf);
+}
+
+// ============================================================================
+// str() conversion functions
+// ============================================================================
+
+// Forward declarations for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListStr;
+
+// Forward declarations for set
+#define SET_OCCUPIED_STR 1
+typedef struct {
+    int64_t key;
+    uint8_t state;
+} SetEntryStr;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    SetEntryStr* entries;
+} PySetStr;
+
+// Forward declarations for dict
+#define DICT_OCCUPIED_STR 1
+typedef struct {
+    int64_t key;
+    int64_t value;
+    uint8_t state;
+} DictEntryStr;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    DictEntryStr* entries;
+} PyDictStr;
+
+// Convert bytes to str (returns b'...' representation)
+sds bytes_to_str(const char* bytes) {
+    if (bytes == NULL) return sdsnew("b''");
+
+    size_t len = strlen(bytes);
+    sds result = sdsnew("b'");
+    result = sdscatlen(result, bytes, len);
+    result = sdscat(result, "'");
+    return result;
+}
+
+// Convert None to str
+sds none_to_str(void) {
+    return sdsnew("None");
+}
+
+// Helper for int comparison in qsort
+static int cmp_int64_str(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Convert list to str
+sds list_to_str(PyListStr* list) {
+    if (list == NULL || list->len == 0) return sdsnew("[]");
+
+    sds result = sdsnew("[");
+    for (int64_t i = 0; i < list->len; i++) {
+        if (i > 0) result = sdscat(result, ", ");
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", (long long)list->data[i]);
+        result = sdscat(result, buf);
+    }
+    result = sdscat(result, "]");
+    return result;
+}
+
+// Convert set to str
+sds set_to_str(PySetStr* set) {
+    if (set == NULL || set->len == 0) return sdsnew("set()");
+
+    // Collect elements
+    int64_t* elements = malloc(set->len * sizeof(int64_t));
+    if (elements == NULL) return sdsnew("set()");
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < set->capacity && j < set->len; i++) {
+        if (set->entries[i].state == SET_OCCUPIED_STR) {
+            elements[j++] = set->entries[i].key;
+        }
+    }
+
+    // Sort elements for consistent output
+    qsort(elements, j, sizeof(int64_t), cmp_int64_str);
+
+    sds result = sdsnew("{");
+    for (int64_t i = 0; i < j; i++) {
+        if (i > 0) result = sdscat(result, ", ");
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", (long long)elements[i]);
+        result = sdscat(result, buf);
+    }
+    result = sdscat(result, "}");
+
+    free(elements);
+    return result;
+}
+
+// Convert dict to str
+sds dict_to_str(PyDictStr* dict) {
+    if (dict == NULL || dict->len == 0) return sdsnew("{}");
+
+    // Collect key-value pairs
+    typedef struct {
+        int64_t key;
+        int64_t value;
+    } KVPair;
+    KVPair* pairs = malloc(dict->len * sizeof(KVPair));
+    if (pairs == NULL) return sdsnew("{}");
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_STR) {
+            pairs[j].key = dict->entries[i].key;
+            pairs[j].value = dict->entries[i].value;
+            j++;
+        }
+    }
+
+    // Sort by key for consistent output
+    qsort(pairs, j, sizeof(KVPair), cmp_int64_str);
+
+    sds result = sdsnew("{");
+    for (int64_t i = 0; i < j; i++) {
+        if (i > 0) result = sdscat(result, ", ");
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%lld: %lld", (long long)pairs[i].key, (long long)pairs[i].value);
+        result = sdscat(result, buf);
+    }
+    result = sdscat(result, "}");
+
+    free(pairs);
+    return result;
+}
+
+// Convert string-keyed dict to str
+typedef struct {
+    char* key;
+    int64_t value;
+    uint8_t state;
+} StrDictEntryStr;
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    StrDictEntryStr* entries;
+} PyStrDictStr;
+
+// Helper for string comparison in qsort
+static int cmp_str_entry(const void* a, const void* b) {
+    const StrDictEntryStr* ea = a;
+    const StrDictEntryStr* eb = b;
+    return strcmp(ea->key, eb->key);
+}
+
+sds str_dict_to_str(PyStrDictStr* dict) {
+    if (dict == NULL || dict->len == 0) return sdsnew("{}");
+
+    // Collect entries
+    StrDictEntryStr* entries = malloc(dict->len * sizeof(StrDictEntryStr));
+    if (entries == NULL) return sdsnew("{}");
+
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_STR) {
+            entries[j] = dict->entries[i];
+            j++;
+        }
+    }
+
+    // Sort by key for consistent output
+    qsort(entries, j, sizeof(StrDictEntryStr), cmp_str_entry);
+
+    sds result = sdsnew("{");
+    for (int64_t i = 0; i < j; i++) {
+        if (i > 0) result = sdscat(result, ", ");
+        // Format "'key': value"
+        result = sdscat(result, "'");
+        result = sdscat(result, entries[i].key);
+        result = sdscat(result, "': ");
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", (long long)entries[i].value);
+        result = sdscat(result, buf);
+    }
+    result = sdscat(result, "}");
+
+    free(entries);
+    return result;
+}

@@ -7,4 +7,11 @@ b2_len_list = len([1, 2, 3])
 b3_len_dict = len({"a": 1})
 b4_len_set = len({1, 2, 3})
 
+# Print all variables
+print("b0_len_str:", b0_len_str)
+print("b1_len_bytes:", b1_len_bytes)
+print("b2_len_list:", b2_len_list)
+print("b3_len_dict:", b3_len_dict)
+print("b4_len_set:", b4_len_set)
+
 print("len() tests passed!")

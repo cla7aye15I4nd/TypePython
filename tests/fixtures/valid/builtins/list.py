@@ -7,4 +7,11 @@ b2_list_list = list([1, 2, 3])
 b3_list_dict = list({"a": 1})
 b4_list_set = list({1, 2, 3})
 
+# Print all variables
+print("b0_list_str:", b0_list_str)
+print("b1_list_bytes:", b1_list_bytes)
+print("b2_list_list:", b2_list_list)
+print("b3_list_dict:", b3_list_dict)
+print("b4_list_set:", b4_list_set)
+
 print("list() tests passed!")

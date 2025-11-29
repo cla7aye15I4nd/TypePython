@@ -162,6 +162,15 @@ int64_t dict_contains(PyDict* dict, int64_t key) {
     return find_slot(dict, key, 0) >= 0 ? 1 : 0;
 }
 
+// Check if float key exists (treats keys as doubles)
+int64_t dict_contains_float(PyDict* dict, double key) {
+    if (dict == NULL) return 0;
+    // Type-pun the double as int64_t for hashing
+    union { double d; int64_t i; } u;
+    u.d = key;
+    return find_slot(dict, u.i, 0) >= 0 ? 1 : 0;
+}
+
 // Get with default value
 int64_t dict_get(PyDict* dict, int64_t key, int64_t default_val) {
     if (dict == NULL) return default_val;
@@ -325,4 +334,286 @@ void print_dict(PyDict* dict) {
         }
     }
     printf("}");
+}
+
+// ============================================================================
+// String-Keyed Dict (PyStrDict)
+// ============================================================================
+
+typedef struct {
+    char* key;
+    int64_t value;
+    uint8_t state;
+} StrDictEntry;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    StrDictEntry* entries;
+} PyStrDict;
+
+// Hash function for string keys (djb2)
+static uint64_t hash_str(const char* key) {
+    uint64_t hash = 5381;
+    int c;
+    while ((c = *key++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
+
+static int64_t str_dict_find_slot(PyStrDict* dict, const char* key, int for_insert) {
+    uint64_t hash = hash_str(key);
+    int64_t mask = dict->capacity - 1;
+    int64_t index = hash & mask;
+    int64_t first_deleted = -1;
+
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        StrDictEntry* entry = &dict->entries[index];
+        if (entry->state == DICT_EMPTY) {
+            return for_insert ? (first_deleted >= 0 ? first_deleted : index) : -1;
+        }
+        if (entry->state == DICT_DELETED) {
+            if (first_deleted < 0) first_deleted = index;
+        } else if (strcmp(entry->key, key) == 0) {
+            return index;
+        }
+        index = (index + 1) & mask;
+    }
+    return for_insert ? first_deleted : -1;
+}
+
+static PyStrDict* str_dict_resize(PyStrDict* dict, int64_t new_capacity) {
+    StrDictEntry* old_entries = dict->entries;
+    int64_t old_capacity = dict->capacity;
+
+    dict->entries = (StrDictEntry*)calloc(new_capacity, sizeof(StrDictEntry));
+    if (dict->entries == NULL) {
+        dict->entries = old_entries;
+        return NULL;
+    }
+    dict->capacity = new_capacity;
+    dict->len = 0;
+
+    for (int64_t i = 0; i < old_capacity; i++) {
+        if (old_entries[i].state == DICT_OCCUPIED) {
+            int64_t slot = str_dict_find_slot(dict, old_entries[i].key, 1);
+            dict->entries[slot].key = old_entries[i].key;
+            dict->entries[slot].value = old_entries[i].value;
+            dict->entries[slot].state = DICT_OCCUPIED;
+            dict->len++;
+        }
+    }
+
+    free(old_entries);
+    return dict;
+}
+
+PyStrDict* str_dict_new(void) {
+    PyStrDict* dict = (PyStrDict*)malloc(sizeof(PyStrDict));
+    if (dict == NULL) return NULL;
+    dict->len = 0;
+    dict->capacity = INITIAL_CAPACITY;
+    dict->entries = (StrDictEntry*)calloc(INITIAL_CAPACITY, sizeof(StrDictEntry));
+    if (dict->entries == NULL) {
+        free(dict);
+        return NULL;
+    }
+    return dict;
+}
+
+void str_dict_setitem(PyStrDict* dict, const char* key, int64_t value) {
+    if (dict == NULL) return;
+
+    if ((double)dict->len / dict->capacity >= LOAD_FACTOR) {
+        str_dict_resize(dict, dict->capacity * 2);
+    }
+
+    int64_t slot = str_dict_find_slot(dict, key, 1);
+    if (slot < 0) return;
+
+    if (dict->entries[slot].state != DICT_OCCUPIED) {
+        dict->entries[slot].key = strdup(key);
+        dict->len++;
+    }
+    dict->entries[slot].value = value;
+    dict->entries[slot].state = DICT_OCCUPIED;
+}
+
+int64_t str_dict_getitem(PyStrDict* dict, const char* key) {
+    if (dict == NULL) return 0;
+    int64_t slot = str_dict_find_slot(dict, key, 0);
+    if (slot < 0) return 0;
+    return dict->entries[slot].value;
+}
+
+int64_t str_dict_contains(PyStrDict* dict, const char* key) {
+    if (dict == NULL) return 0;
+    return str_dict_find_slot(dict, key, 0) >= 0 ? 1 : 0;
+}
+
+int64_t str_dict_len(PyStrDict* dict) {
+    if (dict == NULL) return 0;
+    return dict->len;
+}
+
+// Find min key (lexicographic)
+char* str_dict_min(PyStrDict* dict) {
+    if (dict == NULL || dict->len == 0) return strdup("");
+    char* min_key = NULL;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (min_key == NULL || strcmp(dict->entries[i].key, min_key) < 0) {
+                min_key = dict->entries[i].key;
+            }
+        }
+    }
+    return min_key ? strdup(min_key) : strdup("");
+}
+
+// Find max key (lexicographic)
+char* str_dict_max(PyStrDict* dict) {
+    if (dict == NULL || dict->len == 0) return strdup("");
+    char* max_key = NULL;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (max_key == NULL || strcmp(dict->entries[i].key, max_key) > 0) {
+                max_key = dict->entries[i].key;
+            }
+        }
+    }
+    return max_key ? strdup(max_key) : strdup("");
+}
+
+// Copy a string dict
+PyStrDict* str_dict_copy(PyStrDict* dict) {
+    if (dict == NULL) return str_dict_new();
+    PyStrDict* copy = (PyStrDict*)malloc(sizeof(PyStrDict));
+    if (copy == NULL) return NULL;
+    copy->len = 0;
+    copy->capacity = dict->capacity;
+    copy->entries = (StrDictEntry*)calloc(copy->capacity, sizeof(StrDictEntry));
+    if (copy->entries == NULL) {
+        free(copy);
+        return NULL;
+    }
+    // Copy all entries
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            copy->entries[i].key = strdup(dict->entries[i].key);
+            copy->entries[i].value = dict->entries[i].value;
+            copy->entries[i].state = DICT_OCCUPIED;
+            copy->len++;
+        }
+    }
+    return copy;
+}
+
+// Merge two string dicts: dict1 | dict2
+PyStrDict* str_dict_merge(PyStrDict* dict1, PyStrDict* dict2) {
+    PyStrDict* result = str_dict_copy(dict1);
+    if (result == NULL) return NULL;
+    // Update with dict2 entries
+    if (dict2 != NULL) {
+        for (int64_t i = 0; i < dict2->capacity; i++) {
+            if (dict2->entries[i].state == DICT_OCCUPIED) {
+                str_dict_setitem(result, dict2->entries[i].key, dict2->entries[i].value);
+            }
+        }
+    }
+    return result;
+}
+
+void print_str_dict(PyStrDict* dict) {
+    printf("{");
+    if (dict != NULL) {
+        int first = 1;
+        for (int64_t i = 0; i < dict->capacity; i++) {
+            if (dict->entries[i].state == DICT_OCCUPIED) {
+                if (!first) printf(", ");
+                printf("'%s': %ld", dict->entries[i].key, dict->entries[i].value);
+                first = 0;
+            }
+        }
+    }
+    printf("}");
+}
+
+// ============================================================================
+// Sorted/Reversed Functions
+// ============================================================================
+
+// Forward declaration for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListDict;
+
+// External list function
+extern PyListDict* list_with_capacity(int64_t capacity);
+
+// Helper for int comparison in qsort
+static int cmp_int64_dict(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Return sorted list of dict keys (int-keyed dict)
+PyListDict* dict_sorted(PyDict* dict) {
+    if (dict == NULL || dict->len == 0) {
+        PyListDict* result = list_with_capacity(0);
+        if (result) result->len = 0;
+        return result;
+    }
+
+    PyListDict* result = list_with_capacity(dict->len);
+    if (result == NULL) return NULL;
+
+    // Collect keys
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            result->data[j++] = dict->entries[i].key;
+        }
+    }
+    result->len = j;
+
+    // Sort
+    qsort(result->data, j, sizeof(int64_t), cmp_int64_dict);
+
+    return result;
+}
+
+// Return reversed list of dict keys (reversed insertion order - approximated by reversed sorted)
+PyListDict* dict_reversed(PyDict* dict) {
+    if (dict == NULL || dict->len == 0) {
+        PyListDict* result = list_with_capacity(0);
+        if (result) result->len = 0;
+        return result;
+    }
+
+    PyListDict* result = list_with_capacity(dict->len);
+    if (result == NULL) return NULL;
+
+    // Collect keys
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            result->data[j++] = dict->entries[i].key;
+        }
+    }
+    result->len = j;
+
+    // Reverse in place
+    for (int64_t i = 0; i < j / 2; i++) {
+        int64_t tmp = result->data[i];
+        result->data[i] = result->data[j - 1 - i];
+        result->data[j - 1 - i] = tmp;
+    }
+
+    return result;
 }

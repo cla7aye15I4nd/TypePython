@@ -76,6 +76,20 @@ pub fn binary_op<'a, 'ctx>(
             )),
             _ => Err(format!("Cannot use 'is not' between None and {:?}", rhs.ty)),
         },
+        // Membership: None in list/dict/set - always False (can't have None in int collections)
+        BinaryOp::In => match &rhs.ty {
+            PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+            }
+            _ => Err(format!("Cannot use 'in' with None and {:?}", rhs.ty)),
+        },
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with None and {:?}", rhs.ty)),
+        },
+
         _ => Err(format!("Operator {:?} not supported on None", op)),
     }
 }

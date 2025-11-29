@@ -5,4 +5,9 @@ b0_int_int = int(1)
 b1_int_float = int(1.0)
 b2_int_bool = int(True)
 
+# Print all variables
+print("b0_int_int:", b0_int_int)
+print("b1_int_float:", b1_int_float)
+print("b2_int_bool:", b2_int_bool)
+
 print("int() tests passed!")

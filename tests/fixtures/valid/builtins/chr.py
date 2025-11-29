@@ -4,4 +4,8 @@
 b0_chr_int = chr(1)
 b1_chr_bool = chr(True)
 
+# Print all variables
+print("b0_chr_int:", b0_chr_int)
+print("b1_chr_bool:", b1_chr_bool)
+
 print("chr() tests passed!")

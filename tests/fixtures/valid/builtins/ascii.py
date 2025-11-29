@@ -11,4 +11,15 @@ b6_ascii_dict = ascii({"a": 1})
 b7_ascii_set = ascii({1, 2, 3})
 b8_ascii_none = ascii(None)
 
+# Print all variables
+print("b0_ascii_int:", b0_ascii_int)
+print("b1_ascii_float:", b1_ascii_float)
+print("b2_ascii_bool:", b2_ascii_bool)
+print("b3_ascii_str:", b3_ascii_str)
+print("b4_ascii_bytes:", b4_ascii_bytes)
+print("b5_ascii_list:", b5_ascii_list)
+print("b6_ascii_dict:", b6_ascii_dict)
+print("b7_ascii_set:", b7_ascii_set)
+print("b8_ascii_none:", b8_ascii_none)
+
 print("ascii() tests passed!")

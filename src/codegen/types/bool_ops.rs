@@ -205,10 +205,14 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot logical OR Bool and {:?}", rhs.ty)),
         },
 
-        BinaryOp::In | BinaryOp::NotIn => Err(format!(
-            "Membership operator {:?} not supported on Bool",
-            op
-        )),
+        BinaryOp::In | BinaryOp::NotIn => {
+            // Coerce Bool to Int and delegate to int_ops
+            let lhs_int = cg
+                .builder
+                .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                .unwrap();
+            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+        }
     }
 }
 

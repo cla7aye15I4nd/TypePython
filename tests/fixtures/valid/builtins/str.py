@@ -11,4 +11,15 @@ b6_str_dict = str({"a": 1})
 b7_str_set = str({1, 2, 3})
 b8_str_none = str(None)
 
+# Print all variables
+print("b0_str_int:", b0_str_int)
+print("b1_str_float:", b1_str_float)
+print("b2_str_bool:", b2_str_bool)
+print("b3_str_str:", b3_str_str)
+print("b4_str_bytes:", b4_str_bytes)
+print("b5_str_list:", b5_str_list)
+print("b6_str_dict:", b6_str_dict)
+print("b7_str_set:", b7_str_set)
+print("b8_str_none:", b8_str_none)
+
 print("str() tests passed!")

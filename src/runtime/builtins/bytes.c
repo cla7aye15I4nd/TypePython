@@ -1052,3 +1052,129 @@ int64_t bytes_sum(const char* s, int64_t start) {
     }
     return sum;
 }
+
+// ============================================================================
+// Builtin Functions: min/max
+// ============================================================================
+
+// Return minimum byte value in bytes object
+int64_t bytes_min(const char* s) {
+    if (s == NULL || s[0] == '\0') return 0;  // Empty bytes
+
+    size_t len = strlen(s);
+    unsigned char min_byte = (unsigned char)s[0];
+    for (size_t i = 1; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c < min_byte) min_byte = c;
+    }
+    return (int64_t)min_byte;
+}
+
+// Return maximum byte value in bytes object
+int64_t bytes_max(const char* s) {
+    if (s == NULL || s[0] == '\0') return 0;  // Empty bytes
+
+    size_t len = strlen(s);
+    unsigned char max_byte = (unsigned char)s[0];
+    for (size_t i = 1; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c > max_byte) max_byte = c;
+    }
+    return (int64_t)max_byte;
+}
+
+// ============================================================================
+// Sorted/Reversed Functions
+// ============================================================================
+
+// Forward declaration for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListBytes;
+
+// External list function
+extern PyListBytes* list_with_capacity(int64_t capacity);
+
+// Helper for int comparison in qsort
+static int cmp_int64_bytes(const void* a, const void* b) {
+    int64_t va = *(const int64_t*)a;
+    int64_t vb = *(const int64_t*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Return sorted list of byte values
+PyListBytes* bytes_sorted(const char* s) {
+    if (s == NULL || strlen(s) == 0) {
+        PyListBytes* result = list_with_capacity(0);
+        if (result) result->len = 0;
+        return result;
+    }
+
+    size_t len = strlen(s);
+    PyListBytes* result = list_with_capacity((int64_t)len);
+    if (result == NULL) return NULL;
+
+    // Convert bytes to values
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    result->len = (int64_t)len;
+
+    // Sort
+    qsort(result->data, len, sizeof(int64_t), cmp_int64_bytes);
+
+    return result;
+}
+
+// Return reversed bytes
+sds bytes_reversed(const char* s) {
+    if (s == NULL) return sdsempty();
+
+    size_t len = strlen(s);
+    if (len == 0) return sdsempty();
+
+    sds result = sdsnewlen(NULL, len);
+    if (result == NULL) return NULL;
+
+    for (size_t i = 0; i < len; i++) {
+        result[i] = s[len - 1 - i];
+    }
+    result[len] = '\0';
+
+    return result;
+}
+
+// Repeat bytes n times: b"abc" * 3 -> b"abcabcabc"
+sds bytes_repeat(const char* s, int64_t n) {
+    if (s == NULL || n <= 0) return sdsempty();
+
+    size_t len = strlen(s);
+    if (len == 0) return sdsempty();
+
+    sds result = sdsnewlen(NULL, len * n);
+    if (result == NULL) return sdsempty();
+
+    for (int64_t i = 0; i < n; i++) {
+        memcpy(result + (i * len), s, len);
+    }
+    result[len * n] = '\0';
+
+    return result;
+}
+
+// Check if a byte value is contained in bytes: 104 in b"hello" -> 1
+int64_t bytes_contains_byte(const char* s, int64_t byte_value) {
+    if (s == NULL) return 0;
+
+    unsigned char target = (unsigned char)byte_value;
+    size_t len = strlen(s);
+
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)s[i] == target) return 1;
+    }
+    return 0;
+}

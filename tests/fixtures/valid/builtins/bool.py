@@ -11,4 +11,15 @@ b6_bool_dict = bool({"a": 1})
 b7_bool_set = bool({1, 2, 3})
 b8_bool_none = bool(None)
 
+# Print all variables
+print("b0_bool_int:", b0_bool_int)
+print("b1_bool_float:", b1_bool_float)
+print("b2_bool_bool:", b2_bool_bool)
+print("b3_bool_str:", b3_bool_str)
+print("b4_bool_bytes:", b4_bool_bytes)
+print("b5_bool_list:", b5_bool_list)
+print("b6_bool_dict:", b6_bool_dict)
+print("b7_bool_set:", b7_bool_set)
+print("b8_bool_none:", b8_bool_none)
+
 print("bool() tests passed!")

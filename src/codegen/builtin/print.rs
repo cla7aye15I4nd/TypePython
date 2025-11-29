@@ -55,9 +55,32 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Str => "print_str",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
-            PyType::List(_) => "print_list",
-            PyType::Dict(_, _) => "print_dict",
-            PyType::Set(_) => "print_set",
+            PyType::List(elem_ty) => match elem_ty.as_ref() {
+                PyType::Float => "print_list_float",
+                PyType::Str => "print_str_list",
+                _ => "print_list",
+            },
+            PyType::Tuple(elem_ty) => {
+                if matches!(elem_ty.as_ref(), PyType::Float) {
+                    "print_tuple_float"
+                } else {
+                    "print_tuple_int"
+                }
+            }
+            PyType::Dict(key_ty, _) => {
+                if matches!(key_ty.as_ref(), PyType::Str) {
+                    "print_str_dict"
+                } else {
+                    "print_dict"
+                }
+            }
+            PyType::Set(elem_ty) => {
+                if matches!(elem_ty.as_ref(), PyType::Str) {
+                    "print_str_set"
+                } else {
+                    "print_set"
+                }
+            }
             _ => "print_int", // fallback
         }
     }

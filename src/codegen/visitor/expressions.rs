@@ -157,14 +157,6 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         pairs: &[(Expression, Expression)],
     ) -> Result<PyValue<'ctx>, String> {
-        // Create a new empty dict
-        let dict_new_fn = self.get_or_declare_c_builtin("dict_new");
-        let call_site = self
-            .builder
-            .build_call(dict_new_fn, &[], "dict_new")
-            .unwrap();
-        let dict_ptr = self.extract_ptr_call_result(call_site).value();
-
         // Infer key/value types from first pair (or default to Int for empty dict)
         let (key_type, val_type) = if pairs.is_empty() {
             (PyType::Int, PyType::Int)
@@ -174,8 +166,28 @@ impl<'ctx> CodeGen<'ctx> {
             (first_key.ty.clone(), first_val.ty.clone())
         };
 
+        // Select the appropriate dict type based on key type
+        let is_str_keyed = matches!(key_type, PyType::Str);
+
+        // Create a new empty dict
+        let dict_new_fn = if is_str_keyed {
+            self.get_or_declare_c_builtin("str_dict_new")
+        } else {
+            self.get_or_declare_c_builtin("dict_new")
+        };
+        let call_site = self
+            .builder
+            .build_call(dict_new_fn, &[], "dict_new")
+            .unwrap();
+        let dict_ptr = self.extract_ptr_call_result(call_site).value();
+
         // Set each key-value pair
-        let dict_setitem_fn = self.get_or_declare_c_builtin("dict_setitem");
+        let dict_setitem_fn = if is_str_keyed {
+            self.get_or_declare_c_builtin("str_dict_setitem")
+        } else {
+            self.get_or_declare_c_builtin("dict_setitem")
+        };
+
         for (key_expr, val_expr) in pairs {
             let key_val = self.evaluate_expression(key_expr)?;
             let val_val = self.evaluate_expression(val_expr)?;

@@ -105,6 +105,52 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
+            PyType::Str => {
+                // Int * Str -> Str (string repetition)
+                let str_repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_repeat");
+                let call = cg
+                    .builder
+                    .build_call(
+                        str_repeat_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "str_repeat",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call,
+                    "str_repeat",
+                )))
+            }
+            PyType::Bytes => {
+                // Int * Bytes -> Bytes (bytes repetition)
+                let bytes_repeat_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_repeat");
+                let call = cg
+                    .builder
+                    .build_call(
+                        bytes_repeat_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "bytes_repeat",
+                    )
+                    .unwrap();
+                let result = super::extract_ptr_result(call, "bytes_repeat");
+                Ok(PyValue::new(result, PyType::Bytes, None))
+            }
+            PyType::List(elem_type) => {
+                // Int * List -> List (list repetition)
+                let list_repeat_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "list_repeat");
+                let call = cg
+                    .builder
+                    .build_call(
+                        list_repeat_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "list_repeat",
+                    )
+                    .unwrap();
+                let result = super::extract_ptr_result(call, "list_repeat");
+                Ok(PyValue::new(result, PyType::List(elem_type.clone()), None))
+            }
             _ => Err(format!("Cannot multiply Int and {:?}", rhs.ty)),
         },
         BinaryOp::Div => {
@@ -363,7 +409,10 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let result = cg.builder.build_left_shift(lhs_int, rhs_int, "lshift").unwrap();
+                let result = cg
+                    .builder
+                    .build_left_shift(lhs_int, rhs_int, "lshift")
+                    .unwrap();
                 Ok(PyValue::int(result.into()))
             }
             _ => Err(format!("Cannot left shift Int by {:?}", rhs.ty)),
@@ -390,7 +439,10 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let result = cg.builder.build_right_shift(lhs_int, rhs_int, true, "rshift").unwrap();
+                let result = cg
+                    .builder
+                    .build_right_shift(lhs_int, rhs_int, true, "rshift")
+                    .unwrap();
                 Ok(PyValue::int(result.into()))
             }
             _ => Err(format!("Cannot right shift Int by {:?}", rhs.ty)),
@@ -737,6 +789,28 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
+            PyType::Bytes => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains_byte");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "bytes_contains_byte",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "bytes_contains_byte");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
             _ => Err(format!("Cannot use 'in' with Int and {:?}", rhs.ty)),
         },
 
@@ -796,6 +870,28 @@ pub fn binary_op<'a, 'ctx>(
                     )
                     .unwrap();
                 let result = extract_int_result(call_site, "dict_contains");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result.into_int_value(),
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val.into()))
+            }
+            PyType::Bytes => {
+                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains_byte");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "bytes_contains_byte",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "bytes_contains_byte");
                 let bool_val = cg
                     .builder
                     .build_int_compare(

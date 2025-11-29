@@ -11,4 +11,15 @@ b6_divmod_bool_int = divmod(True, 1)
 b7_divmod_bool_float = divmod(True, 1.0)
 b8_divmod_bool_bool = divmod(True, True)
 
+# Print all variables
+print("b0_divmod_int_int:", b0_divmod_int_int)
+print("b1_divmod_int_float:", b1_divmod_int_float)
+print("b2_divmod_int_bool:", b2_divmod_int_bool)
+print("b3_divmod_float_int:", b3_divmod_float_int)
+print("b4_divmod_float_float:", b4_divmod_float_float)
+print("b5_divmod_float_bool:", b5_divmod_float_bool)
+print("b6_divmod_bool_int:", b6_divmod_bool_int)
+print("b7_divmod_bool_float:", b7_divmod_bool_float)
+print("b8_divmod_bool_bool:", b8_divmod_bool_bool)
+
 print("divmod() tests passed!")

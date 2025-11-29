@@ -7,4 +7,11 @@ b2_sorted_list = sorted([1, 2, 3])
 b3_sorted_dict = sorted({"a": 1})
 b4_sorted_set = sorted({1, 2, 3})
 
+# Print all variables
+print("b0_sorted_str:", b0_sorted_str)
+print("b1_sorted_bytes:", b1_sorted_bytes)
+print("b2_sorted_list:", b2_sorted_list)
+print("b3_sorted_dict:", b3_sorted_dict)
+print("b4_sorted_set:", b4_sorted_set)
+
 print("sorted() tests passed!")

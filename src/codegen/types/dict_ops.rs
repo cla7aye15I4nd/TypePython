@@ -71,9 +71,18 @@ pub fn binary_op<'a, 'ctx>(
 
         // Dict merge with | operator (Python 3.9+): {1: 2} | {3: 4}
         BinaryOp::BitOr => match &rhs.ty {
-            PyType::Dict(_, _) => {
+            PyType::Dict(rhs_key_type, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let merge_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_merge");
+                // Use str_dict_merge for string-keyed dicts
+                let merge_fn_name = match (&lhs.ty, rhs_key_type.as_ref()) {
+                    (PyType::Dict(lhs_key_type, _), _)
+                        if matches!(lhs_key_type.as_ref(), PyType::Str) =>
+                    {
+                        "str_dict_merge"
+                    }
+                    _ => "dict_merge",
+                };
+                let merge_fn = get_or_declare_builtin(cg.module, cg.ctx, merge_fn_name);
                 let call_site = cg
                     .builder
                     .build_call(merge_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_merge")
@@ -82,6 +91,23 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::new(result, lhs.ty.clone(), None))
             }
             _ => Err(format!("Cannot use | between dict and {:?}", rhs.ty)),
+        },
+
+        // Membership: dict in list is checking if the dict is an element of the list
+        // For lists of int, this is always False
+        BinaryOp::In => match &rhs.ty {
+            PyType::List(_) => {
+                // dict in list - always False (can't have dicts in int lists)
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+            }
+            _ => Err(format!("Cannot use 'in' with dict and {:?}", rhs.ty)),
+        },
+        BinaryOp::NotIn => match &rhs.ty {
+            PyType::List(_) => {
+                // dict not in list - always True (can't have dicts in int lists)
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+            }
+            _ => Err(format!("Cannot use 'not in' with dict and {:?}", rhs.ty)),
         },
 
         _ => Err(format!("Operator {:?} not supported on dict", op)),

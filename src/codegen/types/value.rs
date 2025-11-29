@@ -211,6 +211,7 @@ pub enum PyType {
     List(Box<PyType>),              // Element type
     Dict(Box<PyType>, Box<PyType>), // Key type, Value type
     Set(Box<PyType>),               // Element type
+    Tuple(Box<PyType>),             // Element type (for divmod results)
     // Compile-time types (have special LLVM values)
     Function,
     Module,
@@ -442,6 +443,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::List(_) => super::list_ops::binary_op(self, cg, op, rhs),
             PyType::Dict(_, _) => super::dict_ops::binary_op(self, cg, op, rhs),
             PyType::Set(_) => super::set_ops::binary_op(self, cg, op, rhs),
+            PyType::Tuple(_) => Err("Binary operations not supported on tuples".to_string()),
             PyType::Function => Err("Binary operations not supported on functions".to_string()),
             PyType::Module => Err("Binary operations not supported on modules".to_string()),
             PyType::Macro => Err("Binary operations not supported on macros".to_string()),
@@ -468,6 +470,7 @@ impl<'ctx> PyValue<'ctx> {
             PyType::List(_) => super::list_ops::unary_op(self, cg, op),
             PyType::Dict(_, _) => super::dict_ops::unary_op(self, cg, op),
             PyType::Set(_) => super::set_ops::unary_op(self, cg, op),
+            PyType::Tuple(_) => Err(format!("Unary operator {:?} not supported on tuple", op)),
             PyType::Function => Err("Unary operations not supported on functions".to_string()),
             PyType::Module => Err("Unary operations not supported on modules".to_string()),
             PyType::Macro => Err("Unary operations not supported on macros".to_string()),
@@ -488,8 +491,21 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
             PyType::List(_) => "print_list",
-            PyType::Dict(_, _) => "print_dict",
+            PyType::Dict(key_ty, _) => {
+                if matches!(key_ty.as_ref(), PyType::Str) {
+                    "print_str_dict"
+                } else {
+                    "print_dict"
+                }
+            }
             PyType::Set(_) => "print_set",
+            PyType::Tuple(elem_ty) => {
+                if matches!(elem_ty.as_ref(), PyType::Float) {
+                    "print_tuple_float"
+                } else {
+                    "print_tuple_int"
+                }
+            }
             PyType::Function => "print_function",
             PyType::Module => "print_module",
             PyType::Macro => "print_macro",
@@ -544,6 +560,11 @@ impl<'ctx> PyValue<'ctx> {
             PyType::Set(_) => {
                 builder
                     .build_call(print_fn, &[self.runtime_value().into()], "print_set")
+                    .unwrap();
+            }
+            PyType::Tuple(_) => {
+                builder
+                    .build_call(print_fn, &[self.runtime_value().into()], "print_tuple")
                     .unwrap();
             }
             PyType::Function => {
@@ -673,6 +694,10 @@ impl<'ctx> PyValue<'ctx> {
                     .build_int_compare(IntPredicate::NE, len.into_int_value(), zero, "set_to_bool")
                     .unwrap()
                     .into())
+            }
+            PyType::Tuple(_) => {
+                // Non-empty tuple is always truthy (divmod always returns 2 elements)
+                Ok(cg.ctx.bool_type().const_int(1, false).into())
             }
             PyType::Function => {
                 // Functions are always truthy
