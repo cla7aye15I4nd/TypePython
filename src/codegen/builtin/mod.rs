@@ -3,6 +3,7 @@
 //! This module contains all the logic for handling Python builtin functions
 //! that need special codegen treatment (type dispatch, multiple args, etc.)
 
+mod bytes;
 mod math;
 mod print;
 

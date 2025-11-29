@@ -153,7 +153,12 @@ impl<'ctx> CodeGen<'ctx> {
                 let function = function_info.function;
                 let return_type = function_info.return_type;
 
-                let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = Vec::new();
+                // Prepend bound args (for method calls), then add explicit args
+                let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = function_info
+                    .bound_args
+                    .iter()
+                    .map(|v| (*v).into())
+                    .collect();
                 for arg in args {
                     arg_values.push(self.evaluate_expression(arg)?.value().into());
                 }
@@ -208,10 +213,15 @@ impl<'ctx> CodeGen<'ctx> {
                                 function,
                                 param_types: func_info.param_types,
                                 return_type: func_info.return_type,
+                                bound_args: func_info.bound_args,
                             }))
                         } else {
                             Ok(member)
                         }
+                    }
+                    PyType::Bytes => {
+                        // Look up bytes method
+                        self.get_bytes_method(&obj, attr)
                     }
                     _ => Err(format!(
                         "Attribute access not supported for type {:?}",
@@ -228,30 +238,16 @@ impl<'ctx> CodeGen<'ctx> {
                         PyType::Bytes => {
                             let obj_val = obj.value();
                             // bytes[start:stop:step] returns bytes
-                            let len_fn = self.get_or_declare_c_builtin("bytes_len");
-                            let len_call = self
-                                .builder
-                                .build_call(len_fn, &[obj_val.into()], "len")
-                                .unwrap();
-                            let len = self.extract_int_call_result(len_call)?;
+                            let len = self.bytes_len(obj_val)?;
 
                             if let Some(step_expr) = step {
                                 // With step: use bytes_slice_step
                                 let step_val = self.evaluate_expression(step_expr)?;
 
-                                // For negative step, default start is len-1, default end is -len-1
-                                // For positive step, default start is 0, default end is len
-                                // We'll pass special sentinel values and let the C function handle defaults
-                                // Actually, let's compute defaults based on step sign at runtime
-
-                                // Get start value (default depends on step sign)
+                                // Get start value (INT64_MAX as sentinel for "use default")
                                 let start_val = if let Some(s) = start {
                                     self.evaluate_expression(s)?
                                 } else {
-                                    // Use a large positive value as sentinel for "use default"
-                                    // The C code will interpret based on step sign
-                                    // Actually, for simplicity: if step > 0, start=0; if step < 0, start=len-1
-                                    // We need runtime branching for this, so let's use INT64_MAX as sentinel
                                     PyValue::int(
                                         self.context
                                             .i64_type()
@@ -260,11 +256,10 @@ impl<'ctx> CodeGen<'ctx> {
                                     )
                                 };
 
-                                // Get stop value (default depends on step sign)
+                                // Get stop value (INT64_MAX as sentinel for "use default")
                                 let stop_val = if let Some(e) = stop {
                                     self.evaluate_expression(e)?
                                 } else {
-                                    // Use INT64_MAX as sentinel for "use default"
                                     PyValue::int(
                                         self.context
                                             .i64_type()
@@ -273,21 +268,12 @@ impl<'ctx> CodeGen<'ctx> {
                                     )
                                 };
 
-                                let slice_fn = self.get_or_declare_c_builtin("bytes_slice_step");
-                                let call = self
-                                    .builder
-                                    .build_call(
-                                        slice_fn,
-                                        &[
-                                            obj_val.into(),
-                                            start_val.value().into(),
-                                            stop_val.value().into(),
-                                            step_val.value().into(),
-                                        ],
-                                        "bytes_slice_step",
-                                    )
-                                    .unwrap();
-                                self.extract_bytes_call_result(call)
+                                self.bytes_slice_step(
+                                    obj_val,
+                                    start_val.value(),
+                                    stop_val.value(),
+                                    step_val.value(),
+                                )
                             } else {
                                 // No step: use simpler bytes_slice
                                 // Get start value (default 0)
@@ -304,20 +290,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     len
                                 };
 
-                                let slice_fn = self.get_or_declare_c_builtin("bytes_slice");
-                                let call = self
-                                    .builder
-                                    .build_call(
-                                        slice_fn,
-                                        &[
-                                            obj_val.into(),
-                                            start_val.value().into(),
-                                            stop_val.value().into(),
-                                        ],
-                                        "bytes_slice",
-                                    )
-                                    .unwrap();
-                                self.extract_bytes_call_result(call)
+                                self.bytes_slice(obj_val, start_val.value(), stop_val.value())
                             }
                         }
                         _ => Err(format!(
@@ -330,16 +303,7 @@ impl<'ctx> CodeGen<'ctx> {
                     match &obj.ty {
                         PyType::Bytes => {
                             // bytes[index] returns an int (the byte value at that index)
-                            let getitem_fn = self.get_or_declare_c_builtin("bytes_getitem");
-                            let call = self
-                                .builder
-                                .build_call(
-                                    getitem_fn,
-                                    &[obj.value().into(), idx.value().into()],
-                                    "bytes_getitem",
-                                )
-                                .unwrap();
-                            self.extract_int_call_result(call)
+                            self.bytes_getitem(obj.value(), idx.value())
                         }
                         _ => Err(format!(
                             "Subscript operation not supported for type {:?}",

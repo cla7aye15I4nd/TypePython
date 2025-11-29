@@ -72,6 +72,7 @@ impl<'ctx> CodeGen<'ctx> {
                 function,
                 param_types,
                 return_type,
+                bound_args: vec![],
             }));
         }
 

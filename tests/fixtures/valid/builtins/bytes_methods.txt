@@ -1,0 +1,61 @@
+b'HELLO'
+b'hello'
+b'WORLD'
+b'world'
+b'HELLO WORLD'
+b'hello world'
+b'hi   '
+b'hello'
+b'x   '
+b'   hi'
+b'hello'
+b'   x'
+b'  hi  '
+b'  a  '
+b'hello'
+b'00042'
+b'-0042'
+b'hello'
+b'hello'
+b'hello  '
+b'  hello'
+b'hello'
+1
+0
+0
+1
+0
+0
+1
+0
+0
+1
+0
+0
+1
+1
+1
+1
+0
+0
+2
+3
+-1
+0
+3
+2
+2
+0
+1
+0
+1
+1
+1
+0
+1
+1
+b'heLLo'
+b'bonono'
+b'hello'
+b'hello'
+b'hello'

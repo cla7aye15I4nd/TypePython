@@ -45,6 +45,9 @@ pub struct FunctionInfo<'ctx> {
     pub param_types: Vec<PyType>,
     /// Return type
     pub return_type: PyType,
+    /// Bound arguments (prepended to call args at call time)
+    /// Used for method calls where the receiver is pre-bound
+    pub bound_args: Vec<BasicValueEnum<'ctx>>,
 }
 
 impl<'ctx> FunctionInfo<'ctx> {
@@ -95,6 +98,7 @@ impl<'ctx> FunctionInfo<'ctx> {
             function,
             param_types,
             return_type,
+            bound_args: vec![],
         }
     }
 
