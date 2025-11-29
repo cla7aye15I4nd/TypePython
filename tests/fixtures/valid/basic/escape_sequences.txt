@@ -7,6 +7,6 @@ b'bell\x07char'
 b'backspace\x08char'
 b'formfeed\x0cchar'
 b'vertical\x0btab'
-b'apostrophe\'char'
+b"apostrophe'char"
 b'ABC'
 b'ABC'

@@ -34,15 +34,15 @@ fn get_bytes_method_info(name: &str) -> Option<(&'static str, PyType)> {
         "find" => Some(("bytes_find", PyType::Int)),
         "count" => Some(("bytes_count", PyType::Int)),
 
-        // Predicates - return bool (as int)
-        "startswith" => Some(("bytes_startswith", PyType::Int)),
-        "endswith" => Some(("bytes_endswith", PyType::Int)),
-        "isalnum" => Some(("bytes_isalnum", PyType::Int)),
-        "isalpha" => Some(("bytes_isalpha", PyType::Int)),
-        "isdigit" => Some(("bytes_isdigit", PyType::Int)),
-        "isspace" => Some(("bytes_isspace", PyType::Int)),
-        "islower" => Some(("bytes_islower", PyType::Int)),
-        "isupper" => Some(("bytes_isupper", PyType::Int)),
+        // Predicates - return bool
+        "startswith" => Some(("bytes_startswith", PyType::Bool)),
+        "endswith" => Some(("bytes_endswith", PyType::Bool)),
+        "isalnum" => Some(("bytes_isalnum", PyType::Bool)),
+        "isalpha" => Some(("bytes_isalpha", PyType::Bool)),
+        "isdigit" => Some(("bytes_isdigit", PyType::Bool)),
+        "isspace" => Some(("bytes_isspace", PyType::Bool)),
+        "islower" => Some(("bytes_islower", PyType::Bool)),
+        "isupper" => Some(("bytes_isupper", PyType::Bool)),
 
         // Transform - return bytes
         "replace" => Some(("bytes_replace", PyType::Bytes)),

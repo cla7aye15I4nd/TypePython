@@ -101,6 +101,45 @@ int64_t round_int(int64_t value) {
     return value;
 }
 
+// Helper: Python-style banker's rounding (round half to even)
+static double bankers_round(double value) {
+    double int_part;
+    double frac_part = modf(value, &int_part);
+
+    // If fraction is exactly 0.5, round to even
+    if (frac_part == 0.5) {
+        // Round to even: if int_part is odd, round up; if even, round down
+        int64_t int_val = (int64_t)int_part;
+        if (int_val % 2 != 0) {
+            return int_part + 1.0;
+        }
+        return int_part;
+    } else if (frac_part == -0.5) {
+        // Negative: if int_part is odd (in magnitude), round away from zero
+        int64_t int_val = (int64_t)int_part;
+        if (int_val % 2 != 0) {
+            return int_part - 1.0;
+        }
+        return int_part;
+    }
+    // Otherwise use normal rounding
+    return round(value);
+}
+
+// round() for integers with ndigits - returns int
+// For negative ndigits, rounds to tens, hundreds, etc.
+// For positive ndigits, returns the integer unchanged
+// Uses banker's rounding (round half to even) like Python
+int64_t round_int_ndigits(int64_t value, int64_t ndigits) {
+    if (ndigits >= 0) {
+        // No decimal places for integers, return unchanged
+        return value;
+    }
+    // For negative ndigits, round to nearest 10^(-ndigits)
+    double divisor = pow(10.0, (double)(-ndigits));
+    return (int64_t)(bankers_round((double)value / divisor) * divisor);
+}
+
 // ============================================================================
 // Python built-in functions: min() and max()
 // ============================================================================

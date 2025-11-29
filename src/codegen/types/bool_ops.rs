@@ -99,7 +99,7 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty)),
         },
 
-        // Comparison - coerce to int when RHS is int
+        // Comparison - coerce to int when RHS is int, return false for other types
         BinaryOp::Eq => match &rhs.ty {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
@@ -119,7 +119,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
+            // Different types are never equal
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::Ne => match &rhs.ty {
             PyType::Bool => Ok(PyValue::bool(
@@ -140,7 +141,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
+            // Different types are never equal
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
             // Coerce to int for ordering comparisons

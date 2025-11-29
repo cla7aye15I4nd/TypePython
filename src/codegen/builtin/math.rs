@@ -84,25 +84,17 @@ impl<'ctx> CodeGen<'ctx> {
                     Ok(Some(self.extract_float_call_result(call)?))
                 }
                 PyType::Int => {
-                    // For integers with ndigits, convert to float first
-                    let float_val = self
-                        .builder
-                        .build_signed_int_to_float(
-                            val.value().into_int_value(),
-                            self.context.f64_type(),
-                            "int_to_float",
-                        )
-                        .unwrap();
-                    let round_fn = self.get_or_declare_c_builtin("round_float_ndigits");
+                    // For integers with ndigits, use round_int_ndigits which returns int
+                    let round_fn = self.get_or_declare_c_builtin("round_int_ndigits");
                     let call = self
                         .builder
                         .build_call(
                             round_fn,
-                            &[float_val.into(), ndigits.value().into()],
+                            &[val.value().into(), ndigits.value().into()],
                             "round",
                         )
                         .unwrap();
-                    Ok(Some(self.extract_float_call_result(call)?))
+                    Ok(Some(self.extract_int_call_result(call)?))
                 }
                 _ => Err(format!("round() not supported for type {:?}", val.ty)),
             }

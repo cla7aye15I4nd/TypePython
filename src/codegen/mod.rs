@@ -818,6 +818,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Helper to extract bool result from a call site
+    /// Handles both i1 (native bool) and int64_t (C int) return types
     fn extract_bool_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
@@ -828,7 +829,13 @@ impl<'ctx> CodeGen<'ctx> {
                 if iv.get_type().get_bit_width() == 1 {
                     Ok(PyValue::bool(iv.into()))
                 } else {
-                    Err("Expected bool (i1) return value".to_string())
+                    // Convert int64_t to bool by comparing with zero
+                    let zero = iv.get_type().const_zero();
+                    let bool_val = self
+                        .builder
+                        .build_int_compare(inkwell::IntPredicate::NE, iv, zero, "to_bool")
+                        .unwrap();
+                    Ok(PyValue::bool(bool_val.into()))
                 }
             }
             _ => Err("Expected bool return value".to_string()),

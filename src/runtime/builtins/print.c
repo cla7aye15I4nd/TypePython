@@ -47,7 +47,20 @@ void print_bool(_Bool value) {
 
 void print_bytes(const char* value) {
     // Print bytes in Python-style format: b'...' with escaped special chars
-    printf("b'");
+    // Use double quotes if string contains single quote but no double quote
+    int has_single_quote = 0;
+    int has_double_quote = 0;
+    for (const char* p = value; *p != '\0'; p++) {
+        if (*p == '\'') has_single_quote = 1;
+        if (*p == '"') has_double_quote = 1;
+    }
+
+    char quote_char = '\'';
+    if (has_single_quote && !has_double_quote) {
+        quote_char = '"';
+    }
+
+    printf("b%c", quote_char);
     for (const char* p = value; *p != '\0'; p++) {
         unsigned char c = (unsigned char)*p;
         switch (c) {
@@ -55,7 +68,14 @@ void print_bytes(const char* value) {
             case '\t': printf("\\t"); break;
             case '\r': printf("\\r"); break;
             case '\\': printf("\\\\"); break;
-            case '\'': printf("\\'"); break;
+            case '\'':
+                if (quote_char == '\'') printf("\\'");
+                else putchar(c);
+                break;
+            case '"':
+                if (quote_char == '"') printf("\\\"");
+                else putchar(c);
+                break;
             default:
                 if (c >= 32 && c < 127) {
                     putchar(c);
@@ -65,7 +85,7 @@ void print_bytes(const char* value) {
                 break;
         }
     }
-    printf("'");
+    printf("%c", quote_char);
 }
 
 void print_space(void) {

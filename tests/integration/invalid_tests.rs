@@ -182,3 +182,35 @@ invalid_test!(
     test_len_wrong_type,
     "tests/fixtures/invalid/len_wrong_type.py"
 );
+
+// ============================================================================
+// Bool Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot bitwise AND Bool and Bytes
+invalid_test!(
+    test_bool_bitand_bytes,
+    "tests/fixtures/invalid/bool_bitand_bytes.py"
+);
+
+// Cannot bitwise OR Bool and Bytes
+invalid_test!(
+    test_bool_bitor_bytes,
+    "tests/fixtures/invalid/bool_bitor_bytes.py"
+);
+
+// Cannot bitwise XOR Bool and Bytes
+invalid_test!(
+    test_bool_bitxor_bytes,
+    "tests/fixtures/invalid/bool_bitxor_bytes.py"
+);
+
+// ============================================================================
+// Float Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot add Float and Bytes
+invalid_test!(
+    test_float_add_bytes,
+    "tests/fixtures/invalid/float_add_bytes.py"
+);
