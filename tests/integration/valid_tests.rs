@@ -34,6 +34,10 @@ test_case!(
     "tests/fixtures/valid/basic/bool_operations.py"
 );
 test_case!(
+    test_bool_int_ops,
+    "tests/fixtures/valid/basic/bool_int_ops.py"
+);
+test_case!(
     test_string_basics,
     "tests/fixtures/valid/basic/string_basics.py"
 );

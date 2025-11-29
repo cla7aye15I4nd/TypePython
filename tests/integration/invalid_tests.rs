@@ -77,3 +77,53 @@ invalid_test!(
     test_undefined_variable,
     "tests/fixtures/invalid/undefined_variable.py"
 );
+
+// ============================================================================
+// Int Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot add Int and Bytes
+invalid_test!(
+    test_int_add_bytes,
+    "tests/fixtures/invalid/int_add_bytes.py"
+);
+
+// Cannot subtract Bytes from Int
+invalid_test!(
+    test_int_sub_bytes,
+    "tests/fixtures/invalid/int_sub_bytes.py"
+);
+
+// Cannot divide Int by Bytes
+invalid_test!(
+    test_int_div_bytes,
+    "tests/fixtures/invalid/int_div_bytes.py"
+);
+
+// Cannot floor divide Int by Bytes
+invalid_test!(
+    test_int_floordiv_bytes,
+    "tests/fixtures/invalid/int_floordiv_bytes.py"
+);
+
+// Cannot compute Int modulo Bytes
+invalid_test!(
+    test_int_mod_bytes,
+    "tests/fixtures/invalid/int_mod_bytes.py"
+);
+
+// ============================================================================
+// Bytes Type Mismatch Error Tests
+// ============================================================================
+
+// Cannot concatenate Bytes and Int
+invalid_test!(
+    test_bytes_add_int,
+    "tests/fixtures/invalid/bytes_add_int.py"
+);
+
+// Cannot multiply Bytes by Bytes
+invalid_test!(
+    test_bytes_mul_bytes,
+    "tests/fixtures/invalid/bytes_mul_bytes.py"
+);

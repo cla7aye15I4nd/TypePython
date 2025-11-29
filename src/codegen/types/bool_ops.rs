@@ -45,7 +45,7 @@ pub fn binary_op<'a, 'ctx>(
             super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
         }
 
-        // Bitwise (bool-specific)
+        // Bitwise - coerce to int when RHS is int
         BinaryOp::BitAnd => match &rhs.ty {
             PyType::Bool => {
                 let result = cg
@@ -53,6 +53,14 @@ pub fn binary_op<'a, 'ctx>(
                     .build_and(lhs_bool, rhs.runtime_value().into_int_value(), "bitand")
                     .unwrap();
                 Ok(PyValue::bool(result.into()))
+            }
+            PyType::Int => {
+                // Coerce bool to int and delegate
+                let lhs_int = cg
+                    .builder
+                    .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                    .unwrap();
+                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
             _ => Err(format!("Cannot bitwise AND Bool and {:?}", rhs.ty)),
         },
@@ -64,6 +72,13 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(result.into()))
             }
+            PyType::Int => {
+                let lhs_int = cg
+                    .builder
+                    .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                    .unwrap();
+                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            }
             _ => Err(format!("Cannot bitwise OR Bool and {:?}", rhs.ty)),
         },
         BinaryOp::BitXor => match &rhs.ty {
@@ -74,10 +89,17 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(result.into()))
             }
+            PyType::Int => {
+                let lhs_int = cg
+                    .builder
+                    .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                    .unwrap();
+                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            }
             _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty)),
         },
 
-        // Comparison
+        // Comparison - coerce to int when RHS is int
         BinaryOp::Eq => match &rhs.ty {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
@@ -90,6 +112,13 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Int => {
+                let lhs_int = cg
+                    .builder
+                    .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                    .unwrap();
+                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            }
             _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
         },
         BinaryOp::Ne => match &rhs.ty {
@@ -104,6 +133,13 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
+            PyType::Int => {
+                let lhs_int = cg
+                    .builder
+                    .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
+                    .unwrap();
+                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            }
             _ => Err(format!("Cannot compare Bool with {:?}", rhs.ty)),
         },
         BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
