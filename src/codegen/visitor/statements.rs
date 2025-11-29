@@ -23,9 +23,7 @@ impl<'ctx> CodeGen<'ctx> {
         let coerced_val = self.coerce_value_to_type(val.value, var_type)?;
 
         self.builder.build_store(alloca, coerced_val).unwrap();
-        let llvm_type = self.type_to_llvm(var_type);
-        // Create an addressable PyValue for the variable
-        let var = PyValue::from_ast_type_addressable(var_type, coerced_val, alloca, llvm_type)?;
+        let var = PyValue::from_ast_type(var_type, coerced_val, Some(alloca))?;
         self.variables.insert(name.to_string(), var);
         Ok(())
     }

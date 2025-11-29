@@ -7,7 +7,6 @@ use crate::ast::{BinaryOp, Type, UnaryOp};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::BasicTypeEnum;
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
 use super::traits::{BitNegatable, LogicalNegatable, Negatable, Printable, ToBool, UnaryPlusable};
@@ -82,79 +81,48 @@ pub struct PyValue<'ctx> {
     pub ty: PyType,
     /// Optional pointer for addressable values (variables)
     ptr: Option<PointerValue<'ctx>>,
-    /// LLVM type for loading (needed when ptr is Some)
-    llvm_type: Option<BasicTypeEnum<'ctx>>,
 }
 
 impl<'ctx> PyValue<'ctx> {
-    /// Create a new Python value (rvalue - no address)
-    pub fn new(value: BasicValueEnum<'ctx>, ty: PyType) -> Self {
-        Self {
-            value,
-            ty,
-            ptr: None,
-            llvm_type: None,
-        }
-    }
-
-    /// Create a new addressable Python value (lvalue - has address)
-    pub fn new_addressable(
-        value: BasicValueEnum<'ctx>,
-        ty: PyType,
-        ptr: PointerValue<'ctx>,
-        llvm_type: BasicTypeEnum<'ctx>,
-    ) -> Self {
-        Self {
-            value,
-            ty,
-            ptr: Some(ptr),
-            llvm_type: Some(llvm_type),
-        }
+    /// Create a new Python value
+    /// - Without ptr: rvalue (literals, expression results)
+    /// - With ptr: lvalue (variables that can be stored to)
+    pub fn new(value: BasicValueEnum<'ctx>, ty: PyType, ptr: Option<PointerValue<'ctx>>) -> Self {
+        Self { value, ty, ptr }
     }
 
     /// Create a Python int value
     pub fn int(value: BasicValueEnum<'ctx>) -> Self {
-        Self::new(value, PyType::Int)
+        Self::new(value, PyType::Int, None)
     }
 
     /// Create a Python float value
     pub fn float(value: BasicValueEnum<'ctx>) -> Self {
-        Self::new(value, PyType::Float)
+        Self::new(value, PyType::Float, None)
     }
 
     /// Create a Python bool value
     pub fn bool(value: BasicValueEnum<'ctx>) -> Self {
-        Self::new(value, PyType::Bool)
+        Self::new(value, PyType::Bool, None)
     }
 
     /// Create a Python bytes value
     pub fn bytes(value: BasicValueEnum<'ctx>) -> Self {
-        Self::new(value, PyType::Bytes)
+        Self::new(value, PyType::Bytes, None)
     }
 
     /// Create a Python none value
     pub fn none(value: BasicValueEnum<'ctx>) -> Self {
-        Self::new(value, PyType::None)
+        Self::new(value, PyType::None, None)
     }
 
     /// Create a PyValue from an AST Type and an LLVM value
-    pub fn from_ast_type(ty: &Type, value: BasicValueEnum<'ctx>) -> Result<Self, String> {
-        Ok(Self::new(value, PyType::from_ast_type(ty)?))
-    }
-
-    /// Create an addressable PyValue from an AST Type
-    pub fn from_ast_type_addressable(
+    pub fn from_ast_type(
         ty: &Type,
         value: BasicValueEnum<'ctx>,
-        ptr: PointerValue<'ctx>,
-        llvm_type: BasicTypeEnum<'ctx>,
+        ptr: Option<PointerValue<'ctx>>,
     ) -> Result<Self, String> {
-        Ok(Self::new_addressable(
-            value,
-            PyType::from_ast_type(ty)?,
-            ptr,
-            llvm_type,
-        ))
+        Ok(Self::new(value, PyType::from_ast_type(ty)?, ptr))
     }
 
     /// Check if this value has an address (is an lvalue)
@@ -170,9 +138,10 @@ impl<'ctx> PyValue<'ctx> {
     /// Load the current value from memory (for addressable values)
     /// Returns self.value for non-addressable values
     pub fn load(&self, builder: &Builder<'ctx>, name: &str) -> PyValue<'ctx> {
-        if let (Some(ptr), Some(llvm_type)) = (self.ptr, self.llvm_type) {
+        if let Some(ptr) = self.ptr {
+            let llvm_type = self.value.get_type();
             let value = builder.build_load(llvm_type, ptr, name).unwrap();
-            Self::new_addressable(value, self.ty.clone(), ptr, llvm_type)
+            Self::new(value, self.ty.clone(), Some(ptr))
         } else {
             self.clone()
         }

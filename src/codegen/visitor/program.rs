@@ -53,14 +53,7 @@ impl<'ctx> CodeGen<'ctx> {
             let param_value = function.get_nth_param(i as u32).unwrap();
             let alloca = self.create_entry_block_alloca(&func.name, &param.name, &param.param_type);
             self.builder.build_store(alloca, param_value).unwrap();
-            let llvm_type = self.type_to_llvm(&param.param_type);
-            // Create an addressable PyValue for the parameter
-            let var = PyValue::from_ast_type_addressable(
-                &param.param_type,
-                param_value,
-                alloca,
-                llvm_type,
-            )?;
+            let var = PyValue::from_ast_type(&param.param_type, param_value, Some(alloca))?;
             self.variables.insert(param.name.clone(), var);
         }
 
