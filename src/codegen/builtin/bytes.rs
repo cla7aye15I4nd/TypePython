@@ -91,6 +91,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let getitem_fn = self.get_or_declare_c_builtin("bytes_getitem");
         let call = self
+            .cg
             .builder
             .build_call(
                 getitem_fn,
@@ -109,6 +110,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn bytes_len(&mut self, bytes_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
         let len_fn = self.get_or_declare_c_builtin("bytes_len");
         let call = self
+            .cg
             .builder
             .build_call(len_fn, &[bytes_val.into()], "bytes_len")
             .unwrap();
@@ -124,6 +126,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let slice_fn = self.get_or_declare_c_builtin("bytes_slice");
         let call = self
+            .cg
             .builder
             .build_call(
                 slice_fn,
@@ -144,6 +147,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let slice_fn = self.get_or_declare_c_builtin("bytes_slice_step");
         let call = self
+            .cg
             .builder
             .build_call(
                 slice_fn,

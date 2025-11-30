@@ -78,6 +78,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let getitem_fn = self.get_or_declare_c_builtin("dict_getitem");
         let call = self
+            .cg
             .builder
             .build_call(getitem_fn, &[dict_val.into(), key.into()], "dict_getitem")
             .unwrap();
@@ -93,7 +94,8 @@ impl<'ctx> CodeGen<'ctx> {
         value: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
         let setitem_fn = self.get_or_declare_c_builtin("dict_setitem");
-        self.builder
+        self.cg
+            .builder
             .build_call(
                 setitem_fn,
                 &[dict_val.into(), key.into(), value.into()],
@@ -110,7 +112,8 @@ impl<'ctx> CodeGen<'ctx> {
         key: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
         let delitem_fn = self.get_or_declare_c_builtin("dict_delitem");
-        self.builder
+        self.cg
+            .builder
             .build_call(delitem_fn, &[dict_val.into(), key.into()], "dict_delitem")
             .unwrap();
         Ok(())
@@ -132,6 +135,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Create empty dict with default int key/value types
         let dict_new_fn = self.get_or_declare_c_builtin("dict_new");
         let call_site = self
+            .cg
             .builder
             .build_call(dict_new_fn, &[], "dict_new")
             .unwrap();

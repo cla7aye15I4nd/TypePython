@@ -81,6 +81,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let getitem_fn = self.get_or_declare_c_builtin("list_getitem");
         let call = self
+            .cg
             .builder
             .build_call(getitem_fn, &[list_val.into(), index.into()], "list_getitem")
             .unwrap();
@@ -98,7 +99,8 @@ impl<'ctx> CodeGen<'ctx> {
         value: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
         let setitem_fn = self.get_or_declare_c_builtin("list_setitem");
-        self.builder
+        self.cg
+            .builder
             .build_call(
                 setitem_fn,
                 &[list_val.into(), index.into(), value.into()],
@@ -115,7 +117,8 @@ impl<'ctx> CodeGen<'ctx> {
         index: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
         let delitem_fn = self.get_or_declare_c_builtin("list_delitem");
-        self.builder
+        self.cg
+            .builder
             .build_call(delitem_fn, &[list_val.into(), index.into()], "list_delitem")
             .unwrap();
         Ok(())
@@ -129,6 +132,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn list_len(&mut self, list_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
         let len_fn = self.get_or_declare_c_builtin("list_len");
         let call = self
+            .cg
             .builder
             .build_call(len_fn, &[list_val.into()], "list_len")
             .unwrap();
@@ -145,6 +149,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let slice_fn = self.get_or_declare_c_builtin("list_slice");
         let call = self
+            .cg
             .builder
             .build_call(
                 slice_fn,
@@ -171,6 +176,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         let slice_fn = self.get_or_declare_c_builtin("list_slice_step");
         let call = self
+            .cg
             .builder
             .build_call(
                 slice_fn,
@@ -202,6 +208,7 @@ impl<'ctx> CodeGen<'ctx> {
             // Create empty list with default int element type
             let list_new_fn = self.get_or_declare_c_builtin("list_new");
             let call_site = self
+                .cg
                 .builder
                 .build_call(list_new_fn, &[], "list_new")
                 .unwrap();
@@ -226,6 +233,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // Copy existing list
                 let list_from_list_fn = self.get_or_declare_c_builtin("list_from_list");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(
                         list_from_list_fn,
@@ -244,6 +252,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // list("hello") -> ['h', 'e', 'l', 'l', 'o'] (single-char strings)
                 let list_from_str_fn = self.get_or_declare_c_builtin("str_list_from_str");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(
                         list_from_str_fn,
@@ -262,6 +271,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // list(b"hello") -> [104, 101, 108, 108, 111] (byte values)
                 let list_from_bytes_fn = self.get_or_declare_c_builtin("list_from_bytes");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(
                         list_from_bytes_fn,
@@ -280,6 +290,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // list({1, 2, 3}) -> [1, 2, 3]
                 let list_from_set_fn = self.get_or_declare_c_builtin("list_from_set");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(list_from_set_fn, &[arg_val.value().into()], "list_from_set")
                     .unwrap();
@@ -296,6 +307,7 @@ impl<'ctx> CodeGen<'ctx> {
                 if matches!(key_type.as_ref(), PyType::Str) {
                     let list_from_dict_fn = self.get_or_declare_c_builtin("str_list_from_str_dict");
                     let call_site = self
+                        .cg
                         .builder
                         .build_call(
                             list_from_dict_fn,
@@ -312,6 +324,7 @@ impl<'ctx> CodeGen<'ctx> {
                 } else {
                     let list_from_dict_fn = self.get_or_declare_c_builtin("list_from_dict");
                     let call_site = self
+                        .cg
                         .builder
                         .build_call(
                             list_from_dict_fn,

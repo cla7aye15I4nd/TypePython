@@ -18,28 +18,32 @@ impl<'ctx> CodeGen<'ctx> {
 
             // print_none takes no arguments, others take the value
             if val.ty == PyType::None {
-                self.builder.build_call(print_fn, &[], "print").unwrap();
+                self.cg.builder.build_call(print_fn, &[], "print").unwrap();
             } else {
-                self.builder
+                self.cg
+                    .builder
                     .build_call(print_fn, &[val.value().into()], "print")
                     .unwrap();
             }
 
             // Print space between arguments (not after last)
             if i < args.len() - 1 {
-                self.builder
+                self.cg
+                    .builder
                     .build_call(print_space, &[], "print_space")
                     .unwrap();
             }
         }
 
         // Print newline at end
-        self.builder
+        self.cg
+            .builder
             .build_call(print_newline, &[], "print_newline")
             .unwrap();
 
         Ok(PyValue::none(
-            self.context
+            self.cg
+                .ctx
                 .ptr_type(inkwell::AddressSpace::default())
                 .const_null()
                 .into(),

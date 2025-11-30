@@ -10,9 +10,9 @@ use super::value::{CgCtx, PyType, PyValue};
 use super::{extract_int_result, extract_ptr_result, get_or_declare_builtin};
 
 /// Binary operations for set type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -27,7 +27,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Sub => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let diff_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_difference");
+                let diff_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_difference");
                 let call_site = cg
                     .builder
                     .build_call(diff_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_difference")
@@ -46,7 +46,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::BitOr => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let union_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_union");
+                let union_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_union");
                 let call_site = cg
                     .builder
                     .build_call(union_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_union")
@@ -65,7 +65,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::BitAnd => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let intersect_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_intersection");
+                let intersect_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_intersection");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -89,7 +89,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let sym_diff_fn =
-                    get_or_declare_builtin(cg.module, cg.ctx, "set_symmetric_difference");
+                    get_or_declare_builtin(&cg.module, cg.ctx, "set_symmetric_difference");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -112,7 +112,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Eq => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_eq")
@@ -136,7 +136,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Ne => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_eq")
@@ -160,7 +160,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Lt => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let subset_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_is_proper_subset");
+                let subset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_is_proper_subset");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -188,7 +188,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Le => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let subset_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_issubset");
+                let subset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_issubset");
                 let call_site = cg
                     .builder
                     .build_call(subset_fn, &[lhs_ptr.into(), rhs_ptr.into()], "set_issubset")
@@ -213,7 +213,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let superset_fn =
-                    get_or_declare_builtin(cg.module, cg.ctx, "set_is_proper_superset");
+                    get_or_declare_builtin(&cg.module, cg.ctx, "set_is_proper_superset");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -241,7 +241,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Ge => match &rhs.ty {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let superset_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_issuperset");
+                let superset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_issuperset");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -285,7 +285,7 @@ pub fn binary_op<'a, 'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             // Get set length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "set_len")
@@ -317,7 +317,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Or => {
             // Get set length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "set_len")
@@ -381,16 +381,16 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for set type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not set: true if set is empty, false otherwise
             let ptr = val.runtime_value().into_pointer_value();
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[ptr.into()], "set_len")

@@ -104,11 +104,11 @@ impl<'ctx> CodeGen<'ctx> {
 
         self.used_builtin_modules.insert(builtin.module.to_string());
 
-        if let Some(func) = self.module.get_function(builtin.symbol) {
+        if let Some(func) = self.cg.module.get_function(builtin.symbol) {
             return func;
         }
 
-        let fn_type = builtin.to_llvm_fn_type(self.context);
-        self.module.add_function(builtin.symbol, fn_type, None)
+        let fn_type = builtin.to_llvm_fn_type(self.cg.ctx);
+        self.cg.module.add_function(builtin.symbol, fn_type, None)
     }
 }

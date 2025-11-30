@@ -87,7 +87,11 @@ impl<'ctx> CodeGen<'ctx> {
         if args.is_empty() {
             // Create empty set with default int element type
             let set_new_fn = self.get_or_declare_c_builtin("set_new");
-            let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
+            let call_site = self
+                .cg
+                .builder
+                .build_call(set_new_fn, &[], "set_new")
+                .unwrap();
             let set_ptr = self.extract_ptr_call_result(call_site);
 
             return Ok(PyValue::new(
@@ -109,6 +113,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // Copy existing set
                 let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(set_copy_fn, &[arg_val.value().into()], "set_copy")
                     .unwrap();
@@ -123,6 +128,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // set("hello") -> {'h', 'e', 'l', 'o'} (single-char strings)
                 let set_from_str_fn = self.get_or_declare_c_builtin("str_set_from_str");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(
                         set_from_str_fn,
@@ -141,6 +147,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // set(b"hello") -> {104, 101, 108, 111} (byte values)
                 let set_from_bytes_fn = self.get_or_declare_c_builtin("set_from_bytes");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(
                         set_from_bytes_fn,
@@ -159,6 +166,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // set([1, 2, 3]) -> {1, 2, 3}
                 let set_from_list_fn = self.get_or_declare_c_builtin("set_from_list");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(set_from_list_fn, &[arg_val.value().into()], "set_from_list")
                     .unwrap();
@@ -173,6 +181,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // set({"a": 1}) -> {"a"} (set of keys)
                 let set_from_dict_fn = self.get_or_declare_c_builtin("set_from_dict");
                 let call_site = self
+                    .cg
                     .builder
                     .build_call(set_from_dict_fn, &[arg_val.value().into()], "set_from_dict")
                     .unwrap();

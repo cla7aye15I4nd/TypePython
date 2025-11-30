@@ -10,9 +10,9 @@ use super::value::{CgCtx, PyType, PyValue};
 use super::{extract_int_result, get_or_declare_builtin};
 
 /// Binary operations for Int type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -107,7 +107,7 @@ pub fn binary_op<'a, 'ctx>(
             }
             PyType::Str => {
                 // Int * Str -> Str (string repetition)
-                let str_repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_repeat");
+                let str_repeat_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "str_repeat");
                 let call = cg
                     .builder
                     .build_call(
@@ -124,7 +124,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::Bytes => {
                 // Int * Bytes -> Bytes (bytes repetition)
                 let bytes_repeat_fn =
-                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_repeat");
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_repeat");
                 let call = cg
                     .builder
                     .build_call(
@@ -139,7 +139,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::List(elem_type) => {
                 // Int * List -> List (list repetition)
                 let list_repeat_fn =
-                    super::get_or_declare_builtin(cg.module, cg.ctx, "list_repeat");
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "list_repeat");
                 let call = cg
                     .builder
                     .build_call(
@@ -202,7 +202,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::FloorDiv => match &rhs.ty {
             PyType::Int => {
-                let floordiv_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "floordiv_int");
+                let floordiv_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "floordiv_int");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -225,7 +225,7 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let floordiv_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "floordiv_int");
+                let floordiv_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "floordiv_int");
                 let call_site = cg
                     .builder
                     .build_call(floordiv_fn, &[lhs_int.into(), rhs_int.into()], "floordiv")
@@ -246,7 +246,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Mod => match &rhs.ty {
             PyType::Int => {
-                let mod_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "mod_int");
+                let mod_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "mod_int");
                 let call_site = cg
                     .builder
                     .build_call(mod_fn, &[lhs_int.into(), rhs.runtime_value().into()], "mod")
@@ -264,7 +264,7 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let mod_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "mod_int");
+                let mod_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "mod_int");
                 let call_site = cg
                     .builder
                     .build_call(mod_fn, &[lhs_int.into(), rhs_int.into()], "mod")
@@ -284,7 +284,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Pow => match &rhs.ty {
             PyType::Int => {
-                let pow_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "pow_int");
+                let pow_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "pow_int");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -306,7 +306,7 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let pow_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "pow_int");
+                let pow_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "pow_int");
                 let call_site = cg
                     .builder
                     .build_call(pow_fn, &[lhs_int.into(), rhs_int.into()], "ipow")
@@ -764,7 +764,7 @@ pub fn binary_op<'a, 'ctx>(
 
         BinaryOp::In => match &rhs.ty {
             PyType::List(_) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -786,7 +786,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Set(_) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -808,7 +808,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Dict(_, _) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -830,7 +830,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Bytes => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains_byte");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "bytes_contains_byte");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -856,7 +856,7 @@ pub fn binary_op<'a, 'ctx>(
 
         BinaryOp::NotIn => match &rhs.ty {
             PyType::List(_) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -878,7 +878,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Set(_) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -900,7 +900,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Dict(_, _) => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_contains");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -922,7 +922,7 @@ pub fn binary_op<'a, 'ctx>(
                 Ok(PyValue::bool(bool_val.into()))
             }
             PyType::Bytes => {
-                let contains_fn = get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains_byte");
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "bytes_contains_byte");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -949,9 +949,9 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for Int type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     let int_val = val.runtime_value().into_int_value();

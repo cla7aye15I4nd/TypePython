@@ -10,9 +10,9 @@ use super::value::{CgCtx, PyType, PyValue};
 use super::{extract_int_result, get_or_declare_builtin};
 
 /// Binary operations for dict type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -23,7 +23,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Eq => match &rhs.ty {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_eq")
@@ -48,7 +48,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Ne => match &rhs.ty {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_eq")
@@ -82,7 +82,7 @@ pub fn binary_op<'a, 'ctx>(
                     }
                     _ => "dict_merge",
                 };
-                let merge_fn = get_or_declare_builtin(cg.module, cg.ctx, merge_fn_name);
+                let merge_fn = get_or_declare_builtin(&cg.module, cg.ctx, merge_fn_name);
                 let call_site = cg
                     .builder
                     .build_call(merge_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_merge")
@@ -113,7 +113,7 @@ pub fn binary_op<'a, 'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             // Get dict length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "dict_len")
@@ -149,7 +149,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Or => {
             // Get dict length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "dict_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "dict_len")
@@ -217,16 +217,16 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for dict type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not dict: true if dict is empty, false otherwise
             let ptr = val.runtime_value().into_pointer_value();
-            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "dict_len");
+            let len_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "dict_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[ptr.into()], "dict_len")

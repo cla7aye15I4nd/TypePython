@@ -8,9 +8,9 @@ use inkwell::values::BasicValueEnum;
 use super::value::{CgCtx, PyType, PyValue};
 
 /// Binary operations for Bytes type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -20,7 +20,7 @@ pub fn binary_op<'a, 'ctx>(
         // Concatenation
         BinaryOp::Add => match &rhs.ty {
             PyType::Bytes => {
-                let strcat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcat_bytes");
+                let strcat_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcat_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -40,7 +40,8 @@ pub fn binary_op<'a, 'ctx>(
         // Repetition
         BinaryOp::Mul => match &rhs.ty {
             PyType::Int => {
-                let repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strrepeat_bytes");
+                let repeat_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "strrepeat_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -64,7 +65,8 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let repeat_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strrepeat_bytes");
+                let repeat_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "strrepeat_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -84,7 +86,7 @@ pub fn binary_op<'a, 'ctx>(
         // Comparison
         BinaryOp::Eq => match &rhs.ty {
             PyType::Bytes => {
-                let strcmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcmp_bytes");
+                let strcmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcmp_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -105,7 +107,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Ne => match &rhs.ty {
             PyType::Bytes => {
-                let strcmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "strcmp_bytes");
+                let strcmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcmp_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -127,7 +129,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Lt => match &rhs.ty {
             PyType::Bytes => {
-                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_lt");
+                let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_lt");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -147,7 +149,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Le => match &rhs.ty {
             PyType::Bytes => {
-                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_le");
+                let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_le");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -167,7 +169,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Gt => match &rhs.ty {
             PyType::Bytes => {
-                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_gt");
+                let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_gt");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -187,7 +189,7 @@ pub fn binary_op<'a, 'ctx>(
         },
         BinaryOp::Ge => match &rhs.ty {
             PyType::Bytes => {
-                let cmp_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_ge");
+                let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_ge");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -211,7 +213,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let contains_fn =
-                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains");
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -233,7 +235,7 @@ pub fn binary_op<'a, 'ctx>(
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let contains_fn =
-                    super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_contains");
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_contains");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -256,7 +258,7 @@ pub fn binary_op<'a, 'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             // Get bytes length to determine truthiness
-            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+            let len_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
@@ -288,7 +290,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Or => {
             // Get bytes length to determine truthiness
-            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+            let len_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
@@ -352,16 +354,16 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for Bytes type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not bytes: true if bytes is empty, false otherwise
             let ptr = val.runtime_value().into_pointer_value();
-            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+            let len_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[ptr.into()], "bytes_len")

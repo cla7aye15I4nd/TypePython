@@ -1,7 +1,7 @@
 /// Statement visitor implementation for code generation
 use super::super::CodeGen;
 use crate::ast::*;
-use crate::types::{CgCtx, PyType, PyValue};
+use crate::types::{PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_decl_impl(
@@ -22,7 +22,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Coerce the value to match the declared type if needed
         let coerced_val = self.coerce_value_to_type(val.value(), var_type)?;
 
-        self.builder.build_store(alloca, coerced_val).unwrap();
+        self.cg.builder.build_store(alloca, coerced_val).unwrap();
         let var = PyValue::from_ast_type(var_type, coerced_val, Some(alloca))?;
         self.variables.insert(name.to_string(), var);
         Ok(())
@@ -41,12 +41,12 @@ impl<'ctx> CodeGen<'ctx> {
                 // Check if variable exists
                 if let Some(var) = self.variables.get(name).cloned() {
                     // Variable exists, store to it
-                    var.store_value(&self.builder, &val)?;
+                    var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
                     let llvm_type = self.pytype_to_llvm(&val.ty);
                     let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
-                    self.builder.build_store(alloca, val.value()).unwrap();
+                    self.cg.builder.build_store(alloca, val.value()).unwrap();
                     let var = PyValue::new(val.value(), val.ty.clone(), Some(alloca));
                     self.variables.insert(name.to_string(), var);
                 }
@@ -88,7 +88,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .clone();
 
                 // Load current value from the addressable PyValue
-                let current = var.load(&self.builder, name);
+                let current = var.load(&self.cg.builder, name);
 
                 // Evaluate RHS
                 let rhs = self.evaluate_expression(value)?;
@@ -110,11 +110,10 @@ impl<'ctx> CodeGen<'ctx> {
                 };
 
                 // Delegate to the left type's implementation
-                let cg = CgCtx::new(self.context, &self.builder, &self.module);
-                let result = current.binary_op(&cg, &bin_op, &rhs)?;
+                let result = current.binary_op(&self.cg, &bin_op, &rhs)?;
 
                 // Store result to the addressable variable
-                var.store_value(&self.builder, &result)?;
+                var.store_value(&self.cg.builder, &result)?;
                 Ok(())
             }
             _ => panic!("Augmented assignment only supported for variables"),
@@ -123,7 +122,8 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub(crate) fn visit_break_impl(&mut self) -> Result<(), String> {
         if let Some(loop_ctx) = self.loop_stack.last() {
-            self.builder
+            self.cg
+                .builder
                 .build_unconditional_branch(loop_ctx.break_block)
                 .unwrap();
             Ok(())
@@ -134,7 +134,8 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub(crate) fn visit_continue_impl(&mut self) -> Result<(), String> {
         if let Some(loop_ctx) = self.loop_stack.last() {
-            self.builder
+            self.cg
+                .builder
                 .build_unconditional_branch(loop_ctx.continue_block)
                 .unwrap();
             Ok(())
@@ -164,9 +165,9 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_return_impl(&mut self, expr: Option<&Expression>) -> Result<(), String> {
         if let Some(expr) = expr {
             let val = self.evaluate_expression(expr)?;
-            self.builder.build_return(Some(&val.value())).unwrap();
+            self.cg.builder.build_return(Some(&val.value())).unwrap();
         } else {
-            self.builder.build_return(None).unwrap();
+            self.cg.builder.build_return(None).unwrap();
         }
         Ok(())
     }

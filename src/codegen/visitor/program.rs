@@ -33,13 +33,13 @@ impl<'ctx> CodeGen<'ctx> {
             self.generate_main_function(&program.statements)?;
         }
 
-        Ok(self.context.i32_type().const_zero().into())
+        Ok(self.cg.ctx.i32_type().const_zero().into())
     }
 
     pub(crate) fn enter_function_impl(&mut self, func: &Function) -> Result<(), String> {
         // Get the already-declared function
         let mangled_name = self.mangle_function_name(&self.module_name, &func.name);
-        let function = self.module.get_function(&mangled_name).ok_or_else(|| {
+        let function = self.cg.module.get_function(&mangled_name).ok_or_else(|| {
             format!(
                 "Function {} not found (should have been declared in first pass)",
                 func.name
@@ -47,8 +47,8 @@ impl<'ctx> CodeGen<'ctx> {
         })?;
         self.current_function = Some(function);
 
-        let entry_bb = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(entry_bb);
+        let entry_bb = self.cg.ctx.append_basic_block(function, "entry");
+        self.cg.builder.position_at_end(entry_bb);
 
         // Clear variables for new function scope
         self.variables.clear();
@@ -57,7 +57,7 @@ impl<'ctx> CodeGen<'ctx> {
         for (i, param) in func.params.iter().enumerate() {
             let param_value = function.get_nth_param(i as u32).unwrap();
             let alloca = self.create_entry_block_alloca(&func.name, &param.name, &param.param_type);
-            self.builder.build_store(alloca, param_value).unwrap();
+            self.cg.builder.build_store(alloca, param_value).unwrap();
             let var = PyValue::from_ast_type(&param.param_type, param_value, Some(alloca))?;
             self.variables.insert(param.name.clone(), var);
         }
@@ -70,19 +70,19 @@ impl<'ctx> CodeGen<'ctx> {
         if !self.is_block_terminated() {
             match func.return_type {
                 Type::None => {
-                    self.builder.build_return(None).unwrap();
+                    self.cg.builder.build_return(None).unwrap();
                 }
                 Type::Int => {
-                    let zero = self.context.i64_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
+                    let zero = self.cg.ctx.i64_type().const_zero();
+                    self.cg.builder.build_return(Some(&zero)).unwrap();
                 }
                 Type::Float => {
-                    let zero = self.context.f64_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
+                    let zero = self.cg.ctx.f64_type().const_zero();
+                    self.cg.builder.build_return(Some(&zero)).unwrap();
                 }
                 Type::Bool => {
-                    let zero = self.context.bool_type().const_zero();
-                    self.builder.build_return(Some(&zero)).unwrap();
+                    let zero = self.cg.ctx.bool_type().const_zero();
+                    self.cg.builder.build_return(Some(&zero)).unwrap();
                 }
                 _ => {
                     return Err("Unsupported return type".to_string());

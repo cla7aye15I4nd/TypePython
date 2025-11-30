@@ -9,9 +9,9 @@ use inkwell::FloatPredicate;
 use super::value::{CgCtx, PyType, PyValue};
 
 /// Binary operations for Float type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -88,7 +88,7 @@ pub fn binary_op<'a, 'ctx>(
                 .builder
                 .build_float_div(lhs_float, rhs_float, "fdiv")
                 .unwrap();
-            let floor_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "floor_float");
+            let floor_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "floor_float");
             let call_site = cg
                 .builder
                 .build_call(floor_fn, &[div_result.into()], "floor")
@@ -100,7 +100,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Mod => {
             let rhs_float = coerce_rhs(rhs)?;
-            let fmod_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "mod_float");
+            let fmod_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "mod_float");
             let call_site = cg
                 .builder
                 .build_call(fmod_fn, &[lhs_float.into(), rhs_float.into()], "fmod")
@@ -112,7 +112,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Pow => {
             let rhs_float = coerce_rhs(rhs)?;
-            let pow_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "pow_float");
+            let pow_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "pow_float");
             let call_site = cg
                 .builder
                 .build_call(pow_fn, &[lhs_float.into(), rhs_float.into()], "fpow")
@@ -290,7 +290,7 @@ pub fn binary_op<'a, 'ctx>(
                     ))
                 }
             };
-            let contains_fn = super::get_or_declare_builtin(cg.module, cg.ctx, fn_name);
+            let contains_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, fn_name);
             let call = cg
                 .builder
                 .build_call(
@@ -323,9 +323,9 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for Float type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     let float_val = val.runtime_value().into_float_value();

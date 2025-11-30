@@ -15,15 +15,17 @@ use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use std::collections::HashMap;
 
 /// Code generation context bundling LLVM context, builder, and module.
-/// This reduces parameter passing in codegen operations.
-pub struct CgCtx<'a, 'ctx> {
+/// Owns the Builder and Module, holds a reference to Context.
+pub struct CgCtx<'ctx> {
     pub ctx: &'ctx Context,
-    pub builder: &'a Builder<'ctx>,
-    pub module: &'a Module<'ctx>,
+    pub builder: Builder<'ctx>,
+    pub module: Module<'ctx>,
 }
 
-impl<'a, 'ctx> CgCtx<'a, 'ctx> {
-    pub fn new(ctx: &'ctx Context, builder: &'a Builder<'ctx>, module: &'a Module<'ctx>) -> Self {
+impl<'ctx> CgCtx<'ctx> {
+    pub fn new(ctx: &'ctx Context, module_name: &str) -> Self {
+        let module = ctx.create_module(module_name);
+        let builder = ctx.create_builder();
         Self {
             ctx,
             builder,
@@ -31,7 +33,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
         }
     }
 
-    /// Convert a PyValue to a boolean (i1)
+    /// Convert a PyValue to a boolean (i1) for use in `and`/`or` operators
     pub fn value_to_bool(&self, val: &PyValue<'ctx>) -> inkwell::values::IntValue<'ctx> {
         match &val.ty {
             PyType::Bool => {
@@ -60,7 +62,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             PyType::Str => {
                 // Str is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "str_len");
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "str_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "str_len")
@@ -74,7 +76,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "bytes_len");
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "bytes_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "bytes_len")
@@ -92,7 +94,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             PyType::List(_) => {
                 // List is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "list_len");
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "list_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "list_len")
@@ -106,7 +108,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             PyType::Dict(_, _) => {
                 // Dict is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "dict_len");
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "dict_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "dict_len")
@@ -120,7 +122,7 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             PyType::Set(_) => {
                 // Set is truthy if non-empty (check length > 0)
                 let ptr_val = val.value().into_pointer_value();
-                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "set_len");
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "set_len");
                 let len_call = self
                     .builder
                     .build_call(len_fn, &[ptr_val.into()], "set_len")
@@ -534,9 +536,9 @@ impl<'ctx> PyValue<'ctx> {
     // ========================================================================
 
     /// Perform a binary operation: self op rhs
-    pub fn binary_op<'a>(
+    pub fn binary_op(
         &self,
-        cg: &CgCtx<'a, 'ctx>,
+        cg: &CgCtx<'ctx>,
         op: &BinaryOp,
         rhs: &PyValue<'ctx>,
     ) -> Result<PyValue<'ctx>, String> {
@@ -562,11 +564,7 @@ impl<'ctx> PyValue<'ctx> {
     // ========================================================================
 
     /// Perform a unary operation on this value
-    pub fn unary_op<'a>(
-        &self,
-        cg: &CgCtx<'a, 'ctx>,
-        op: &UnaryOp,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
+    pub fn unary_op(&self, cg: &CgCtx<'ctx>, op: &UnaryOp) -> Result<BasicValueEnum<'ctx>, String> {
         match &self.ty {
             PyType::Int => super::int_ops::unary_op(self, cg, op),
             PyType::Float => super::float_ops::unary_op(self, cg, op),

@@ -9,9 +9,9 @@ use inkwell::IntPredicate;
 use super::value::{CgCtx, PyType, PyValue};
 
 /// Binary operations for Bool type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -229,9 +229,9 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for Bool type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     let bool_val = val.runtime_value().into_int_value();

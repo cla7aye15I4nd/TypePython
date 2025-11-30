@@ -5,12 +5,12 @@ use crate::types::{PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_int_lit_impl(&mut self, val: i64) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.context.i64_type().const_int(val as u64, false).into();
+        let ir_val = self.cg.ctx.i64_type().const_int(val as u64, false).into();
         Ok(PyValue::int(ir_val))
     }
 
     pub(crate) fn visit_float_lit_impl(&mut self, val: f64) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.context.f64_type().const_float(val).into();
+        let ir_val = self.cg.ctx.f64_type().const_float(val).into();
         Ok(PyValue::float(ir_val))
     }
 
@@ -24,6 +24,7 @@ impl<'ctx> CodeGen<'ctx> {
             format!(".str_{}", id)
         };
         let str_const = self
+            .cg
             .builder
             .build_global_string_ptr(val, &str_name)
             .unwrap();
@@ -41,6 +42,7 @@ impl<'ctx> CodeGen<'ctx> {
             format!(".bytes_{}", id)
         };
         let str_const = self
+            .cg
             .builder
             .build_global_string_ptr(val, &str_name)
             .unwrap();
@@ -48,27 +50,27 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_bool_lit_impl(&mut self, val: bool) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.context.bool_type().const_int(val as u64, false).into();
+        let ir_val = self.cg.ctx.bool_type().const_int(val as u64, false).into();
         Ok(PyValue::bool(ir_val))
     }
 
     pub(crate) fn visit_none_lit_impl(&mut self) -> Result<PyValue<'ctx>, String> {
         // Represent None as i32(0) - consistent with type_to_llvm(Type::None)
-        let ir_val = self.context.i32_type().const_zero().into();
+        let ir_val = self.cg.ctx.i32_type().const_zero().into();
         Ok(PyValue::none(ir_val))
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {
         // First check local variables (stack allocations)
         if let Some(var) = self.variables.get(name) {
-            return Ok(var.load(&self.builder, name));
+            return Ok(var.load(&self.cg.builder, name));
         }
 
         // Check if it's a function in the current LLVM module (local functions)
         // This must come before global_variables because global_variables contains
         // placeholder functions from preprocessing
         let mangled_name = self.mangle_function_name(&self.module_name, name);
-        if let Some(function) = self.module.get_function(&mangled_name) {
+        if let Some(function) = self.cg.module.get_function(&mangled_name) {
             // Get type info from global_variables if available (for correct return type)
             let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
                 if global.ty == crate::types::PyType::Function {
@@ -114,11 +116,13 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         // Create a new list with capacity for all elements
         let capacity = self
-            .context
+            .cg
+            .ctx
             .i64_type()
             .const_int(elements.len() as u64, false);
         let list_new_fn = self.get_or_declare_c_builtin("list_with_capacity");
         let call_site = self
+            .cg
             .builder
             .build_call(list_new_fn, &[capacity.into()], "list_new")
             .unwrap();
@@ -137,7 +141,8 @@ impl<'ctx> CodeGen<'ctx> {
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
             // TODO: Type check that elem_val.ty matches elem_type
-            self.builder
+            self.cg
+                .builder
                 .build_call(
                     list_append_fn,
                     &[list_ptr.into(), elem_val.value().into()],
@@ -177,6 +182,7 @@ impl<'ctx> CodeGen<'ctx> {
             self.get_or_declare_c_builtin("dict_new")
         };
         let call_site = self
+            .cg
             .builder
             .build_call(dict_new_fn, &[], "dict_new")
             .unwrap();
@@ -193,7 +199,8 @@ impl<'ctx> CodeGen<'ctx> {
             let key_val = self.evaluate_expression(key_expr)?;
             let val_val = self.evaluate_expression(val_expr)?;
             // TODO: Type check that key/val types match
-            self.builder
+            self.cg
+                .builder
                 .build_call(
                     dict_setitem_fn,
                     &[
@@ -220,7 +227,11 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> Result<PyValue<'ctx>, String> {
         // Create a new empty set
         let set_new_fn = self.get_or_declare_c_builtin("set_new");
-        let call_site = self.builder.build_call(set_new_fn, &[], "set_new").unwrap();
+        let call_site = self
+            .cg
+            .builder
+            .build_call(set_new_fn, &[], "set_new")
+            .unwrap();
         let set_ptr = self.extract_ptr_call_result(call_site).value();
 
         // Infer element type from first element (or default to Int for empty set)
@@ -236,7 +247,8 @@ impl<'ctx> CodeGen<'ctx> {
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
             // TODO: Type check that elem_val.ty matches elem_type
-            self.builder
+            self.cg
+                .builder
                 .build_call(
                     set_add_fn,
                     &[set_ptr.into(), elem_val.value().into()],

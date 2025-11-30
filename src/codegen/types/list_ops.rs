@@ -10,9 +10,9 @@ use super::value::{CgCtx, PyType, PyValue};
 use super::{extract_int_result, extract_ptr_result, get_or_declare_builtin};
 
 /// Binary operations for list type
-pub fn binary_op<'a, 'ctx>(
+pub fn binary_op<'ctx>(
     lhs: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &BinaryOp,
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
@@ -34,7 +34,7 @@ pub fn binary_op<'a, 'ctx>(
                     ));
                 }
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let concat_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_concat");
+                let concat_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_concat");
                 let call_site = cg
                     .builder
                     .build_call(concat_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_concat")
@@ -53,7 +53,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Mul => match &rhs.ty {
             PyType::Int => {
                 let rhs_int = rhs.runtime_value().into_int_value();
-                let repeat_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_repeat");
+                let repeat_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_repeat");
                 let call_site = cg
                     .builder
                     .build_call(repeat_fn, &[lhs_ptr.into(), rhs_int.into()], "list_repeat")
@@ -75,7 +75,7 @@ pub fn binary_op<'a, 'ctx>(
                         "btoi",
                     )
                     .unwrap();
-                let repeat_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_repeat");
+                let repeat_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_repeat");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -98,7 +98,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Eq => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_eq")
@@ -123,7 +123,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Ne => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let eq_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_eq");
+                let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_eq");
                 let call_site = cg
                     .builder
                     .build_call(eq_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_eq")
@@ -148,7 +148,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Lt => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let cmp_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_cmp");
                 let call_site = cg
                     .builder
                     .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
@@ -171,7 +171,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Le => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let cmp_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_cmp");
                 let call_site = cg
                     .builder
                     .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
@@ -194,7 +194,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Gt => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let cmp_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_cmp");
                 let call_site = cg
                     .builder
                     .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
@@ -217,7 +217,7 @@ pub fn binary_op<'a, 'ctx>(
         BinaryOp::Ge => match &rhs.ty {
             PyType::List(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
-                let cmp_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_cmp");
+                let cmp_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_cmp");
                 let call_site = cg
                     .builder
                     .build_call(cmp_fn, &[lhs_ptr.into(), rhs_ptr.into()], "list_cmp")
@@ -258,7 +258,7 @@ pub fn binary_op<'a, 'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             // Get list length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "list_len")
@@ -290,7 +290,7 @@ pub fn binary_op<'a, 'ctx>(
         }
         BinaryOp::Or => {
             // Get list length to determine truthiness
-            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+            let len_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "list_len")
@@ -354,16 +354,16 @@ pub fn binary_op<'a, 'ctx>(
 }
 
 /// Unary operations for list type
-pub fn unary_op<'a, 'ctx>(
+pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
-    cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not list: true if list is empty, false otherwise
             let ptr = val.runtime_value().into_pointer_value();
-            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+            let len_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "list_len");
             let len_call = cg
                 .builder
                 .build_call(len_fn, &[ptr.into()], "list_len")
