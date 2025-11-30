@@ -26,11 +26,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "eq",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // None is never equal to other types
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::Ne => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
@@ -41,11 +40,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "ne",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // None is always not equal to other types
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
         BinaryOp::Is => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
@@ -56,11 +54,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "is_none",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
@@ -71,22 +68,21 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "isnot_none",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical, so is not returns true
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
         // Membership: None in list/dict/set - always False (can't have None in int collections)
         BinaryOp::In => match &rhs.ty() {
             PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
-                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero()))
             }
             _ => Err(format!("Cannot use 'in' with None and {:?}", rhs.ty())),
         },
         BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
-                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones()))
             }
             _ => Err(format!("Cannot use 'not in' with None and {:?}", rhs.ty())),
         },
@@ -97,12 +93,12 @@ pub fn binary_op<'ctx>(
             match &rhs.ty() {
                 PyType::None => {
                     // None and None -> None
-                    Ok(PyValue::none(lhs_int.into()))
+                    Ok(PyValue::none(lhs_int))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
                     // None is falsy, so result is always False
-                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero()))
                 }
             }
         }
@@ -111,12 +107,12 @@ pub fn binary_op<'ctx>(
             match &rhs.ty() {
                 PyType::None => {
                     // None or None -> None (returns last)
-                    Ok(PyValue::none(rhs.runtime_value()))
+                    Ok(PyValue::none(rhs.runtime_value().into_int_value()))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
-                    Ok(PyValue::bool(rhs_bool.into()))
+                    Ok(PyValue::bool(rhs_bool))
                 }
             }
         }
@@ -134,7 +130,7 @@ pub fn unary_op<'ctx>(
     match op {
         UnaryOp::Not => {
             // not None: always True (None is falsy)
-            Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false).into()))
+            Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false)))
         }
         _ => Err(format!("Unary operator {:?} not supported on None", op)),
     }

@@ -5,12 +5,12 @@ use crate::types::{PyType, PyValue};
 
 impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_int_lit_impl(&mut self, val: i64) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.cg.ctx.i64_type().const_int(val as u64, false).into();
+        let ir_val = self.cg.ctx.i64_type().const_int(val as u64, false);
         Ok(PyValue::int(ir_val))
     }
 
     pub(crate) fn visit_float_lit_impl(&mut self, val: f64) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.cg.ctx.f64_type().const_float(val).into();
+        let ir_val = self.cg.ctx.f64_type().const_float(val);
         Ok(PyValue::float(ir_val))
     }
 
@@ -28,7 +28,7 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_global_string_ptr(val, &str_name)
             .unwrap();
-        Ok(PyValue::new_str(str_const.as_pointer_value().into()))
+        Ok(PyValue::new_str(str_const.as_pointer_value()))
     }
 
     pub(crate) fn visit_bytes_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {
@@ -46,17 +46,17 @@ impl<'ctx> CodeGen<'ctx> {
             .builder
             .build_global_string_ptr(val, &str_name)
             .unwrap();
-        Ok(PyValue::bytes(str_const.as_pointer_value().into()))
+        Ok(PyValue::bytes(str_const.as_pointer_value()))
     }
 
     pub(crate) fn visit_bool_lit_impl(&mut self, val: bool) -> Result<PyValue<'ctx>, String> {
-        let ir_val = self.cg.ctx.bool_type().const_int(val as u64, false).into();
+        let ir_val = self.cg.ctx.bool_type().const_int(val as u64, false);
         Ok(PyValue::bool(ir_val))
     }
 
     pub(crate) fn visit_none_lit_impl(&mut self) -> Result<PyValue<'ctx>, String> {
         // Represent None as i32(0) - consistent with PyType::None.to_llvm()
-        let ir_val = self.cg.ctx.i32_type().const_zero().into();
+        let ir_val = self.cg.ctx.i32_type().const_zero();
         Ok(PyValue::none(ir_val))
     }
 

@@ -33,14 +33,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::NE,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "dict_eq_bool",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
 
         // Dict inequality: {1: 2} != {1: 3}
@@ -58,14 +58,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::EQ,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "dict_ne_bool",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false).into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false))),
         },
 
         // Dict merge with | operator (Python 3.9+): {1: 2} | {3: 4}
@@ -87,7 +87,7 @@ pub fn binary_op<'ctx>(
                     .build_call(merge_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_merge")
                     .unwrap();
                 let result = super::extract_ptr_result(call_site, "dict_merge");
-                Ok(PyValue::new(result, lhs.ty().clone(), None))
+                Ok(PyValue::new(result.into(), lhs.ty().clone(), None))
             }
             _ => Err(format!("Cannot use | between dict and {:?}", rhs.ty())),
         },
@@ -97,14 +97,14 @@ pub fn binary_op<'ctx>(
         BinaryOp::In => match &rhs.ty() {
             PyType::List(_) => {
                 // dict in list - always False (can't have dicts in int lists)
-                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero()))
             }
             _ => Err(format!("Cannot use 'in' with dict and {:?}", rhs.ty())),
         },
         BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) => {
                 // dict not in list - always True (can't have dicts in int lists)
-                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones()))
             }
             _ => Err(format!("Cannot use 'not in' with dict and {:?}", rhs.ty())),
         },
@@ -117,7 +117,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "dict_len")
                 .unwrap();
-            let len = extract_int_result(len_call, "dict_len").into_int_value();
+            let len = extract_int_result(len_call, "dict_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -142,7 +142,7 @@ pub fn binary_op<'ctx>(
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -153,7 +153,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "dict_len")
                 .unwrap();
-            let len = extract_int_result(len_call, "dict_len").into_int_value();
+            let len = extract_int_result(len_call, "dict_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -178,7 +178,7 @@ pub fn binary_op<'ctx>(
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -190,12 +190,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(IntPredicate::EQ, lhs_ptr, rhs_ptr, "is")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::Dict(_, _) => {
@@ -203,12 +202,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(IntPredicate::NE, lhs_ptr, rhs_ptr, "isnot")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical, so is not returns true
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
 
         _ => Err(format!("Operator {:?} not supported on dict", op)),
@@ -230,14 +228,13 @@ pub fn unary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[ptr.into()], "dict_len")
                 .unwrap();
-            let len = super::extract_int_result(len_call, "dict_len").into_int_value();
+            let len = super::extract_int_result(len_call, "dict_len");
             let zero = cg.ctx.i64_type().const_zero();
             // not dict is true when len == 0
             Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(inkwell::IntPredicate::EQ, len, zero, "dict_not")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         _ => Err(format!("Unary operator {:?} not supported on dict", op)),

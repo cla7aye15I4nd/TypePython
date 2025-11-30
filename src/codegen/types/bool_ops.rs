@@ -38,10 +38,10 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_signed_int_to_float(lhs_int, cg.ctx.f64_type(), "itof")
                     .unwrap();
-                return super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs);
+                return super::float_ops::binary_op(&PyValue::float(lhs_float), cg, op, rhs);
             }
 
-            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
         }
 
         // Bitwise - coerce to int when RHS is int
@@ -51,7 +51,7 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_and(lhs_bool, rhs.runtime_value().into_int_value(), "bitand")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Int => {
                 // Coerce bool to int and delegate
@@ -59,7 +59,7 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                     .unwrap();
-                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+                super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
             }
             _ => Err(format!("Cannot bitwise AND Bool and {:?}", rhs.ty())),
         },
@@ -69,14 +69,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_or(lhs_bool, rhs.runtime_value().into_int_value(), "bitor")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Int => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                     .unwrap();
-                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+                super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
             }
             _ => Err(format!("Cannot bitwise OR Bool and {:?}", rhs.ty())),
         },
@@ -86,14 +86,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_xor(lhs_bool, rhs.runtime_value().into_int_value(), "bitxor")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Int => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                     .unwrap();
-                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+                super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
             }
             _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty())),
         },
@@ -108,18 +108,17 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "eq",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             PyType::Int | PyType::Float => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                     .unwrap();
-                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+                super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
             }
             // Different types are never equal
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::Ne => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
@@ -130,18 +129,17 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "ne",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             PyType::Int | PyType::Float => {
                 let lhs_int = cg
                     .builder
                     .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                     .unwrap();
-                super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+                super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
             }
             // Different types are never equal
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
         BinaryOp::Lt | BinaryOp::Le | BinaryOp::Gt | BinaryOp::Ge => {
             // Coerce to int for ordering comparisons
@@ -149,7 +147,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                 .unwrap();
-            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
         }
         BinaryOp::Is => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
@@ -160,11 +158,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "is",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
@@ -175,11 +172,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_int_value(),
                         "isnot",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
 
         // Logical and/or - same type returns same type, different types return bool
@@ -189,13 +185,13 @@ pub fn binary_op<'ctx>(
                     // Bool and Bool -> Bool (Python semantics)
                     let rhs_bool = rhs.runtime_value().into_int_value();
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
                 _ => {
                     // Different types -> convert rhs to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -205,13 +201,13 @@ pub fn binary_op<'ctx>(
                     // Bool or Bool -> Bool (Python semantics)
                     let rhs_bool = rhs.runtime_value().into_int_value();
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
                 _ => {
                     // Different types -> convert rhs to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -222,7 +218,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
                 .unwrap();
-            super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
+            super::int_ops::binary_op(&PyValue::int(lhs_int), cg, op, rhs)
         }
     }
 }
@@ -236,7 +232,7 @@ pub fn unary_op<'ctx>(
     let bool_val = val.runtime_value().into_int_value();
     match op {
         UnaryOp::Not => Ok(PyValue::bool(
-            cg.builder.build_not(bool_val, "not").unwrap().into(),
+            cg.builder.build_not(bool_val, "not").unwrap(),
         )),
         // For bitwise NOT, unary minus, and unary plus, coerce to int first
         UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Pos => {
@@ -244,7 +240,7 @@ pub fn unary_op<'ctx>(
                 .builder
                 .build_int_z_extend(bool_val, cg.ctx.i64_type(), "btoi")
                 .unwrap();
-            super::int_ops::unary_op(&PyValue::int(int_val.into()), cg, op)
+            super::int_ops::unary_op(&PyValue::int(int_val), cg, op)
         }
     }
 }

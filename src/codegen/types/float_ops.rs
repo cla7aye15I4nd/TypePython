@@ -55,7 +55,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_float_add(lhs_float, rhs_float, "fadd")
                 .unwrap();
-            Ok(PyValue::float(result.into()))
+            Ok(PyValue::float(result))
         }
         BinaryOp::Sub => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -63,7 +63,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_float_sub(lhs_float, rhs_float, "fsub")
                 .unwrap();
-            Ok(PyValue::float(result.into()))
+            Ok(PyValue::float(result))
         }
         BinaryOp::Mul => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -71,7 +71,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_float_mul(lhs_float, rhs_float, "fmul")
                 .unwrap();
-            Ok(PyValue::float(result.into()))
+            Ok(PyValue::float(result))
         }
         BinaryOp::Div => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -79,7 +79,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_float_div(lhs_float, rhs_float, "fdiv")
                 .unwrap();
-            Ok(PyValue::float(result.into()))
+            Ok(PyValue::float(result))
         }
         BinaryOp::FloorDiv => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -129,10 +129,9 @@ pub fn binary_op<'ctx>(
                 Ok(rhs_float) => Ok(PyValue::bool(
                     cg.builder
                         .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "feq")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 )),
-                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
             }
         }
         BinaryOp::Ne => {
@@ -141,10 +140,9 @@ pub fn binary_op<'ctx>(
                 Ok(rhs_float) => Ok(PyValue::bool(
                     cg.builder
                         .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "fne")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 )),
-                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
             }
         }
         BinaryOp::Lt => {
@@ -152,8 +150,7 @@ pub fn binary_op<'ctx>(
             Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(FloatPredicate::OLT, lhs_float, rhs_float, "flt")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         BinaryOp::Le => {
@@ -161,8 +158,7 @@ pub fn binary_op<'ctx>(
             Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(FloatPredicate::OLE, lhs_float, rhs_float, "fle")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         BinaryOp::Gt => {
@@ -170,8 +166,7 @@ pub fn binary_op<'ctx>(
             Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(FloatPredicate::OGT, lhs_float, rhs_float, "fgt")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         BinaryOp::Ge => {
@@ -179,8 +174,7 @@ pub fn binary_op<'ctx>(
             Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(FloatPredicate::OGE, lhs_float, rhs_float, "fge")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         BinaryOp::Is => match &rhs.ty() {
@@ -192,11 +186,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_float_value(),
                         "is",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::Float => Ok(PyValue::bool(
@@ -207,11 +200,10 @@ pub fn binary_op<'ctx>(
                         rhs.runtime_value().into_float_value(),
                         "isnot",
                     )
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             )),
             // Different types are never identical, so is not returns true
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
 
         // Logical and/or - same type returns same type, different types return bool
@@ -229,7 +221,7 @@ pub fn binary_op<'ctx>(
                         .builder
                         .build_select(lhs_is_zero, lhs_float, rhs_float, "and")
                         .unwrap();
-                    Ok(PyValue::float(result))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
@@ -239,7 +231,7 @@ pub fn binary_op<'ctx>(
                         .unwrap();
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -257,7 +249,7 @@ pub fn binary_op<'ctx>(
                         .builder
                         .build_select(lhs_is_nonzero, lhs_float, rhs_float, "or")
                         .unwrap();
-                    Ok(PyValue::float(result))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
@@ -267,7 +259,7 @@ pub fn binary_op<'ctx>(
                         .unwrap();
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -304,19 +296,14 @@ pub fn binary_op<'ctx>(
             let zero = cg.ctx.i64_type().const_zero();
             let bool_result = cg
                 .builder
-                .build_int_compare(
-                    inkwell::IntPredicate::NE,
-                    result_i64.into_int_value(),
-                    zero,
-                    "tobool",
-                )
+                .build_int_compare(inkwell::IntPredicate::NE, result_i64, zero, "tobool")
                 .unwrap();
             if matches!(op, BinaryOp::NotIn) {
                 Ok(PyValue::bool(
-                    cg.builder.build_not(bool_result, "not").unwrap().into(),
+                    cg.builder.build_not(bool_result, "not").unwrap(),
                 ))
             } else {
-                Ok(PyValue::bool(bool_result.into()))
+                Ok(PyValue::bool(bool_result))
             }
         }
     }
@@ -331,20 +318,16 @@ pub fn unary_op<'ctx>(
     let float_val = val.runtime_value().into_float_value();
     match op {
         UnaryOp::Neg => Ok(PyValue::float(
-            cg.builder
-                .build_float_neg(float_val, "fneg")
-                .unwrap()
-                .into(),
+            cg.builder.build_float_neg(float_val, "fneg").unwrap(),
         )),
-        UnaryOp::Pos => Ok(PyValue::float(val.runtime_value())),
+        UnaryOp::Pos => Ok(PyValue::float(val.float_value())),
         UnaryOp::Not => {
             // not float: true if float == 0.0, false otherwise
             let zero = cg.ctx.f64_type().const_zero();
             Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(FloatPredicate::OEQ, float_val, zero, "fnot")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         UnaryOp::BitNot => Err(format!("Operator {:?} not supported on floats", op)),

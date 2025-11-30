@@ -40,7 +40,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 let result = extract_ptr_result(call_site, "list_concat");
                 Ok(PyValue::new(
-                    result,
+                    result.into(),
                     PyType::List(Box::new(lhs_elem_type)),
                     None,
                 ))
@@ -59,7 +59,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 let result = extract_ptr_result(call_site, "list_repeat");
                 Ok(PyValue::new(
-                    result,
+                    result.into(),
                     PyType::List(Box::new(lhs_elem_type)),
                     None,
                 ))
@@ -85,7 +85,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 let result = extract_ptr_result(call_site, "list_repeat");
                 Ok(PyValue::new(
-                    result,
+                    result.into(),
                     PyType::List(Box::new(lhs_elem_type)),
                     None,
                 ))
@@ -108,14 +108,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::NE,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_eq_bool",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
 
         // List inequality: [1, 2] != [1, 3]
@@ -133,14 +133,14 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::EQ,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_ne_bool",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false).into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false))),
         },
 
         // List comparisons: [1, 2] < [1, 3], etc. (lexicographic)
@@ -158,12 +158,12 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::SLT,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_lt",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare list with {:?}", rhs.ty())),
         },
@@ -181,12 +181,12 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::SLE,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_le",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare list with {:?}", rhs.ty())),
         },
@@ -204,12 +204,12 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::SGT,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_gt",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare list with {:?}", rhs.ty())),
         },
@@ -227,12 +227,12 @@ pub fn binary_op<'ctx>(
                     .builder
                     .build_int_compare(
                         IntPredicate::SGE,
-                        result.into_int_value(),
+                        result,
                         cg.ctx.i64_type().const_zero(),
                         "list_ge",
                     )
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare list with {:?}", rhs.ty())),
         },
@@ -242,14 +242,14 @@ pub fn binary_op<'ctx>(
         BinaryOp::In => match &rhs.ty() {
             PyType::List(_) => {
                 // list in list - always False for int lists (no nesting)
-                Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero()))
             }
             _ => Err(format!("Cannot use 'in' with list and {:?}", rhs.ty())),
         },
         BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) => {
                 // list not in list - always True for int lists (no nesting)
-                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones()))
             }
             _ => Err(format!("Cannot use 'not in' with list and {:?}", rhs.ty())),
         },
@@ -262,7 +262,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "list_len")
                 .unwrap();
-            let len = extract_int_result(len_call, "list_len").into_int_value();
+            let len = extract_int_result(len_call, "list_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -283,7 +283,7 @@ pub fn binary_op<'ctx>(
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -294,7 +294,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "list_len")
                 .unwrap();
-            let len = extract_int_result(len_call, "list_len").into_int_value();
+            let len = extract_int_result(len_call, "list_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -315,7 +315,7 @@ pub fn binary_op<'ctx>(
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -327,12 +327,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(inkwell::IntPredicate::EQ, lhs_ptr, rhs_ptr, "is")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::List(_) => {
@@ -340,12 +339,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(inkwell::IntPredicate::NE, lhs_ptr, rhs_ptr, "isnot")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical, so is not returns true
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
 
         _ => Err(format!("Operator {:?} not supported on list", op)),
@@ -367,14 +365,13 @@ pub fn unary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[ptr.into()], "list_len")
                 .unwrap();
-            let len = super::extract_int_result(len_call, "list_len").into_int_value();
+            let len = super::extract_int_result(len_call, "list_len");
             let zero = cg.ctx.i64_type().const_zero();
             // not list is true when len == 0
             Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(inkwell::IntPredicate::EQ, len, zero, "list_not")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         _ => Err(format!("Unary operator {:?} not supported on list", op)),

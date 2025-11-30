@@ -166,13 +166,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Use the return type from func_value metadata
                 match &return_type {
-                    PyType::None => Ok(PyValue::none(
-                        self.cg
-                            .ctx
-                            .ptr_type(inkwell::AddressSpace::default())
-                            .const_null()
-                            .into(),
-                    )),
+                    PyType::None => Ok(PyValue::none(self.cg.ctx.i32_type().const_zero())),
                     PyType::Int => Ok(self.extract_int_call_result(call_site)),
                     PyType::Float => Ok(self.extract_float_call_result(call_site)),
                     PyType::Bool => Ok(self.extract_bool_call_result(call_site)),
@@ -261,11 +255,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     self.evaluate_expression(s)?
                                 } else {
                                     PyValue::int(
-                                        self.cg
-                                            .ctx
-                                            .i64_type()
-                                            .const_int(i64::MAX as u64, false)
-                                            .into(),
+                                        self.cg.ctx.i64_type().const_int(i64::MAX as u64, false),
                                     )
                                 };
 
@@ -274,11 +264,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     self.evaluate_expression(e)?
                                 } else {
                                     PyValue::int(
-                                        self.cg
-                                            .ctx
-                                            .i64_type()
-                                            .const_int(i64::MAX as u64, false)
-                                            .into(),
+                                        self.cg.ctx.i64_type().const_int(i64::MAX as u64, false),
                                     )
                                 };
 
@@ -294,7 +280,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 let start_val = if let Some(s) = start {
                                     self.evaluate_expression(s)?
                                 } else {
-                                    PyValue::int(self.cg.ctx.i64_type().const_zero().into())
+                                    PyValue::int(self.cg.ctx.i64_type().const_zero())
                                 };
 
                                 // Get stop value (default len)
@@ -322,11 +308,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     self.evaluate_expression(s)?
                                 } else {
                                     PyValue::int(
-                                        self.cg
-                                            .ctx
-                                            .i64_type()
-                                            .const_int(i64::MAX as u64, false)
-                                            .into(),
+                                        self.cg.ctx.i64_type().const_int(i64::MAX as u64, false),
                                     )
                                 };
 
@@ -335,11 +317,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     self.evaluate_expression(e)?
                                 } else {
                                     PyValue::int(
-                                        self.cg
-                                            .ctx
-                                            .i64_type()
-                                            .const_int(i64::MAX as u64, false)
-                                            .into(),
+                                        self.cg.ctx.i64_type().const_int(i64::MAX as u64, false),
                                     )
                                 };
 
@@ -356,7 +334,7 @@ impl<'ctx> CodeGen<'ctx> {
                                 let start_val = if let Some(s) = start {
                                     self.evaluate_expression(s)?
                                 } else {
-                                    PyValue::int(self.cg.ctx.i64_type().const_zero().into())
+                                    PyValue::int(self.cg.ctx.i64_type().const_zero())
                                 };
 
                                 // Get stop value (default len)
@@ -654,7 +632,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
         let iv = call_site.as_any_value_enum().into_int_value();
-        PyValue::int(iv.into())
+        PyValue::int(iv)
     }
 
     /// Helper to extract float result from a call site
@@ -665,7 +643,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
         let fv = call_site.as_any_value_enum().into_float_value();
-        PyValue::float(fv.into())
+        PyValue::float(fv)
     }
 
     /// Helper to extract bool result from a call site
@@ -678,7 +656,7 @@ impl<'ctx> CodeGen<'ctx> {
         use inkwell::values::AnyValue;
         let iv = call_site.as_any_value_enum().into_int_value();
         if iv.get_type().get_bit_width() == 1 {
-            PyValue::bool(iv.into())
+            PyValue::bool(iv)
         } else {
             // Convert int64_t to bool by comparing with zero
             let zero = iv.get_type().const_zero();
@@ -687,7 +665,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_int_compare(inkwell::IntPredicate::NE, iv, zero, "to_bool")
                 .unwrap();
-            PyValue::bool(bool_val.into())
+            PyValue::bool(bool_val)
         }
     }
 
@@ -699,7 +677,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
         let pv = call_site.as_any_value_enum().into_pointer_value();
-        PyValue::bytes(pv.into())
+        PyValue::bytes(pv)
     }
 
     /// Helper to extract str (pointer) result from a call site
@@ -710,7 +688,7 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
         let pv = call_site.as_any_value_enum().into_pointer_value();
-        PyValue::new_str(pv.into())
+        PyValue::new_str(pv)
     }
 
     /// Helper to extract pointer result from a call site (for container types)
@@ -721,8 +699,8 @@ impl<'ctx> CodeGen<'ctx> {
     ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
         let pv = call_site.as_any_value_enum().into_pointer_value();
-        // Return as int type - caller will wrap with proper container type
-        PyValue::int(pv.into())
+        // Return as str type since it holds pointer - caller will wrap with proper container type
+        PyValue::new_str(pv)
     }
 
     pub(crate) fn create_entry_block_alloca(

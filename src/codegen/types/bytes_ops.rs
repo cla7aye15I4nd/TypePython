@@ -97,12 +97,12 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "strcmp_bytes");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             // Different types are never equal
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::Ne => match &rhs.ty() {
             PyType::Bytes => {
@@ -118,13 +118,13 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "strcmp_bytes");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
                 let negated = cg.builder.build_not(bool_val, "ne").unwrap();
-                Ok(PyValue::bool(negated.into()))
+                Ok(PyValue::bool(negated))
             }
             // Different types are never equal
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
         BinaryOp::Lt => match &rhs.ty() {
             PyType::Bytes => {
@@ -140,9 +140,9 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_lt");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
@@ -160,9 +160,9 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_le");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
@@ -180,9 +180,9 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_gt");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
@@ -200,9 +200,9 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_ge");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
@@ -224,9 +224,9 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_contains");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
-                Ok(PyValue::bool(bool_val.into()))
+                Ok(PyValue::bool(bool_val))
             }
             _ => Err(format!("Cannot use 'in' with Bytes and {:?}", rhs.ty())),
         },
@@ -246,10 +246,10 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_int_result(call_site, "bytes_contains");
                 let bool_val = cg
                     .builder
-                    .build_int_truncate(result.into_int_value(), cg.ctx.bool_type(), "to_bool")
+                    .build_int_truncate(result, cg.ctx.bool_type(), "to_bool")
                     .unwrap();
                 let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
-                Ok(PyValue::bool(negated.into()))
+                Ok(PyValue::bool(negated))
             }
             _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty())),
         },
@@ -262,7 +262,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
                 .unwrap();
-            let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+            let len = super::extract_int_result(len_call, "bytes_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -277,13 +277,13 @@ pub fn binary_op<'ctx>(
                         .builder
                         .build_select(lhs_bool, rhs_ptr, lhs_ptr, "and")
                         .unwrap();
-                    Ok(PyValue::bytes(result))
+                    Ok(PyValue::bytes(result.into_pointer_value()))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -294,7 +294,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
                 .unwrap();
-            let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+            let len = super::extract_int_result(len_call, "bytes_len");
             let zero = cg.ctx.i64_type().const_zero();
             let lhs_bool = cg
                 .builder
@@ -309,13 +309,13 @@ pub fn binary_op<'ctx>(
                         .builder
                         .build_select(lhs_bool, lhs_ptr, rhs_ptr, "or")
                         .unwrap();
-                    Ok(PyValue::bytes(result))
+                    Ok(PyValue::bytes(result.into_pointer_value()))
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
                     let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
-                    Ok(PyValue::bool(result.into()))
+                    Ok(PyValue::bool(result))
                 }
             }
         }
@@ -327,12 +327,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(inkwell::IntPredicate::EQ, lhs_ptr, rhs_ptr, "is")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero())),
         },
         BinaryOp::IsNot => match &rhs.ty() {
             PyType::Bytes => {
@@ -340,12 +339,11 @@ pub fn binary_op<'ctx>(
                 Ok(PyValue::bool(
                     cg.builder
                         .build_int_compare(inkwell::IntPredicate::NE, lhs_ptr, rhs_ptr, "isnot")
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                 ))
             }
             // Different types are never identical, so is not returns true
-            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
         },
 
         _ => Err(format!("Operator {:?} not supported for bytes type", op)),
@@ -367,14 +365,13 @@ pub fn unary_op<'ctx>(
                 .builder
                 .build_call(len_fn, &[ptr.into()], "bytes_len")
                 .unwrap();
-            let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+            let len = super::extract_int_result(len_call, "bytes_len");
             let zero = cg.ctx.i64_type().const_zero();
             // not bytes is true when len == 0
             Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(inkwell::IntPredicate::EQ, len, zero, "bytes_not")
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
             ))
         }
         _ => Err(format!("Unary operator {:?} not supported on bytes", op)),

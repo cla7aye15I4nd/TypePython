@@ -41,13 +41,7 @@ impl<'ctx> CodeGen<'ctx> {
             .build_call(print_newline, &[], "print_newline")
             .unwrap();
 
-        Ok(PyValue::none(
-            self.cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null()
-                .into(),
-        ))
+        Ok(PyValue::none(self.cg.ctx.i32_type().const_zero()))
     }
 
     /// Get the appropriate print function name for a type

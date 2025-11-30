@@ -14,7 +14,7 @@ mod set_ops;
 mod str_ops;
 mod value;
 
-pub use value::{CgCtx, FunctionInfo, LLVMValue, MacroKind, ModuleInfo, PyType, PyValue};
+pub use value::{CgCtx, FunctionInfo, MacroKind, ModuleInfo, PyType, PyValue};
 
 // ============================================================================
 // Helper Functions (used by type operation modules)
@@ -23,7 +23,7 @@ pub use value::{CgCtx, FunctionInfo, LLVMValue, MacroKind, ModuleInfo, PyType, P
 use crate::codegen::builtins::BUILTIN_TABLE;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::values::{BasicValueEnum, FunctionValue};
+use inkwell::values::FunctionValue;
 
 fn get_or_declare_builtin<'ctx>(
     module: &Module<'ctx>,
@@ -45,11 +45,11 @@ fn get_or_declare_builtin<'ctx>(
 fn extract_int_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> BasicValueEnum<'ctx> {
+) -> inkwell::values::IntValue<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::IntValue(iv) = any_val {
-        iv.into()
+        iv
     } else {
         panic!("{} did not return an int value", fn_name)
     }
@@ -58,11 +58,11 @@ fn extract_int_result<'ctx>(
 fn extract_float_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> BasicValueEnum<'ctx> {
+) -> inkwell::values::FloatValue<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::FloatValue(fv) = any_val {
-        fv.into()
+        fv
     } else {
         panic!("{} did not return a float value", fn_name)
     }
@@ -71,11 +71,11 @@ fn extract_float_result<'ctx>(
 fn extract_ptr_result<'ctx>(
     call_site: inkwell::values::CallSiteValue<'ctx>,
     fn_name: &str,
-) -> BasicValueEnum<'ctx> {
+) -> inkwell::values::PointerValue<'ctx> {
     use inkwell::values::AnyValue;
     let any_val = call_site.as_any_value_enum();
     if let inkwell::values::AnyValueEnum::PointerValue(pv) = any_val {
-        pv.into()
+        pv
     } else {
         panic!("{} did not return a pointer value", fn_name)
     }

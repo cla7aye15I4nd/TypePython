@@ -47,7 +47,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "btoi",
                     )
                     .unwrap();
-                Ok(PyValue::int(result.into()))
+                Ok(PyValue::int(result))
             }
             _ => Err(format!("abs() not supported for type {:?}", val.ty())),
         }
@@ -91,7 +91,7 @@ impl<'ctx> CodeGen<'ctx> {
                             "btoi",
                         )
                         .unwrap();
-                    Ok(PyValue::int(result.into()))
+                    Ok(PyValue::int(result))
                 }
                 PyType::Float => {
                     let round_fn = self.get_or_declare_c_builtin("round_float");
@@ -350,7 +350,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(cmp, a_val, b_val, "minmax")
                         .unwrap();
-                    Ok(PyValue::bool(result.into_int_value().into()))
+                    Ok(PyValue::bool(result.into_int_value()))
                 }
                 PyType::Int => {
                     let a_val = a.value().into_int_value();
@@ -370,7 +370,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(cmp, a_val, b_val, "minmax")
                         .unwrap();
-                    Ok(PyValue::int(result.into_int_value().into()))
+                    Ok(PyValue::int(result.into_int_value()))
                 }
                 PyType::Float => {
                     let a_val = a.value().into_float_value();
@@ -390,7 +390,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(cmp, a_val, b_val, "minmax")
                         .unwrap();
-                    Ok(PyValue::float(result.into_float_value().into()))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
                 PyType::Str => {
                     // Compare strings lexicographically
@@ -452,7 +452,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(cmp, a.value(), b.value(), "minmax")
                         .unwrap();
-                    Ok(PyValue::bytes(result.into_pointer_value().into()))
+                    Ok(PyValue::bytes(result.into_pointer_value()))
                 }
                 PyType::List(_) => {
                     // Compare lists lexicographically
@@ -616,7 +616,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     phi.add_incoming(&[(&a_val.into_int_value(), then_bb), (&b_as_int, else_bb)]);
 
-                    Ok(PyValue::int(phi.as_basic_value()))
+                    Ok(PyValue::int(phi.as_basic_value().into_int_value()))
                 }
                 (PyType::Float, PyType::Int) => {
                     // If returning a (float), use float; if returning b (int), convert to float
@@ -625,7 +625,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(return_a, a.value().into_float_value(), b_float, "minmax")
                         .unwrap();
-                    Ok(PyValue::float(result.into_float_value().into()))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
                 (PyType::Bool, PyType::Float) => {
                     // Return bool when a wins/eq, float when b wins
@@ -689,7 +689,7 @@ impl<'ctx> CodeGen<'ctx> {
                             "tobool",
                         )
                         .unwrap();
-                    Ok(PyValue::bool(bool_result.into()))
+                    Ok(PyValue::bool(bool_result))
                 }
                 (PyType::Float, PyType::Bool) => {
                     // Return float when a wins/eq, convert bool to float when b wins
@@ -698,7 +698,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(return_a, a.value().into_float_value(), b_float, "minmax")
                         .unwrap();
-                    Ok(PyValue::float(result.into_float_value().into()))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
                 (PyType::Int, PyType::Bool) | (PyType::Bool, PyType::Int) => {
                     // Both int-ish, compare as ints and return first arg type
@@ -731,9 +731,9 @@ impl<'ctx> CodeGen<'ctx> {
                                 "tobool",
                             )
                             .unwrap();
-                        Ok(PyValue::bool(bool_result.into()))
+                        Ok(PyValue::bool(bool_result))
                     } else {
-                        Ok(PyValue::int(result.into_int_value().into()))
+                        Ok(PyValue::int(result.into_int_value()))
                     }
                 }
                 _ => {
@@ -743,7 +743,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_select(return_a, a_float, b_float, "minmax")
                         .unwrap();
-                    Ok(PyValue::float(result.into_float_value().into()))
+                    Ok(PyValue::float(result.into_float_value()))
                 }
             }
         }
@@ -969,7 +969,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "ftoi",
                     )
                     .unwrap();
-                Ok(PyValue::int(result.into()))
+                Ok(PyValue::int(result))
             }
             PyType::Bool => {
                 let result = self
@@ -981,7 +981,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "btoi",
                     )
                     .unwrap();
-                Ok(PyValue::int(result.into()))
+                Ok(PyValue::int(result))
             }
             _ => Err(format!("int() not supported for type {:?}", val.ty())),
         }
@@ -1009,7 +1009,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "itof",
                     )
                     .unwrap();
-                Ok(PyValue::float(result.into()))
+                Ok(PyValue::float(result))
             }
             PyType::Bool => {
                 let int_val = self
@@ -1026,7 +1026,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_signed_int_to_float(int_val, self.cg.ctx.f64_type(), "itof")
                     .unwrap();
-                Ok(PyValue::float(result.into()))
+                Ok(PyValue::float(result))
             }
             _ => Err(format!("float() not supported for type {:?}", val.ty())),
         }
@@ -1051,7 +1051,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, val.value().into_int_value(), zero, "itob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Float => {
                 let zero = self.cg.ctx.f64_type().const_zero();
@@ -1065,7 +1065,7 @@ impl<'ctx> CodeGen<'ctx> {
                         "ftob",
                     )
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Str => {
                 let len_fn = self.get_or_declare_c_builtin("str_len");
@@ -1081,7 +1081,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, len.value().into_int_value(), zero, "stob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Bytes => {
                 let len_fn = self.get_or_declare_c_builtin("bytes_len");
@@ -1097,7 +1097,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, len.value().into_int_value(), zero, "btob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::List(_) => {
                 let len_fn = self.get_or_declare_c_builtin("list_len");
@@ -1113,7 +1113,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, len.value().into_int_value(), zero, "ltob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Dict(_, _) => {
                 let len_fn = self.get_or_declare_c_builtin("dict_len");
@@ -1129,7 +1129,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, len.value().into_int_value(), zero, "dtob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::Set(_) => {
                 let len_fn = self.get_or_declare_c_builtin("set_len");
@@ -1145,12 +1145,12 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_int_compare(IntPredicate::NE, len.value().into_int_value(), zero, "stob")
                     .unwrap();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             PyType::None => {
                 // None is always falsy
                 let result = self.cg.ctx.bool_type().const_zero();
-                Ok(PyValue::bool(result.into()))
+                Ok(PyValue::bool(result))
             }
             _ => Err(format!("bool() not supported for type {:?}", val.ty())),
         }
