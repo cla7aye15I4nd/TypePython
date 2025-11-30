@@ -23,486 +23,646 @@ v16_int_gt_int: bool = 1 > 1
 v17_int_ge_int: bool = 1 >= 1
 v18_int_and_int: int = 1 and 1
 v19_int_or_int: int = 1 or 1
-v20_int_add_float: float = 1 + 1.0
-v21_int_sub_float: float = 1 - 1.0
-v22_int_mul_float: float = 1 * 1.0
-v23_int_div_float: float = 1 / 1.0
-v24_int_floordiv_float: float = 1 // 1.0
-v25_int_mod_float: float = 1 % 1.0
-v26_int_pow_float: float = 1 ** 1.0
-v27_int_eq_float: bool = 1 == 1.0
-v28_int_ne_float: bool = 1 != 1.0
-v29_int_lt_float: bool = 1 < 1.0
-v30_int_le_float: bool = 1 <= 1.0
-v31_int_gt_float: bool = 1 > 1.0
-v32_int_ge_float: bool = 1 >= 1.0
-v33_int_and_float: bool = bool(1 and 1.0)
-v34_int_or_float: bool = bool(1 or 1.0)
-v35_int_add_bool: int = 1 + True
-v36_int_sub_bool: int = 1 - True
-v37_int_mul_bool: int = 1 * True
-v38_int_div_bool: float = 1 / True
-v39_int_floordiv_bool: int = 1 // True
-v40_int_mod_bool: int = 1 % True
-v41_int_pow_bool: int = 1 ** True
-v42_int_bitand_bool: int = 1 & True
-v43_int_bitor_bool: int = 1 | True
-v44_int_bitxor_bool: int = 1 ^ True
-v45_int_lshift_bool: int = 1 << True
-v46_int_rshift_bool: int = 1 >> True
-v47_int_eq_bool: bool = 1 == True
-v48_int_ne_bool: bool = 1 != True
-v49_int_lt_bool: bool = 1 < True
-v50_int_le_bool: bool = 1 <= True
-v51_int_gt_bool: bool = 1 > True
-v52_int_ge_bool: bool = 1 >= True
-v53_int_and_bool: bool = bool(1 and True)
-v54_int_or_bool: bool = bool(1 or True)
-v55_int_mul_str: str = 1 * "hello"
-v56_int_eq_str: bool = 1 == "hello"
-v57_int_ne_str: bool = 1 != "hello"
-v58_int_and_str: bool = bool(1 and "hello")
-v59_int_or_str: bool = bool(1 or "hello")
-v60_int_mul_bytes: bytes = 1 * b"hello"
-v61_int_eq_bytes: bool = 1 == b"hello"
-v62_int_ne_bytes: bool = 1 != b"hello"
-v63_int_in_bytes: bool = 1 in b"hello"
-v64_int_notin_bytes: bool = 1 not in b"hello"
-v65_int_and_bytes: bool = bool(1 and b"hello")
-v66_int_or_bytes: bool = bool(1 or b"hello")
-v67_int_mul_list: list[int] = 1 * [1, 2, 3]
-v68_int_eq_list: bool = 1 == [1, 2, 3]
-v69_int_ne_list: bool = 1 != [1, 2, 3]
-v70_int_in_list: bool = 1 in [1, 2, 3]
-v71_int_notin_list: bool = 1 not in [1, 2, 3]
-v72_int_and_list: bool = bool(1 and [1, 2, 3])
-v73_int_or_list: bool = bool(1 or [1, 2, 3])
-v74_int_eq_dict: bool = 1 == {"a": 1}
-v75_int_ne_dict: bool = 1 != {"a": 1}
-v76_int_in_dict: bool = 1 in {"a": 1}
-v77_int_notin_dict: bool = 1 not in {"a": 1}
-v78_int_and_dict: bool = bool(1 and {"a": 1})
-v79_int_or_dict: bool = bool(1 or {"a": 1})
-v80_int_eq_set: bool = 1 == {1, 2, 3}
-v81_int_ne_set: bool = 1 != {1, 2, 3}
-v82_int_in_set: bool = 1 in {1, 2, 3}
-v83_int_notin_set: bool = 1 not in {1, 2, 3}
-v84_int_and_set: bool = bool(1 and {1, 2, 3})
-v85_int_or_set: bool = bool(1 or {1, 2, 3})
-v86_int_eq_none: bool = 1 == None
-v87_int_ne_none: bool = 1 != None
-v88_int_and_none: bool = bool(1 and None)
-v89_int_or_none: bool = bool(1 or None)
-v90_float_add_int: float = 1.0 + 1
-v91_float_sub_int: float = 1.0 - 1
-v92_float_mul_int: float = 1.0 * 1
-v93_float_div_int: float = 1.0 / 1
-v94_float_floordiv_int: float = 1.0 // 1
-v95_float_mod_int: float = 1.0 % 1
-v96_float_pow_int: float = 1.0 ** 1
-v97_float_eq_int: bool = 1.0 == 1
-v98_float_ne_int: bool = 1.0 != 1
-v99_float_lt_int: bool = 1.0 < 1
-v100_float_le_int: bool = 1.0 <= 1
-v101_float_gt_int: bool = 1.0 > 1
-v102_float_ge_int: bool = 1.0 >= 1
-v103_float_and_int: bool = bool(1.0 and 1)
-v104_float_or_int: bool = bool(1.0 or 1)
-v105_float_add_float: float = 1.0 + 1.0
-v106_float_sub_float: float = 1.0 - 1.0
-v107_float_mul_float: float = 1.0 * 1.0
-v108_float_div_float: float = 1.0 / 1.0
-v109_float_floordiv_float: float = 1.0 // 1.0
-v110_float_mod_float: float = 1.0 % 1.0
-v111_float_pow_float: float = 1.0 ** 1.0
-v112_float_eq_float: bool = 1.0 == 1.0
-v113_float_ne_float: bool = 1.0 != 1.0
-v114_float_lt_float: bool = 1.0 < 1.0
-v115_float_le_float: bool = 1.0 <= 1.0
-v116_float_gt_float: bool = 1.0 > 1.0
-v117_float_ge_float: bool = 1.0 >= 1.0
-v118_float_and_float: float = 1.0 and 1.0
-v119_float_or_float: float = 1.0 or 1.0
-v120_float_add_bool: float = 1.0 + True
-v121_float_sub_bool: float = 1.0 - True
-v122_float_mul_bool: float = 1.0 * True
-v123_float_div_bool: float = 1.0 / True
-v124_float_floordiv_bool: float = 1.0 // True
-v125_float_mod_bool: float = 1.0 % True
-v126_float_pow_bool: float = 1.0 ** True
-v127_float_eq_bool: bool = 1.0 == True
-v128_float_ne_bool: bool = 1.0 != True
-v129_float_lt_bool: bool = 1.0 < True
-v130_float_le_bool: bool = 1.0 <= True
-v131_float_gt_bool: bool = 1.0 > True
-v132_float_ge_bool: bool = 1.0 >= True
-v133_float_and_bool: bool = bool(1.0 and True)
-v134_float_or_bool: bool = bool(1.0 or True)
-v135_float_eq_str: bool = 1.0 == "hello"
-v136_float_ne_str: bool = 1.0 != "hello"
-v137_float_and_str: bool = bool(1.0 and "hello")
-v138_float_or_str: bool = bool(1.0 or "hello")
-v139_float_eq_bytes: bool = 1.0 == b"hello"
-v140_float_ne_bytes: bool = 1.0 != b"hello"
-v141_float_and_bytes: bool = bool(1.0 and b"hello")
-v142_float_or_bytes: bool = bool(1.0 or b"hello")
-v143_float_eq_list: bool = 1.0 == [1, 2, 3]
-v144_float_ne_list: bool = 1.0 != [1, 2, 3]
-v145_float_and_list: bool = bool(1.0 and [1, 2, 3])
-v146_float_or_list: bool = bool(1.0 or [1, 2, 3])
-v147_float_eq_dict: bool = 1.0 == {"a": 1}
-v148_float_ne_dict: bool = 1.0 != {"a": 1}
-v149_float_and_dict: bool = bool(1.0 and {"a": 1})
-v150_float_or_dict: bool = bool(1.0 or {"a": 1})
-v151_float_eq_set: bool = 1.0 == {1, 2, 3}
-v152_float_ne_set: bool = 1.0 != {1, 2, 3}
-v153_float_and_set: bool = bool(1.0 and {1, 2, 3})
-v154_float_or_set: bool = bool(1.0 or {1, 2, 3})
-v155_float_eq_none: bool = 1.0 == None
-v156_float_ne_none: bool = 1.0 != None
-v157_float_and_none: bool = bool(1.0 and None)
-v158_float_or_none: bool = bool(1.0 or None)
-v159_bool_add_int: int = True + 1
-v160_bool_sub_int: int = True - 1
-v161_bool_mul_int: int = True * 1
-v162_bool_div_int: float = True / 1
-v163_bool_floordiv_int: int = True // 1
-v164_bool_mod_int: int = True % 1
-v165_bool_pow_int: int = True ** 1
-v166_bool_bitand_int: int = True & 1
-v167_bool_bitor_int: int = True | 1
-v168_bool_bitxor_int: int = True ^ 1
-v169_bool_lshift_int: int = True << 1
-v170_bool_rshift_int: int = True >> 1
-v171_bool_eq_int: bool = True == 1
-v172_bool_ne_int: bool = True != 1
-v173_bool_lt_int: bool = True < 1
-v174_bool_le_int: bool = True <= 1
-v175_bool_gt_int: bool = True > 1
-v176_bool_ge_int: bool = True >= 1
-v177_bool_and_int: bool = bool(True and 1)
-v178_bool_or_int: bool = bool(True or 1)
-v179_bool_add_float: float = True + 1.0
-v180_bool_sub_float: float = True - 1.0
-v181_bool_mul_float: float = True * 1.0
-v182_bool_div_float: float = True / 1.0
-v183_bool_floordiv_float: float = True // 1.0
-v184_bool_mod_float: float = True % 1.0
-v185_bool_pow_float: float = True ** 1.0
-v186_bool_eq_float: bool = True == 1.0
-v187_bool_ne_float: bool = True != 1.0
-v188_bool_lt_float: bool = True < 1.0
-v189_bool_le_float: bool = True <= 1.0
-v190_bool_gt_float: bool = True > 1.0
-v191_bool_ge_float: bool = True >= 1.0
-v192_bool_and_float: bool = bool(True and 1.0)
-v193_bool_or_float: bool = bool(True or 1.0)
-v194_bool_add_bool: int = True + True
-v195_bool_sub_bool: int = True - True
-v196_bool_mul_bool: int = True * True
-v197_bool_div_bool: float = True / True
-v198_bool_floordiv_bool: int = True // True
-v199_bool_mod_bool: int = True % True
-v200_bool_pow_bool: int = True ** True
-v201_bool_bitand_bool: bool = True & True
-v202_bool_bitor_bool: bool = True | True
-v203_bool_bitxor_bool: bool = True ^ True
-v204_bool_lshift_bool: int = True << True
-v205_bool_rshift_bool: int = True >> True
-v206_bool_eq_bool: bool = True == True
-v207_bool_ne_bool: bool = True != True
-v208_bool_lt_bool: bool = True < True
-v209_bool_le_bool: bool = True <= True
-v210_bool_gt_bool: bool = True > True
-v211_bool_ge_bool: bool = True >= True
-v212_bool_and_bool: bool = True and True
-v213_bool_or_bool: bool = True or True
-v214_bool_mul_str: str = True * "hello"
-v215_bool_eq_str: bool = True == "hello"
-v216_bool_ne_str: bool = True != "hello"
-v217_bool_and_str: bool = bool(True and "hello")
-v218_bool_or_str: bool = bool(True or "hello")
-v219_bool_mul_bytes: bytes = True * b"hello"
-v220_bool_eq_bytes: bool = True == b"hello"
-v221_bool_ne_bytes: bool = True != b"hello"
-v222_bool_in_bytes: bool = True in b"hello"
-v223_bool_notin_bytes: bool = True not in b"hello"
-v224_bool_and_bytes: bool = bool(True and b"hello")
-v225_bool_or_bytes: bool = bool(True or b"hello")
-v226_bool_mul_list: list[int] = True * [1, 2, 3]
-v227_bool_eq_list: bool = True == [1, 2, 3]
-v228_bool_ne_list: bool = True != [1, 2, 3]
-v229_bool_in_list: bool = True in [1, 2, 3]
-v230_bool_notin_list: bool = True not in [1, 2, 3]
-v231_bool_and_list: bool = bool(True and [1, 2, 3])
-v232_bool_or_list: bool = bool(True or [1, 2, 3])
-v233_bool_eq_dict: bool = True == {"a": 1}
-v234_bool_ne_dict: bool = True != {"a": 1}
-v235_bool_in_dict: bool = True in {"a": 1}
-v236_bool_notin_dict: bool = True not in {"a": 1}
-v237_bool_and_dict: bool = bool(True and {"a": 1})
-v238_bool_or_dict: bool = bool(True or {"a": 1})
-v239_bool_eq_set: bool = True == {1, 2, 3}
-v240_bool_ne_set: bool = True != {1, 2, 3}
-v241_bool_in_set: bool = True in {1, 2, 3}
-v242_bool_notin_set: bool = True not in {1, 2, 3}
-v243_bool_and_set: bool = bool(True and {1, 2, 3})
-v244_bool_or_set: bool = bool(True or {1, 2, 3})
-v245_bool_eq_none: bool = True == None
-v246_bool_ne_none: bool = True != None
-v247_bool_and_none: bool = bool(True and None)
-v248_bool_or_none: bool = bool(True or None)
-v249_str_mul_int: str = "hello" * 1
-v250_str_eq_int: bool = "hello" == 1
-v251_str_ne_int: bool = "hello" != 1
-v252_str_and_int: bool = bool("hello" and 1)
-v253_str_or_int: bool = bool("hello" or 1)
-v254_str_eq_float: bool = "hello" == 1.0
-v255_str_ne_float: bool = "hello" != 1.0
-v256_str_and_float: bool = bool("hello" and 1.0)
-v257_str_or_float: bool = bool("hello" or 1.0)
-v258_str_mul_bool: str = "hello" * True
-v259_str_eq_bool: bool = "hello" == True
-v260_str_ne_bool: bool = "hello" != True
-v261_str_and_bool: bool = bool("hello" and True)
-v262_str_or_bool: bool = bool("hello" or True)
-v263_str_add_str: str = "hello" + "hello"
-v264_str_eq_str: bool = "hello" == "hello"
-v265_str_ne_str: bool = "hello" != "hello"
-v266_str_lt_str: bool = "hello" < "hello"
-v267_str_le_str: bool = "hello" <= "hello"
-v268_str_gt_str: bool = "hello" > "hello"
-v269_str_ge_str: bool = "hello" >= "hello"
-v270_str_in_str: bool = "hello" in "hello"
-v271_str_notin_str: bool = "hello" not in "hello"
-v272_str_and_str: str = "hello" and "hello"
-v273_str_or_str: str = "hello" or "hello"
-v274_str_mod_bytes: str = "hello" % b"hello"
-v275_str_eq_bytes: bool = "hello" == b"hello"
-v276_str_ne_bytes: bool = "hello" != b"hello"
-v277_str_and_bytes: bool = bool("hello" and b"hello")
-v278_str_or_bytes: bool = bool("hello" or b"hello")
-v279_str_mod_list: str = "hello" % [1, 2, 3]
-v280_str_eq_list: bool = "hello" == [1, 2, 3]
-v281_str_ne_list: bool = "hello" != [1, 2, 3]
-v282_str_and_list: bool = bool("hello" and [1, 2, 3])
-v283_str_or_list: bool = bool("hello" or [1, 2, 3])
-v284_str_mod_dict: str = "hello" % {"a": 1}
-v285_str_eq_dict: bool = "hello" == {"a": 1}
-v286_str_ne_dict: bool = "hello" != {"a": 1}
-v287_str_and_dict: bool = bool("hello" and {"a": 1})
-v288_str_or_dict: bool = bool("hello" or {"a": 1})
-v289_str_eq_set: bool = "hello" == {1, 2, 3}
-v290_str_ne_set: bool = "hello" != {1, 2, 3}
-v291_str_and_set: bool = bool("hello" and {1, 2, 3})
-v292_str_or_set: bool = bool("hello" or {1, 2, 3})
-v293_str_eq_none: bool = "hello" == None
-v294_str_ne_none: bool = "hello" != None
-v295_str_and_none: bool = bool("hello" and None)
-v296_str_or_none: bool = bool("hello" or None)
-v297_bytes_mul_int: bytes = b"hello" * 1
-v298_bytes_eq_int: bool = b"hello" == 1
-v299_bytes_ne_int: bool = b"hello" != 1
-v300_bytes_and_int: bool = bool(b"hello" and 1)
-v301_bytes_or_int: bool = bool(b"hello" or 1)
-v302_bytes_eq_float: bool = b"hello" == 1.0
-v303_bytes_ne_float: bool = b"hello" != 1.0
-v304_bytes_and_float: bool = bool(b"hello" and 1.0)
-v305_bytes_or_float: bool = bool(b"hello" or 1.0)
-v306_bytes_mul_bool: bytes = b"hello" * True
-v307_bytes_eq_bool: bool = b"hello" == True
-v308_bytes_ne_bool: bool = b"hello" != True
-v309_bytes_and_bool: bool = bool(b"hello" and True)
-v310_bytes_or_bool: bool = bool(b"hello" or True)
-v311_bytes_eq_str: bool = b"hello" == "hello"
-v312_bytes_ne_str: bool = b"hello" != "hello"
-v313_bytes_and_str: bool = bool(b"hello" and "hello")
-v314_bytes_or_str: bool = bool(b"hello" or "hello")
-v315_bytes_add_bytes: bytes = b"hello" + b"hello"
-v316_bytes_eq_bytes: bool = b"hello" == b"hello"
-v317_bytes_ne_bytes: bool = b"hello" != b"hello"
-v318_bytes_lt_bytes: bool = b"hello" < b"hello"
-v319_bytes_le_bytes: bool = b"hello" <= b"hello"
-v320_bytes_gt_bytes: bool = b"hello" > b"hello"
-v321_bytes_ge_bytes: bool = b"hello" >= b"hello"
-v322_bytes_in_bytes: bool = b"hello" in b"hello"
-v323_bytes_notin_bytes: bool = b"hello" not in b"hello"
-v324_bytes_and_bytes: bytes = b"hello" and b"hello"
-v325_bytes_or_bytes: bytes = b"hello" or b"hello"
-v326_bytes_eq_list: bool = b"hello" == [1, 2, 3]
-v327_bytes_ne_list: bool = b"hello" != [1, 2, 3]
-v328_bytes_and_list: bool = bool(b"hello" and [1, 2, 3])
-v329_bytes_or_list: bool = bool(b"hello" or [1, 2, 3])
-v330_bytes_eq_dict: bool = b"hello" == {"a": 1}
-v331_bytes_ne_dict: bool = b"hello" != {"a": 1}
-v332_bytes_and_dict: bool = bool(b"hello" and {"a": 1})
-v333_bytes_or_dict: bool = bool(b"hello" or {"a": 1})
-v334_bytes_eq_set: bool = b"hello" == {1, 2, 3}
-v335_bytes_ne_set: bool = b"hello" != {1, 2, 3}
-v336_bytes_and_set: bool = bool(b"hello" and {1, 2, 3})
-v337_bytes_or_set: bool = bool(b"hello" or {1, 2, 3})
-v338_bytes_eq_none: bool = b"hello" == None
-v339_bytes_ne_none: bool = b"hello" != None
-v340_bytes_and_none: bool = bool(b"hello" and None)
-v341_bytes_or_none: bool = bool(b"hello" or None)
-v342_list_mul_int: list[int] = [1, 2, 3] * 1
-v343_list_eq_int: bool = [1, 2, 3] == 1
-v344_list_ne_int: bool = [1, 2, 3] != 1
-v345_list_and_int: bool = bool([1, 2, 3] and 1)
-v346_list_or_int: bool = bool([1, 2, 3] or 1)
-v347_list_eq_float: bool = [1, 2, 3] == 1.0
-v348_list_ne_float: bool = [1, 2, 3] != 1.0
-v349_list_and_float: bool = bool([1, 2, 3] and 1.0)
-v350_list_or_float: bool = bool([1, 2, 3] or 1.0)
-v351_list_mul_bool: list[int] = [1, 2, 3] * True
-v352_list_eq_bool: bool = [1, 2, 3] == True
-v353_list_ne_bool: bool = [1, 2, 3] != True
-v354_list_and_bool: bool = bool([1, 2, 3] and True)
-v355_list_or_bool: bool = bool([1, 2, 3] or True)
-v356_list_eq_str: bool = [1, 2, 3] == "hello"
-v357_list_ne_str: bool = [1, 2, 3] != "hello"
-v358_list_and_str: bool = bool([1, 2, 3] and "hello")
-v359_list_or_str: bool = bool([1, 2, 3] or "hello")
-v360_list_eq_bytes: bool = [1, 2, 3] == b"hello"
-v361_list_ne_bytes: bool = [1, 2, 3] != b"hello"
-v362_list_and_bytes: bool = bool([1, 2, 3] and b"hello")
-v363_list_or_bytes: bool = bool([1, 2, 3] or b"hello")
-v364_list_add_list: list[int] = [1, 2, 3] + [1, 2, 3]
-v365_list_eq_list: bool = [1, 2, 3] == [1, 2, 3]
-v366_list_ne_list: bool = [1, 2, 3] != [1, 2, 3]
-v367_list_lt_list: bool = [1, 2, 3] < [1, 2, 3]
-v368_list_le_list: bool = [1, 2, 3] <= [1, 2, 3]
-v369_list_gt_list: bool = [1, 2, 3] > [1, 2, 3]
-v370_list_ge_list: bool = [1, 2, 3] >= [1, 2, 3]
-v371_list_and_list: list[int] = [1, 2, 3] and [1, 2, 3]
-v372_list_or_list: list[int] = [1, 2, 3] or [1, 2, 3]
-v373_list_eq_dict: bool = [1, 2, 3] == {"a": 1}
-v374_list_ne_dict: bool = [1, 2, 3] != {"a": 1}
-v375_list_and_dict: bool = bool([1, 2, 3] and {"a": 1})
-v376_list_or_dict: bool = bool([1, 2, 3] or {"a": 1})
-v377_list_eq_set: bool = [1, 2, 3] == {1, 2, 3}
-v378_list_ne_set: bool = [1, 2, 3] != {1, 2, 3}
-v379_list_and_set: bool = bool([1, 2, 3] and {1, 2, 3})
-v380_list_or_set: bool = bool([1, 2, 3] or {1, 2, 3})
-v381_list_eq_none: bool = [1, 2, 3] == None
-v382_list_ne_none: bool = [1, 2, 3] != None
-v383_list_and_none: bool = bool([1, 2, 3] and None)
-v384_list_or_none: bool = bool([1, 2, 3] or None)
-v385_dict_eq_int: bool = {"a": 1} == 1
-v386_dict_ne_int: bool = {"a": 1} != 1
-v387_dict_and_int: bool = bool({"a": 1} and 1)
-v388_dict_or_int: bool = bool({"a": 1} or 1)
-v389_dict_eq_float: bool = {"a": 1} == 1.0
-v390_dict_ne_float: bool = {"a": 1} != 1.0
-v391_dict_and_float: bool = bool({"a": 1} and 1.0)
-v392_dict_or_float: bool = bool({"a": 1} or 1.0)
-v393_dict_eq_bool: bool = {"a": 1} == True
-v394_dict_ne_bool: bool = {"a": 1} != True
-v395_dict_and_bool: bool = bool({"a": 1} and True)
-v396_dict_or_bool: bool = bool({"a": 1} or True)
-v397_dict_eq_str: bool = {"a": 1} == "hello"
-v398_dict_ne_str: bool = {"a": 1} != "hello"
-v399_dict_and_str: bool = bool({"a": 1} and "hello")
-v400_dict_or_str: bool = bool({"a": 1} or "hello")
-v401_dict_eq_bytes: bool = {"a": 1} == b"hello"
-v402_dict_ne_bytes: bool = {"a": 1} != b"hello"
-v403_dict_and_bytes: bool = bool({"a": 1} and b"hello")
-v404_dict_or_bytes: bool = bool({"a": 1} or b"hello")
-v405_dict_eq_list: bool = {"a": 1} == [1, 2, 3]
-v406_dict_ne_list: bool = {"a": 1} != [1, 2, 3]
-v407_dict_and_list: bool = bool({"a": 1} and [1, 2, 3])
-v408_dict_or_list: bool = bool({"a": 1} or [1, 2, 3])
-v409_dict_bitor_dict: dict[str, int] = {"a": 1} | {"a": 1}
-v410_dict_and_dict: dict[str, int] = {"a": 1} and {"a": 1}
-v411_dict_or_dict: dict[str, int] = {"a": 1} or {"a": 1}
-v412_dict_eq_set: bool = {"a": 1} == {1, 2, 3}
-v413_dict_ne_set: bool = {"a": 1} != {1, 2, 3}
-v414_dict_and_set: bool = bool({"a": 1} and {1, 2, 3})
-v415_dict_or_set: bool = bool({"a": 1} or {1, 2, 3})
-v416_dict_eq_none: bool = {"a": 1} == None
-v417_dict_ne_none: bool = {"a": 1} != None
-v418_dict_and_none: bool = bool({"a": 1} and None)
-v419_dict_or_none: bool = bool({"a": 1} or None)
-v420_set_eq_int: bool = {1, 2, 3} == 1
-v421_set_ne_int: bool = {1, 2, 3} != 1
-v422_set_and_int: bool = bool({1, 2, 3} and 1)
-v423_set_or_int: bool = bool({1, 2, 3} or 1)
-v424_set_eq_float: bool = {1, 2, 3} == 1.0
-v425_set_ne_float: bool = {1, 2, 3} != 1.0
-v426_set_and_float: bool = bool({1, 2, 3} and 1.0)
-v427_set_or_float: bool = bool({1, 2, 3} or 1.0)
-v428_set_eq_bool: bool = {1, 2, 3} == True
-v429_set_ne_bool: bool = {1, 2, 3} != True
-v430_set_and_bool: bool = bool({1, 2, 3} and True)
-v431_set_or_bool: bool = bool({1, 2, 3} or True)
-v432_set_eq_str: bool = {1, 2, 3} == "hello"
-v433_set_ne_str: bool = {1, 2, 3} != "hello"
-v434_set_and_str: bool = bool({1, 2, 3} and "hello")
-v435_set_or_str: bool = bool({1, 2, 3} or "hello")
-v436_set_eq_bytes: bool = {1, 2, 3} == b"hello"
-v437_set_ne_bytes: bool = {1, 2, 3} != b"hello"
-v438_set_and_bytes: bool = bool({1, 2, 3} and b"hello")
-v439_set_or_bytes: bool = bool({1, 2, 3} or b"hello")
-v440_set_eq_list: bool = {1, 2, 3} == [1, 2, 3]
-v441_set_ne_list: bool = {1, 2, 3} != [1, 2, 3]
-v442_set_and_list: bool = bool({1, 2, 3} and [1, 2, 3])
-v443_set_or_list: bool = bool({1, 2, 3} or [1, 2, 3])
-v444_set_eq_dict: bool = {1, 2, 3} == {"a": 1}
-v445_set_ne_dict: bool = {1, 2, 3} != {"a": 1}
-v446_set_and_dict: bool = bool({1, 2, 3} and {"a": 1})
-v447_set_or_dict: bool = bool({1, 2, 3} or {"a": 1})
-v448_set_sub_set: set[int] = {1, 2, 3} - {1, 2, 3}
-v449_set_bitand_set: set[int] = {1, 2, 3} & {1, 2, 3}
-v450_set_bitor_set: set[int] = {1, 2, 3} | {1, 2, 3}
-v451_set_bitxor_set: set[int] = {1, 2, 3} ^ {1, 2, 3}
-v452_set_eq_set: bool = {1, 2, 3} == {1, 2, 3}
-v453_set_ne_set: bool = {1, 2, 3} != {1, 2, 3}
-v454_set_lt_set: bool = {1, 2, 3} < {1, 2, 3}
-v455_set_le_set: bool = {1, 2, 3} <= {1, 2, 3}
-v456_set_gt_set: bool = {1, 2, 3} > {1, 2, 3}
-v457_set_ge_set: bool = {1, 2, 3} >= {1, 2, 3}
-v458_set_and_set: set[int] = {1, 2, 3} and {1, 2, 3}
-v459_set_or_set: set[int] = {1, 2, 3} or {1, 2, 3}
-v460_set_eq_none: bool = {1, 2, 3} == None
-v461_set_ne_none: bool = {1, 2, 3} != None
-v462_set_and_none: bool = bool({1, 2, 3} and None)
-v463_set_or_none: bool = bool({1, 2, 3} or None)
-v464_none_eq_int: bool = None == 1
-v465_none_ne_int: bool = None != 1
-v466_none_and_int: bool = bool(None and 1)
-v467_none_or_int: bool = bool(None or 1)
-v468_none_eq_float: bool = None == 1.0
-v469_none_ne_float: bool = None != 1.0
-v470_none_and_float: bool = bool(None and 1.0)
-v471_none_or_float: bool = bool(None or 1.0)
-v472_none_eq_bool: bool = None == True
-v473_none_ne_bool: bool = None != True
-v474_none_and_bool: bool = bool(None and True)
-v475_none_or_bool: bool = bool(None or True)
-v476_none_eq_str: bool = None == "hello"
-v477_none_ne_str: bool = None != "hello"
-v478_none_and_str: bool = bool(None and "hello")
-v479_none_or_str: bool = bool(None or "hello")
-v480_none_eq_bytes: bool = None == b"hello"
-v481_none_ne_bytes: bool = None != b"hello"
-v482_none_and_bytes: bool = bool(None and b"hello")
-v483_none_or_bytes: bool = bool(None or b"hello")
-v484_none_eq_list: bool = None == [1, 2, 3]
-v485_none_ne_list: bool = None != [1, 2, 3]
-v486_none_and_list: bool = bool(None and [1, 2, 3])
-v487_none_or_list: bool = bool(None or [1, 2, 3])
-v488_none_eq_dict: bool = None == {"a": 1}
-v489_none_ne_dict: bool = None != {"a": 1}
-v490_none_and_dict: bool = bool(None and {"a": 1})
-v491_none_or_dict: bool = bool(None or {"a": 1})
-v492_none_eq_set: bool = None == {1, 2, 3}
-v493_none_ne_set: bool = None != {1, 2, 3}
-v494_none_and_set: bool = bool(None and {1, 2, 3})
-v495_none_or_set: bool = bool(None or {1, 2, 3})
-v496_none_eq_none: bool = None == None
-v497_none_ne_none: bool = None != None
-v498_none_and_none: None = None and None
-v499_none_or_none: None = None or None
+v20_int_is_int: bool = 1 is 1
+v21_int_isnot_int: bool = 1 is not 1
+v22_int_add_float: float = 1 + 1.0
+v23_int_sub_float: float = 1 - 1.0
+v24_int_mul_float: float = 1 * 1.0
+v25_int_div_float: float = 1 / 1.0
+v26_int_floordiv_float: float = 1 // 1.0
+v27_int_mod_float: float = 1 % 1.0
+v28_int_pow_float: float = 1 ** 1.0
+v29_int_eq_float: bool = 1 == 1.0
+v30_int_ne_float: bool = 1 != 1.0
+v31_int_lt_float: bool = 1 < 1.0
+v32_int_le_float: bool = 1 <= 1.0
+v33_int_gt_float: bool = 1 > 1.0
+v34_int_ge_float: bool = 1 >= 1.0
+v35_int_and_float: bool = bool(1 and 1.0)
+v36_int_or_float: bool = bool(1 or 1.0)
+v37_int_is_float: bool = 1 is 1.0
+v38_int_isnot_float: bool = 1 is not 1.0
+v39_int_add_bool: int = 1 + True
+v40_int_sub_bool: int = 1 - True
+v41_int_mul_bool: int = 1 * True
+v42_int_div_bool: float = 1 / True
+v43_int_floordiv_bool: int = 1 // True
+v44_int_mod_bool: int = 1 % True
+v45_int_pow_bool: int = 1 ** True
+v46_int_bitand_bool: int = 1 & True
+v47_int_bitor_bool: int = 1 | True
+v48_int_bitxor_bool: int = 1 ^ True
+v49_int_lshift_bool: int = 1 << True
+v50_int_rshift_bool: int = 1 >> True
+v51_int_eq_bool: bool = 1 == True
+v52_int_ne_bool: bool = 1 != True
+v53_int_lt_bool: bool = 1 < True
+v54_int_le_bool: bool = 1 <= True
+v55_int_gt_bool: bool = 1 > True
+v56_int_ge_bool: bool = 1 >= True
+v57_int_and_bool: bool = bool(1 and True)
+v58_int_or_bool: bool = bool(1 or True)
+v59_int_is_bool: bool = 1 is True
+v60_int_isnot_bool: bool = 1 is not True
+v61_int_mul_str: str = 1 * "hello"
+v62_int_eq_str: bool = 1 == "hello"
+v63_int_ne_str: bool = 1 != "hello"
+v64_int_and_str: bool = bool(1 and "hello")
+v65_int_or_str: bool = bool(1 or "hello")
+v66_int_is_str: bool = 1 is "hello"
+v67_int_isnot_str: bool = 1 is not "hello"
+v68_int_mul_bytes: bytes = 1 * b"hello"
+v69_int_eq_bytes: bool = 1 == b"hello"
+v70_int_ne_bytes: bool = 1 != b"hello"
+v71_int_in_bytes: bool = 1 in b"hello"
+v72_int_notin_bytes: bool = 1 not in b"hello"
+v73_int_and_bytes: bool = bool(1 and b"hello")
+v74_int_or_bytes: bool = bool(1 or b"hello")
+v75_int_is_bytes: bool = 1 is b"hello"
+v76_int_isnot_bytes: bool = 1 is not b"hello"
+v77_int_mul_list: list[int] = 1 * [1, 2, 3]
+v78_int_eq_list: bool = 1 == [1, 2, 3]
+v79_int_ne_list: bool = 1 != [1, 2, 3]
+v80_int_in_list: bool = 1 in [1, 2, 3]
+v81_int_notin_list: bool = 1 not in [1, 2, 3]
+v82_int_and_list: bool = bool(1 and [1, 2, 3])
+v83_int_or_list: bool = bool(1 or [1, 2, 3])
+v84_int_is_list: bool = 1 is [1, 2, 3]
+v85_int_isnot_list: bool = 1 is not [1, 2, 3]
+v86_int_eq_dict: bool = 1 == {"a": 1}
+v87_int_ne_dict: bool = 1 != {"a": 1}
+v88_int_in_dict: bool = 1 in {"a": 1}
+v89_int_notin_dict: bool = 1 not in {"a": 1}
+v90_int_and_dict: bool = bool(1 and {"a": 1})
+v91_int_or_dict: bool = bool(1 or {"a": 1})
+v92_int_is_dict: bool = 1 is {"a": 1}
+v93_int_isnot_dict: bool = 1 is not {"a": 1}
+v94_int_eq_set: bool = 1 == {1, 2, 3}
+v95_int_ne_set: bool = 1 != {1, 2, 3}
+v96_int_in_set: bool = 1 in {1, 2, 3}
+v97_int_notin_set: bool = 1 not in {1, 2, 3}
+v98_int_and_set: bool = bool(1 and {1, 2, 3})
+v99_int_or_set: bool = bool(1 or {1, 2, 3})
+v100_int_is_set: bool = 1 is {1, 2, 3}
+v101_int_isnot_set: bool = 1 is not {1, 2, 3}
+v102_int_eq_none: bool = 1 == None
+v103_int_ne_none: bool = 1 != None
+v104_int_and_none: bool = bool(1 and None)
+v105_int_or_none: bool = bool(1 or None)
+v106_int_is_none: bool = 1 is None
+v107_int_isnot_none: bool = 1 is not None
+v108_float_add_int: float = 1.0 + 1
+v109_float_sub_int: float = 1.0 - 1
+v110_float_mul_int: float = 1.0 * 1
+v111_float_div_int: float = 1.0 / 1
+v112_float_floordiv_int: float = 1.0 // 1
+v113_float_mod_int: float = 1.0 % 1
+v114_float_pow_int: float = 1.0 ** 1
+v115_float_eq_int: bool = 1.0 == 1
+v116_float_ne_int: bool = 1.0 != 1
+v117_float_lt_int: bool = 1.0 < 1
+v118_float_le_int: bool = 1.0 <= 1
+v119_float_gt_int: bool = 1.0 > 1
+v120_float_ge_int: bool = 1.0 >= 1
+v121_float_and_int: bool = bool(1.0 and 1)
+v122_float_or_int: bool = bool(1.0 or 1)
+v123_float_is_int: bool = 1.0 is 1
+v124_float_isnot_int: bool = 1.0 is not 1
+v125_float_add_float: float = 1.0 + 1.0
+v126_float_sub_float: float = 1.0 - 1.0
+v127_float_mul_float: float = 1.0 * 1.0
+v128_float_div_float: float = 1.0 / 1.0
+v129_float_floordiv_float: float = 1.0 // 1.0
+v130_float_mod_float: float = 1.0 % 1.0
+v131_float_pow_float: float = 1.0 ** 1.0
+v132_float_eq_float: bool = 1.0 == 1.0
+v133_float_ne_float: bool = 1.0 != 1.0
+v134_float_lt_float: bool = 1.0 < 1.0
+v135_float_le_float: bool = 1.0 <= 1.0
+v136_float_gt_float: bool = 1.0 > 1.0
+v137_float_ge_float: bool = 1.0 >= 1.0
+v138_float_and_float: float = 1.0 and 1.0
+v139_float_or_float: float = 1.0 or 1.0
+v140_float_is_float: bool = 1.0 is 1.0
+v141_float_isnot_float: bool = 1.0 is not 1.0
+v142_float_add_bool: float = 1.0 + True
+v143_float_sub_bool: float = 1.0 - True
+v144_float_mul_bool: float = 1.0 * True
+v145_float_div_bool: float = 1.0 / True
+v146_float_floordiv_bool: float = 1.0 // True
+v147_float_mod_bool: float = 1.0 % True
+v148_float_pow_bool: float = 1.0 ** True
+v149_float_eq_bool: bool = 1.0 == True
+v150_float_ne_bool: bool = 1.0 != True
+v151_float_lt_bool: bool = 1.0 < True
+v152_float_le_bool: bool = 1.0 <= True
+v153_float_gt_bool: bool = 1.0 > True
+v154_float_ge_bool: bool = 1.0 >= True
+v155_float_and_bool: bool = bool(1.0 and True)
+v156_float_or_bool: bool = bool(1.0 or True)
+v157_float_is_bool: bool = 1.0 is True
+v158_float_isnot_bool: bool = 1.0 is not True
+v159_float_eq_str: bool = 1.0 == "hello"
+v160_float_ne_str: bool = 1.0 != "hello"
+v161_float_and_str: bool = bool(1.0 and "hello")
+v162_float_or_str: bool = bool(1.0 or "hello")
+v163_float_is_str: bool = 1.0 is "hello"
+v164_float_isnot_str: bool = 1.0 is not "hello"
+v165_float_eq_bytes: bool = 1.0 == b"hello"
+v166_float_ne_bytes: bool = 1.0 != b"hello"
+v167_float_and_bytes: bool = bool(1.0 and b"hello")
+v168_float_or_bytes: bool = bool(1.0 or b"hello")
+v169_float_is_bytes: bool = 1.0 is b"hello"
+v170_float_isnot_bytes: bool = 1.0 is not b"hello"
+v171_float_eq_list: bool = 1.0 == [1, 2, 3]
+v172_float_ne_list: bool = 1.0 != [1, 2, 3]
+v173_float_and_list: bool = bool(1.0 and [1, 2, 3])
+v174_float_or_list: bool = bool(1.0 or [1, 2, 3])
+v175_float_is_list: bool = 1.0 is [1, 2, 3]
+v176_float_isnot_list: bool = 1.0 is not [1, 2, 3]
+v177_float_eq_dict: bool = 1.0 == {"a": 1}
+v178_float_ne_dict: bool = 1.0 != {"a": 1}
+v179_float_and_dict: bool = bool(1.0 and {"a": 1})
+v180_float_or_dict: bool = bool(1.0 or {"a": 1})
+v181_float_is_dict: bool = 1.0 is {"a": 1}
+v182_float_isnot_dict: bool = 1.0 is not {"a": 1}
+v183_float_eq_set: bool = 1.0 == {1, 2, 3}
+v184_float_ne_set: bool = 1.0 != {1, 2, 3}
+v185_float_and_set: bool = bool(1.0 and {1, 2, 3})
+v186_float_or_set: bool = bool(1.0 or {1, 2, 3})
+v187_float_is_set: bool = 1.0 is {1, 2, 3}
+v188_float_isnot_set: bool = 1.0 is not {1, 2, 3}
+v189_float_eq_none: bool = 1.0 == None
+v190_float_ne_none: bool = 1.0 != None
+v191_float_and_none: bool = bool(1.0 and None)
+v192_float_or_none: bool = bool(1.0 or None)
+v193_float_is_none: bool = 1.0 is None
+v194_float_isnot_none: bool = 1.0 is not None
+v195_bool_add_int: int = True + 1
+v196_bool_sub_int: int = True - 1
+v197_bool_mul_int: int = True * 1
+v198_bool_div_int: float = True / 1
+v199_bool_floordiv_int: int = True // 1
+v200_bool_mod_int: int = True % 1
+v201_bool_pow_int: int = True ** 1
+v202_bool_bitand_int: int = True & 1
+v203_bool_bitor_int: int = True | 1
+v204_bool_bitxor_int: int = True ^ 1
+v205_bool_lshift_int: int = True << 1
+v206_bool_rshift_int: int = True >> 1
+v207_bool_eq_int: bool = True == 1
+v208_bool_ne_int: bool = True != 1
+v209_bool_lt_int: bool = True < 1
+v210_bool_le_int: bool = True <= 1
+v211_bool_gt_int: bool = True > 1
+v212_bool_ge_int: bool = True >= 1
+v213_bool_and_int: bool = bool(True and 1)
+v214_bool_or_int: bool = bool(True or 1)
+v215_bool_is_int: bool = True is 1
+v216_bool_isnot_int: bool = True is not 1
+v217_bool_add_float: float = True + 1.0
+v218_bool_sub_float: float = True - 1.0
+v219_bool_mul_float: float = True * 1.0
+v220_bool_div_float: float = True / 1.0
+v221_bool_floordiv_float: float = True // 1.0
+v222_bool_mod_float: float = True % 1.0
+v223_bool_pow_float: float = True ** 1.0
+v224_bool_eq_float: bool = True == 1.0
+v225_bool_ne_float: bool = True != 1.0
+v226_bool_lt_float: bool = True < 1.0
+v227_bool_le_float: bool = True <= 1.0
+v228_bool_gt_float: bool = True > 1.0
+v229_bool_ge_float: bool = True >= 1.0
+v230_bool_and_float: bool = bool(True and 1.0)
+v231_bool_or_float: bool = bool(True or 1.0)
+v232_bool_is_float: bool = True is 1.0
+v233_bool_isnot_float: bool = True is not 1.0
+v234_bool_add_bool: int = True + True
+v235_bool_sub_bool: int = True - True
+v236_bool_mul_bool: int = True * True
+v237_bool_div_bool: float = True / True
+v238_bool_floordiv_bool: int = True // True
+v239_bool_mod_bool: int = True % True
+v240_bool_pow_bool: int = True ** True
+v241_bool_bitand_bool: bool = True & True
+v242_bool_bitor_bool: bool = True | True
+v243_bool_bitxor_bool: bool = True ^ True
+v244_bool_lshift_bool: int = True << True
+v245_bool_rshift_bool: int = True >> True
+v246_bool_eq_bool: bool = True == True
+v247_bool_ne_bool: bool = True != True
+v248_bool_lt_bool: bool = True < True
+v249_bool_le_bool: bool = True <= True
+v250_bool_gt_bool: bool = True > True
+v251_bool_ge_bool: bool = True >= True
+v252_bool_and_bool: bool = True and True
+v253_bool_or_bool: bool = True or True
+v254_bool_is_bool: bool = True is True
+v255_bool_isnot_bool: bool = True is not True
+v256_bool_mul_str: str = True * "hello"
+v257_bool_eq_str: bool = True == "hello"
+v258_bool_ne_str: bool = True != "hello"
+v259_bool_and_str: bool = bool(True and "hello")
+v260_bool_or_str: bool = bool(True or "hello")
+v261_bool_is_str: bool = True is "hello"
+v262_bool_isnot_str: bool = True is not "hello"
+v263_bool_mul_bytes: bytes = True * b"hello"
+v264_bool_eq_bytes: bool = True == b"hello"
+v265_bool_ne_bytes: bool = True != b"hello"
+v266_bool_in_bytes: bool = True in b"hello"
+v267_bool_notin_bytes: bool = True not in b"hello"
+v268_bool_and_bytes: bool = bool(True and b"hello")
+v269_bool_or_bytes: bool = bool(True or b"hello")
+v270_bool_is_bytes: bool = True is b"hello"
+v271_bool_isnot_bytes: bool = True is not b"hello"
+v272_bool_mul_list: list[int] = True * [1, 2, 3]
+v273_bool_eq_list: bool = True == [1, 2, 3]
+v274_bool_ne_list: bool = True != [1, 2, 3]
+v275_bool_in_list: bool = True in [1, 2, 3]
+v276_bool_notin_list: bool = True not in [1, 2, 3]
+v277_bool_and_list: bool = bool(True and [1, 2, 3])
+v278_bool_or_list: bool = bool(True or [1, 2, 3])
+v279_bool_is_list: bool = True is [1, 2, 3]
+v280_bool_isnot_list: bool = True is not [1, 2, 3]
+v281_bool_eq_dict: bool = True == {"a": 1}
+v282_bool_ne_dict: bool = True != {"a": 1}
+v283_bool_in_dict: bool = True in {"a": 1}
+v284_bool_notin_dict: bool = True not in {"a": 1}
+v285_bool_and_dict: bool = bool(True and {"a": 1})
+v286_bool_or_dict: bool = bool(True or {"a": 1})
+v287_bool_is_dict: bool = True is {"a": 1}
+v288_bool_isnot_dict: bool = True is not {"a": 1}
+v289_bool_eq_set: bool = True == {1, 2, 3}
+v290_bool_ne_set: bool = True != {1, 2, 3}
+v291_bool_in_set: bool = True in {1, 2, 3}
+v292_bool_notin_set: bool = True not in {1, 2, 3}
+v293_bool_and_set: bool = bool(True and {1, 2, 3})
+v294_bool_or_set: bool = bool(True or {1, 2, 3})
+v295_bool_is_set: bool = True is {1, 2, 3}
+v296_bool_isnot_set: bool = True is not {1, 2, 3}
+v297_bool_eq_none: bool = True == None
+v298_bool_ne_none: bool = True != None
+v299_bool_and_none: bool = bool(True and None)
+v300_bool_or_none: bool = bool(True or None)
+v301_bool_is_none: bool = True is None
+v302_bool_isnot_none: bool = True is not None
+v303_str_mul_int: str = "hello" * 1
+v304_str_eq_int: bool = "hello" == 1
+v305_str_ne_int: bool = "hello" != 1
+v306_str_and_int: bool = bool("hello" and 1)
+v307_str_or_int: bool = bool("hello" or 1)
+v308_str_is_int: bool = "hello" is 1
+v309_str_isnot_int: bool = "hello" is not 1
+v310_str_eq_float: bool = "hello" == 1.0
+v311_str_ne_float: bool = "hello" != 1.0
+v312_str_and_float: bool = bool("hello" and 1.0)
+v313_str_or_float: bool = bool("hello" or 1.0)
+v314_str_is_float: bool = "hello" is 1.0
+v315_str_isnot_float: bool = "hello" is not 1.0
+v316_str_mul_bool: str = "hello" * True
+v317_str_eq_bool: bool = "hello" == True
+v318_str_ne_bool: bool = "hello" != True
+v319_str_and_bool: bool = bool("hello" and True)
+v320_str_or_bool: bool = bool("hello" or True)
+v321_str_is_bool: bool = "hello" is True
+v322_str_isnot_bool: bool = "hello" is not True
+v323_str_add_str: str = "hello" + "hello"
+v324_str_eq_str: bool = "hello" == "hello"
+v325_str_ne_str: bool = "hello" != "hello"
+v326_str_lt_str: bool = "hello" < "hello"
+v327_str_le_str: bool = "hello" <= "hello"
+v328_str_gt_str: bool = "hello" > "hello"
+v329_str_ge_str: bool = "hello" >= "hello"
+v330_str_in_str: bool = "hello" in "hello"
+v331_str_notin_str: bool = "hello" not in "hello"
+v332_str_and_str: str = "hello" and "hello"
+v333_str_or_str: str = "hello" or "hello"
+v334_str_is_str: bool = "hello" is "hello"
+v335_str_isnot_str: bool = "hello" is not "hello"
+v336_str_mod_bytes: str = "hello" % b"hello"
+v337_str_eq_bytes: bool = "hello" == b"hello"
+v338_str_ne_bytes: bool = "hello" != b"hello"
+v339_str_and_bytes: bool = bool("hello" and b"hello")
+v340_str_or_bytes: bool = bool("hello" or b"hello")
+v341_str_is_bytes: bool = "hello" is b"hello"
+v342_str_isnot_bytes: bool = "hello" is not b"hello"
+v343_str_eq_list: bool = "hello" == [1, 2, 3]
+v344_str_ne_list: bool = "hello" != [1, 2, 3]
+v345_str_and_list: bool = bool("hello" and [1, 2, 3])
+v346_str_or_list: bool = bool("hello" or [1, 2, 3])
+v347_str_is_list: bool = "hello" is [1, 2, 3]
+v348_str_isnot_list: bool = "hello" is not [1, 2, 3]
+v349_str_eq_dict: bool = "hello" == {"a": 1}
+v350_str_ne_dict: bool = "hello" != {"a": 1}
+v351_str_and_dict: bool = bool("hello" and {"a": 1})
+v352_str_or_dict: bool = bool("hello" or {"a": 1})
+v353_str_is_dict: bool = "hello" is {"a": 1}
+v354_str_isnot_dict: bool = "hello" is not {"a": 1}
+v355_str_eq_set: bool = "hello" == {1, 2, 3}
+v356_str_ne_set: bool = "hello" != {1, 2, 3}
+v357_str_and_set: bool = bool("hello" and {1, 2, 3})
+v358_str_or_set: bool = bool("hello" or {1, 2, 3})
+v359_str_is_set: bool = "hello" is {1, 2, 3}
+v360_str_isnot_set: bool = "hello" is not {1, 2, 3}
+v361_str_eq_none: bool = "hello" == None
+v362_str_ne_none: bool = "hello" != None
+v363_str_and_none: bool = bool("hello" and None)
+v364_str_or_none: bool = bool("hello" or None)
+v365_str_is_none: bool = "hello" is None
+v366_str_isnot_none: bool = "hello" is not None
+v367_bytes_mul_int: bytes = b"hello" * 1
+v368_bytes_eq_int: bool = b"hello" == 1
+v369_bytes_ne_int: bool = b"hello" != 1
+v370_bytes_and_int: bool = bool(b"hello" and 1)
+v371_bytes_or_int: bool = bool(b"hello" or 1)
+v372_bytes_is_int: bool = b"hello" is 1
+v373_bytes_isnot_int: bool = b"hello" is not 1
+v374_bytes_eq_float: bool = b"hello" == 1.0
+v375_bytes_ne_float: bool = b"hello" != 1.0
+v376_bytes_and_float: bool = bool(b"hello" and 1.0)
+v377_bytes_or_float: bool = bool(b"hello" or 1.0)
+v378_bytes_is_float: bool = b"hello" is 1.0
+v379_bytes_isnot_float: bool = b"hello" is not 1.0
+v380_bytes_mul_bool: bytes = b"hello" * True
+v381_bytes_eq_bool: bool = b"hello" == True
+v382_bytes_ne_bool: bool = b"hello" != True
+v383_bytes_and_bool: bool = bool(b"hello" and True)
+v384_bytes_or_bool: bool = bool(b"hello" or True)
+v385_bytes_is_bool: bool = b"hello" is True
+v386_bytes_isnot_bool: bool = b"hello" is not True
+v387_bytes_eq_str: bool = b"hello" == "hello"
+v388_bytes_ne_str: bool = b"hello" != "hello"
+v389_bytes_and_str: bool = bool(b"hello" and "hello")
+v390_bytes_or_str: bool = bool(b"hello" or "hello")
+v391_bytes_is_str: bool = b"hello" is "hello"
+v392_bytes_isnot_str: bool = b"hello" is not "hello"
+v393_bytes_add_bytes: bytes = b"hello" + b"hello"
+v394_bytes_eq_bytes: bool = b"hello" == b"hello"
+v395_bytes_ne_bytes: bool = b"hello" != b"hello"
+v396_bytes_lt_bytes: bool = b"hello" < b"hello"
+v397_bytes_le_bytes: bool = b"hello" <= b"hello"
+v398_bytes_gt_bytes: bool = b"hello" > b"hello"
+v399_bytes_ge_bytes: bool = b"hello" >= b"hello"
+v400_bytes_in_bytes: bool = b"hello" in b"hello"
+v401_bytes_notin_bytes: bool = b"hello" not in b"hello"
+v402_bytes_and_bytes: bytes = b"hello" and b"hello"
+v403_bytes_or_bytes: bytes = b"hello" or b"hello"
+v404_bytes_is_bytes: bool = b"hello" is b"hello"
+v405_bytes_isnot_bytes: bool = b"hello" is not b"hello"
+v406_bytes_eq_list: bool = b"hello" == [1, 2, 3]
+v407_bytes_ne_list: bool = b"hello" != [1, 2, 3]
+v408_bytes_and_list: bool = bool(b"hello" and [1, 2, 3])
+v409_bytes_or_list: bool = bool(b"hello" or [1, 2, 3])
+v410_bytes_is_list: bool = b"hello" is [1, 2, 3]
+v411_bytes_isnot_list: bool = b"hello" is not [1, 2, 3]
+v412_bytes_eq_dict: bool = b"hello" == {"a": 1}
+v413_bytes_ne_dict: bool = b"hello" != {"a": 1}
+v414_bytes_and_dict: bool = bool(b"hello" and {"a": 1})
+v415_bytes_or_dict: bool = bool(b"hello" or {"a": 1})
+v416_bytes_is_dict: bool = b"hello" is {"a": 1}
+v417_bytes_isnot_dict: bool = b"hello" is not {"a": 1}
+v418_bytes_eq_set: bool = b"hello" == {1, 2, 3}
+v419_bytes_ne_set: bool = b"hello" != {1, 2, 3}
+v420_bytes_and_set: bool = bool(b"hello" and {1, 2, 3})
+v421_bytes_or_set: bool = bool(b"hello" or {1, 2, 3})
+v422_bytes_is_set: bool = b"hello" is {1, 2, 3}
+v423_bytes_isnot_set: bool = b"hello" is not {1, 2, 3}
+v424_bytes_eq_none: bool = b"hello" == None
+v425_bytes_ne_none: bool = b"hello" != None
+v426_bytes_and_none: bool = bool(b"hello" and None)
+v427_bytes_or_none: bool = bool(b"hello" or None)
+v428_bytes_is_none: bool = b"hello" is None
+v429_bytes_isnot_none: bool = b"hello" is not None
+v430_list_mul_int: list[int] = [1, 2, 3] * 1
+v431_list_eq_int: bool = [1, 2, 3] == 1
+v432_list_ne_int: bool = [1, 2, 3] != 1
+v433_list_and_int: bool = bool([1, 2, 3] and 1)
+v434_list_or_int: bool = bool([1, 2, 3] or 1)
+v435_list_is_int: bool = [1, 2, 3] is 1
+v436_list_isnot_int: bool = [1, 2, 3] is not 1
+v437_list_eq_float: bool = [1, 2, 3] == 1.0
+v438_list_ne_float: bool = [1, 2, 3] != 1.0
+v439_list_and_float: bool = bool([1, 2, 3] and 1.0)
+v440_list_or_float: bool = bool([1, 2, 3] or 1.0)
+v441_list_is_float: bool = [1, 2, 3] is 1.0
+v442_list_isnot_float: bool = [1, 2, 3] is not 1.0
+v443_list_mul_bool: list[int] = [1, 2, 3] * True
+v444_list_eq_bool: bool = [1, 2, 3] == True
+v445_list_ne_bool: bool = [1, 2, 3] != True
+v446_list_and_bool: bool = bool([1, 2, 3] and True)
+v447_list_or_bool: bool = bool([1, 2, 3] or True)
+v448_list_is_bool: bool = [1, 2, 3] is True
+v449_list_isnot_bool: bool = [1, 2, 3] is not True
+v450_list_eq_str: bool = [1, 2, 3] == "hello"
+v451_list_ne_str: bool = [1, 2, 3] != "hello"
+v452_list_and_str: bool = bool([1, 2, 3] and "hello")
+v453_list_or_str: bool = bool([1, 2, 3] or "hello")
+v454_list_is_str: bool = [1, 2, 3] is "hello"
+v455_list_isnot_str: bool = [1, 2, 3] is not "hello"
+v456_list_eq_bytes: bool = [1, 2, 3] == b"hello"
+v457_list_ne_bytes: bool = [1, 2, 3] != b"hello"
+v458_list_and_bytes: bool = bool([1, 2, 3] and b"hello")
+v459_list_or_bytes: bool = bool([1, 2, 3] or b"hello")
+v460_list_is_bytes: bool = [1, 2, 3] is b"hello"
+v461_list_isnot_bytes: bool = [1, 2, 3] is not b"hello"
+v462_list_add_list: list[int] = [1, 2, 3] + [1, 2, 3]
+v463_list_eq_list: bool = [1, 2, 3] == [1, 2, 3]
+v464_list_ne_list: bool = [1, 2, 3] != [1, 2, 3]
+v465_list_lt_list: bool = [1, 2, 3] < [1, 2, 3]
+v466_list_le_list: bool = [1, 2, 3] <= [1, 2, 3]
+v467_list_gt_list: bool = [1, 2, 3] > [1, 2, 3]
+v468_list_ge_list: bool = [1, 2, 3] >= [1, 2, 3]
+v469_list_and_list: list[int] = [1, 2, 3] and [1, 2, 3]
+v470_list_or_list: list[int] = [1, 2, 3] or [1, 2, 3]
+v471_list_is_list: bool = [1, 2, 3] is [1, 2, 3]
+v472_list_isnot_list: bool = [1, 2, 3] is not [1, 2, 3]
+v473_list_eq_dict: bool = [1, 2, 3] == {"a": 1}
+v474_list_ne_dict: bool = [1, 2, 3] != {"a": 1}
+v475_list_and_dict: bool = bool([1, 2, 3] and {"a": 1})
+v476_list_or_dict: bool = bool([1, 2, 3] or {"a": 1})
+v477_list_is_dict: bool = [1, 2, 3] is {"a": 1}
+v478_list_isnot_dict: bool = [1, 2, 3] is not {"a": 1}
+v479_list_eq_set: bool = [1, 2, 3] == {1, 2, 3}
+v480_list_ne_set: bool = [1, 2, 3] != {1, 2, 3}
+v481_list_and_set: bool = bool([1, 2, 3] and {1, 2, 3})
+v482_list_or_set: bool = bool([1, 2, 3] or {1, 2, 3})
+v483_list_is_set: bool = [1, 2, 3] is {1, 2, 3}
+v484_list_isnot_set: bool = [1, 2, 3] is not {1, 2, 3}
+v485_list_eq_none: bool = [1, 2, 3] == None
+v486_list_ne_none: bool = [1, 2, 3] != None
+v487_list_and_none: bool = bool([1, 2, 3] and None)
+v488_list_or_none: bool = bool([1, 2, 3] or None)
+v489_list_is_none: bool = [1, 2, 3] is None
+v490_list_isnot_none: bool = [1, 2, 3] is not None
+v491_dict_eq_int: bool = {"a": 1} == 1
+v492_dict_ne_int: bool = {"a": 1} != 1
+v493_dict_and_int: bool = bool({"a": 1} and 1)
+v494_dict_or_int: bool = bool({"a": 1} or 1)
+v495_dict_is_int: bool = {"a": 1} is 1
+v496_dict_isnot_int: bool = {"a": 1} is not 1
+v497_dict_eq_float: bool = {"a": 1} == 1.0
+v498_dict_ne_float: bool = {"a": 1} != 1.0
+v499_dict_and_float: bool = bool({"a": 1} and 1.0)
+v500_dict_or_float: bool = bool({"a": 1} or 1.0)
+v501_dict_is_float: bool = {"a": 1} is 1.0
+v502_dict_isnot_float: bool = {"a": 1} is not 1.0
+v503_dict_eq_bool: bool = {"a": 1} == True
+v504_dict_ne_bool: bool = {"a": 1} != True
+v505_dict_and_bool: bool = bool({"a": 1} and True)
+v506_dict_or_bool: bool = bool({"a": 1} or True)
+v507_dict_is_bool: bool = {"a": 1} is True
+v508_dict_isnot_bool: bool = {"a": 1} is not True
+v509_dict_eq_str: bool = {"a": 1} == "hello"
+v510_dict_ne_str: bool = {"a": 1} != "hello"
+v511_dict_and_str: bool = bool({"a": 1} and "hello")
+v512_dict_or_str: bool = bool({"a": 1} or "hello")
+v513_dict_is_str: bool = {"a": 1} is "hello"
+v514_dict_isnot_str: bool = {"a": 1} is not "hello"
+v515_dict_eq_bytes: bool = {"a": 1} == b"hello"
+v516_dict_ne_bytes: bool = {"a": 1} != b"hello"
+v517_dict_and_bytes: bool = bool({"a": 1} and b"hello")
+v518_dict_or_bytes: bool = bool({"a": 1} or b"hello")
+v519_dict_is_bytes: bool = {"a": 1} is b"hello"
+v520_dict_isnot_bytes: bool = {"a": 1} is not b"hello"
+v521_dict_eq_list: bool = {"a": 1} == [1, 2, 3]
+v522_dict_ne_list: bool = {"a": 1} != [1, 2, 3]
+v523_dict_and_list: bool = bool({"a": 1} and [1, 2, 3])
+v524_dict_or_list: bool = bool({"a": 1} or [1, 2, 3])
+v525_dict_is_list: bool = {"a": 1} is [1, 2, 3]
+v526_dict_isnot_list: bool = {"a": 1} is not [1, 2, 3]
+v527_dict_bitor_dict: dict[str, int] = {"a": 1} | {"a": 1}
+v528_dict_and_dict: dict[str, int] = {"a": 1} and {"a": 1}
+v529_dict_or_dict: dict[str, int] = {"a": 1} or {"a": 1}
+v530_dict_is_dict: bool = {"a": 1} is {"a": 1}
+v531_dict_isnot_dict: bool = {"a": 1} is not {"a": 1}
+v532_dict_eq_set: bool = {"a": 1} == {1, 2, 3}
+v533_dict_ne_set: bool = {"a": 1} != {1, 2, 3}
+v534_dict_and_set: bool = bool({"a": 1} and {1, 2, 3})
+v535_dict_or_set: bool = bool({"a": 1} or {1, 2, 3})
+v536_dict_is_set: bool = {"a": 1} is {1, 2, 3}
+v537_dict_isnot_set: bool = {"a": 1} is not {1, 2, 3}
+v538_dict_eq_none: bool = {"a": 1} == None
+v539_dict_ne_none: bool = {"a": 1} != None
+v540_dict_and_none: bool = bool({"a": 1} and None)
+v541_dict_or_none: bool = bool({"a": 1} or None)
+v542_dict_is_none: bool = {"a": 1} is None
+v543_dict_isnot_none: bool = {"a": 1} is not None
+v544_set_eq_int: bool = {1, 2, 3} == 1
+v545_set_ne_int: bool = {1, 2, 3} != 1
+v546_set_and_int: bool = bool({1, 2, 3} and 1)
+v547_set_or_int: bool = bool({1, 2, 3} or 1)
+v548_set_is_int: bool = {1, 2, 3} is 1
+v549_set_isnot_int: bool = {1, 2, 3} is not 1
+v550_set_eq_float: bool = {1, 2, 3} == 1.0
+v551_set_ne_float: bool = {1, 2, 3} != 1.0
+v552_set_and_float: bool = bool({1, 2, 3} and 1.0)
+v553_set_or_float: bool = bool({1, 2, 3} or 1.0)
+v554_set_is_float: bool = {1, 2, 3} is 1.0
+v555_set_isnot_float: bool = {1, 2, 3} is not 1.0
+v556_set_eq_bool: bool = {1, 2, 3} == True
+v557_set_ne_bool: bool = {1, 2, 3} != True
+v558_set_and_bool: bool = bool({1, 2, 3} and True)
+v559_set_or_bool: bool = bool({1, 2, 3} or True)
+v560_set_is_bool: bool = {1, 2, 3} is True
+v561_set_isnot_bool: bool = {1, 2, 3} is not True
+v562_set_eq_str: bool = {1, 2, 3} == "hello"
+v563_set_ne_str: bool = {1, 2, 3} != "hello"
+v564_set_and_str: bool = bool({1, 2, 3} and "hello")
+v565_set_or_str: bool = bool({1, 2, 3} or "hello")
+v566_set_is_str: bool = {1, 2, 3} is "hello"
+v567_set_isnot_str: bool = {1, 2, 3} is not "hello"
+v568_set_eq_bytes: bool = {1, 2, 3} == b"hello"
+v569_set_ne_bytes: bool = {1, 2, 3} != b"hello"
+v570_set_and_bytes: bool = bool({1, 2, 3} and b"hello")
+v571_set_or_bytes: bool = bool({1, 2, 3} or b"hello")
+v572_set_is_bytes: bool = {1, 2, 3} is b"hello"
+v573_set_isnot_bytes: bool = {1, 2, 3} is not b"hello"
+v574_set_eq_list: bool = {1, 2, 3} == [1, 2, 3]
+v575_set_ne_list: bool = {1, 2, 3} != [1, 2, 3]
+v576_set_and_list: bool = bool({1, 2, 3} and [1, 2, 3])
+v577_set_or_list: bool = bool({1, 2, 3} or [1, 2, 3])
+v578_set_is_list: bool = {1, 2, 3} is [1, 2, 3]
+v579_set_isnot_list: bool = {1, 2, 3} is not [1, 2, 3]
+v580_set_eq_dict: bool = {1, 2, 3} == {"a": 1}
+v581_set_ne_dict: bool = {1, 2, 3} != {"a": 1}
+v582_set_and_dict: bool = bool({1, 2, 3} and {"a": 1})
+v583_set_or_dict: bool = bool({1, 2, 3} or {"a": 1})
+v584_set_is_dict: bool = {1, 2, 3} is {"a": 1}
+v585_set_isnot_dict: bool = {1, 2, 3} is not {"a": 1}
+v586_set_sub_set: set[int] = {1, 2, 3} - {1, 2, 3}
+v587_set_bitand_set: set[int] = {1, 2, 3} & {1, 2, 3}
+v588_set_bitor_set: set[int] = {1, 2, 3} | {1, 2, 3}
+v589_set_bitxor_set: set[int] = {1, 2, 3} ^ {1, 2, 3}
+v590_set_eq_set: bool = {1, 2, 3} == {1, 2, 3}
+v591_set_ne_set: bool = {1, 2, 3} != {1, 2, 3}
+v592_set_lt_set: bool = {1, 2, 3} < {1, 2, 3}
+v593_set_le_set: bool = {1, 2, 3} <= {1, 2, 3}
+v594_set_gt_set: bool = {1, 2, 3} > {1, 2, 3}
+v595_set_ge_set: bool = {1, 2, 3} >= {1, 2, 3}
+v596_set_and_set: set[int] = {1, 2, 3} and {1, 2, 3}
+v597_set_or_set: set[int] = {1, 2, 3} or {1, 2, 3}
+v598_set_is_set: bool = {1, 2, 3} is {1, 2, 3}
+v599_set_isnot_set: bool = {1, 2, 3} is not {1, 2, 3}
+v600_set_eq_none: bool = {1, 2, 3} == None
+v601_set_ne_none: bool = {1, 2, 3} != None
+v602_set_and_none: bool = bool({1, 2, 3} and None)
+v603_set_or_none: bool = bool({1, 2, 3} or None)
+v604_set_is_none: bool = {1, 2, 3} is None
+v605_set_isnot_none: bool = {1, 2, 3} is not None
+v606_none_eq_int: bool = None == 1
+v607_none_ne_int: bool = None != 1
+v608_none_and_int: bool = bool(None and 1)
+v609_none_or_int: bool = bool(None or 1)
+v610_none_is_int: bool = None is 1
+v611_none_isnot_int: bool = None is not 1
+v612_none_eq_float: bool = None == 1.0
+v613_none_ne_float: bool = None != 1.0
+v614_none_and_float: bool = bool(None and 1.0)
+v615_none_or_float: bool = bool(None or 1.0)
+v616_none_is_float: bool = None is 1.0
+v617_none_isnot_float: bool = None is not 1.0
+v618_none_eq_bool: bool = None == True
+v619_none_ne_bool: bool = None != True
+v620_none_and_bool: bool = bool(None and True)
+v621_none_or_bool: bool = bool(None or True)
+v622_none_is_bool: bool = None is True
+v623_none_isnot_bool: bool = None is not True
+v624_none_eq_str: bool = None == "hello"
+v625_none_ne_str: bool = None != "hello"
+v626_none_and_str: bool = bool(None and "hello")
+v627_none_or_str: bool = bool(None or "hello")
+v628_none_is_str: bool = None is "hello"
+v629_none_isnot_str: bool = None is not "hello"
+v630_none_eq_bytes: bool = None == b"hello"
+v631_none_ne_bytes: bool = None != b"hello"
+v632_none_and_bytes: bool = bool(None and b"hello")
+v633_none_or_bytes: bool = bool(None or b"hello")
+v634_none_is_bytes: bool = None is b"hello"
+v635_none_isnot_bytes: bool = None is not b"hello"
+v636_none_eq_list: bool = None == [1, 2, 3]
+v637_none_ne_list: bool = None != [1, 2, 3]
+v638_none_and_list: bool = bool(None and [1, 2, 3])
+v639_none_or_list: bool = bool(None or [1, 2, 3])
+v640_none_is_list: bool = None is [1, 2, 3]
+v641_none_isnot_list: bool = None is not [1, 2, 3]
+v642_none_eq_dict: bool = None == {"a": 1}
+v643_none_ne_dict: bool = None != {"a": 1}
+v644_none_and_dict: bool = bool(None and {"a": 1})
+v645_none_or_dict: bool = bool(None or {"a": 1})
+v646_none_is_dict: bool = None is {"a": 1}
+v647_none_isnot_dict: bool = None is not {"a": 1}
+v648_none_eq_set: bool = None == {1, 2, 3}
+v649_none_ne_set: bool = None != {1, 2, 3}
+v650_none_and_set: bool = bool(None and {1, 2, 3})
+v651_none_or_set: bool = bool(None or {1, 2, 3})
+v652_none_is_set: bool = None is {1, 2, 3}
+v653_none_isnot_set: bool = None is not {1, 2, 3}
+v654_none_eq_none: bool = None == None
+v655_none_ne_none: bool = None != None
+v656_none_and_none: None = None and None
+v657_none_or_none: None = None or None
+v658_none_is_none: bool = None is None
+v659_none_isnot_none: bool = None is not None
 
 # ===== VALID UNARY OPERATIONS =====
 
@@ -539,486 +699,646 @@ print("v16_int_gt_int:", v16_int_gt_int)
 print("v17_int_ge_int:", v17_int_ge_int)
 print("v18_int_and_int:", v18_int_and_int)
 print("v19_int_or_int:", v19_int_or_int)
-print("v20_int_add_float:", v20_int_add_float)
-print("v21_int_sub_float:", v21_int_sub_float)
-print("v22_int_mul_float:", v22_int_mul_float)
-print("v23_int_div_float:", v23_int_div_float)
-print("v24_int_floordiv_float:", v24_int_floordiv_float)
-print("v25_int_mod_float:", v25_int_mod_float)
-print("v26_int_pow_float:", v26_int_pow_float)
-print("v27_int_eq_float:", v27_int_eq_float)
-print("v28_int_ne_float:", v28_int_ne_float)
-print("v29_int_lt_float:", v29_int_lt_float)
-print("v30_int_le_float:", v30_int_le_float)
-print("v31_int_gt_float:", v31_int_gt_float)
-print("v32_int_ge_float:", v32_int_ge_float)
-print("v33_int_and_float:", v33_int_and_float)
-print("v34_int_or_float:", v34_int_or_float)
-print("v35_int_add_bool:", v35_int_add_bool)
-print("v36_int_sub_bool:", v36_int_sub_bool)
-print("v37_int_mul_bool:", v37_int_mul_bool)
-print("v38_int_div_bool:", v38_int_div_bool)
-print("v39_int_floordiv_bool:", v39_int_floordiv_bool)
-print("v40_int_mod_bool:", v40_int_mod_bool)
-print("v41_int_pow_bool:", v41_int_pow_bool)
-print("v42_int_bitand_bool:", v42_int_bitand_bool)
-print("v43_int_bitor_bool:", v43_int_bitor_bool)
-print("v44_int_bitxor_bool:", v44_int_bitxor_bool)
-print("v45_int_lshift_bool:", v45_int_lshift_bool)
-print("v46_int_rshift_bool:", v46_int_rshift_bool)
-print("v47_int_eq_bool:", v47_int_eq_bool)
-print("v48_int_ne_bool:", v48_int_ne_bool)
-print("v49_int_lt_bool:", v49_int_lt_bool)
-print("v50_int_le_bool:", v50_int_le_bool)
-print("v51_int_gt_bool:", v51_int_gt_bool)
-print("v52_int_ge_bool:", v52_int_ge_bool)
-print("v53_int_and_bool:", v53_int_and_bool)
-print("v54_int_or_bool:", v54_int_or_bool)
-print("v55_int_mul_str:", v55_int_mul_str)
-print("v56_int_eq_str:", v56_int_eq_str)
-print("v57_int_ne_str:", v57_int_ne_str)
-print("v58_int_and_str:", v58_int_and_str)
-print("v59_int_or_str:", v59_int_or_str)
-print("v60_int_mul_bytes:", v60_int_mul_bytes)
-print("v61_int_eq_bytes:", v61_int_eq_bytes)
-print("v62_int_ne_bytes:", v62_int_ne_bytes)
-print("v63_int_in_bytes:", v63_int_in_bytes)
-print("v64_int_notin_bytes:", v64_int_notin_bytes)
-print("v65_int_and_bytes:", v65_int_and_bytes)
-print("v66_int_or_bytes:", v66_int_or_bytes)
-print("v67_int_mul_list:", v67_int_mul_list)
-print("v68_int_eq_list:", v68_int_eq_list)
-print("v69_int_ne_list:", v69_int_ne_list)
-print("v70_int_in_list:", v70_int_in_list)
-print("v71_int_notin_list:", v71_int_notin_list)
-print("v72_int_and_list:", v72_int_and_list)
-print("v73_int_or_list:", v73_int_or_list)
-print("v74_int_eq_dict:", v74_int_eq_dict)
-print("v75_int_ne_dict:", v75_int_ne_dict)
-print("v76_int_in_dict:", v76_int_in_dict)
-print("v77_int_notin_dict:", v77_int_notin_dict)
-print("v78_int_and_dict:", v78_int_and_dict)
-print("v79_int_or_dict:", v79_int_or_dict)
-print("v80_int_eq_set:", v80_int_eq_set)
-print("v81_int_ne_set:", v81_int_ne_set)
-print("v82_int_in_set:", v82_int_in_set)
-print("v83_int_notin_set:", v83_int_notin_set)
-print("v84_int_and_set:", v84_int_and_set)
-print("v85_int_or_set:", v85_int_or_set)
-print("v86_int_eq_none:", v86_int_eq_none)
-print("v87_int_ne_none:", v87_int_ne_none)
-print("v88_int_and_none:", v88_int_and_none)
-print("v89_int_or_none:", v89_int_or_none)
-print("v90_float_add_int:", v90_float_add_int)
-print("v91_float_sub_int:", v91_float_sub_int)
-print("v92_float_mul_int:", v92_float_mul_int)
-print("v93_float_div_int:", v93_float_div_int)
-print("v94_float_floordiv_int:", v94_float_floordiv_int)
-print("v95_float_mod_int:", v95_float_mod_int)
-print("v96_float_pow_int:", v96_float_pow_int)
-print("v97_float_eq_int:", v97_float_eq_int)
-print("v98_float_ne_int:", v98_float_ne_int)
-print("v99_float_lt_int:", v99_float_lt_int)
-print("v100_float_le_int:", v100_float_le_int)
-print("v101_float_gt_int:", v101_float_gt_int)
-print("v102_float_ge_int:", v102_float_ge_int)
-print("v103_float_and_int:", v103_float_and_int)
-print("v104_float_or_int:", v104_float_or_int)
-print("v105_float_add_float:", v105_float_add_float)
-print("v106_float_sub_float:", v106_float_sub_float)
-print("v107_float_mul_float:", v107_float_mul_float)
-print("v108_float_div_float:", v108_float_div_float)
-print("v109_float_floordiv_float:", v109_float_floordiv_float)
-print("v110_float_mod_float:", v110_float_mod_float)
-print("v111_float_pow_float:", v111_float_pow_float)
-print("v112_float_eq_float:", v112_float_eq_float)
-print("v113_float_ne_float:", v113_float_ne_float)
-print("v114_float_lt_float:", v114_float_lt_float)
-print("v115_float_le_float:", v115_float_le_float)
-print("v116_float_gt_float:", v116_float_gt_float)
-print("v117_float_ge_float:", v117_float_ge_float)
-print("v118_float_and_float:", v118_float_and_float)
-print("v119_float_or_float:", v119_float_or_float)
-print("v120_float_add_bool:", v120_float_add_bool)
-print("v121_float_sub_bool:", v121_float_sub_bool)
-print("v122_float_mul_bool:", v122_float_mul_bool)
-print("v123_float_div_bool:", v123_float_div_bool)
-print("v124_float_floordiv_bool:", v124_float_floordiv_bool)
-print("v125_float_mod_bool:", v125_float_mod_bool)
-print("v126_float_pow_bool:", v126_float_pow_bool)
-print("v127_float_eq_bool:", v127_float_eq_bool)
-print("v128_float_ne_bool:", v128_float_ne_bool)
-print("v129_float_lt_bool:", v129_float_lt_bool)
-print("v130_float_le_bool:", v130_float_le_bool)
-print("v131_float_gt_bool:", v131_float_gt_bool)
-print("v132_float_ge_bool:", v132_float_ge_bool)
-print("v133_float_and_bool:", v133_float_and_bool)
-print("v134_float_or_bool:", v134_float_or_bool)
-print("v135_float_eq_str:", v135_float_eq_str)
-print("v136_float_ne_str:", v136_float_ne_str)
-print("v137_float_and_str:", v137_float_and_str)
-print("v138_float_or_str:", v138_float_or_str)
-print("v139_float_eq_bytes:", v139_float_eq_bytes)
-print("v140_float_ne_bytes:", v140_float_ne_bytes)
-print("v141_float_and_bytes:", v141_float_and_bytes)
-print("v142_float_or_bytes:", v142_float_or_bytes)
-print("v143_float_eq_list:", v143_float_eq_list)
-print("v144_float_ne_list:", v144_float_ne_list)
-print("v145_float_and_list:", v145_float_and_list)
-print("v146_float_or_list:", v146_float_or_list)
-print("v147_float_eq_dict:", v147_float_eq_dict)
-print("v148_float_ne_dict:", v148_float_ne_dict)
-print("v149_float_and_dict:", v149_float_and_dict)
-print("v150_float_or_dict:", v150_float_or_dict)
-print("v151_float_eq_set:", v151_float_eq_set)
-print("v152_float_ne_set:", v152_float_ne_set)
-print("v153_float_and_set:", v153_float_and_set)
-print("v154_float_or_set:", v154_float_or_set)
-print("v155_float_eq_none:", v155_float_eq_none)
-print("v156_float_ne_none:", v156_float_ne_none)
-print("v157_float_and_none:", v157_float_and_none)
-print("v158_float_or_none:", v158_float_or_none)
-print("v159_bool_add_int:", v159_bool_add_int)
-print("v160_bool_sub_int:", v160_bool_sub_int)
-print("v161_bool_mul_int:", v161_bool_mul_int)
-print("v162_bool_div_int:", v162_bool_div_int)
-print("v163_bool_floordiv_int:", v163_bool_floordiv_int)
-print("v164_bool_mod_int:", v164_bool_mod_int)
-print("v165_bool_pow_int:", v165_bool_pow_int)
-print("v166_bool_bitand_int:", v166_bool_bitand_int)
-print("v167_bool_bitor_int:", v167_bool_bitor_int)
-print("v168_bool_bitxor_int:", v168_bool_bitxor_int)
-print("v169_bool_lshift_int:", v169_bool_lshift_int)
-print("v170_bool_rshift_int:", v170_bool_rshift_int)
-print("v171_bool_eq_int:", v171_bool_eq_int)
-print("v172_bool_ne_int:", v172_bool_ne_int)
-print("v173_bool_lt_int:", v173_bool_lt_int)
-print("v174_bool_le_int:", v174_bool_le_int)
-print("v175_bool_gt_int:", v175_bool_gt_int)
-print("v176_bool_ge_int:", v176_bool_ge_int)
-print("v177_bool_and_int:", v177_bool_and_int)
-print("v178_bool_or_int:", v178_bool_or_int)
-print("v179_bool_add_float:", v179_bool_add_float)
-print("v180_bool_sub_float:", v180_bool_sub_float)
-print("v181_bool_mul_float:", v181_bool_mul_float)
-print("v182_bool_div_float:", v182_bool_div_float)
-print("v183_bool_floordiv_float:", v183_bool_floordiv_float)
-print("v184_bool_mod_float:", v184_bool_mod_float)
-print("v185_bool_pow_float:", v185_bool_pow_float)
-print("v186_bool_eq_float:", v186_bool_eq_float)
-print("v187_bool_ne_float:", v187_bool_ne_float)
-print("v188_bool_lt_float:", v188_bool_lt_float)
-print("v189_bool_le_float:", v189_bool_le_float)
-print("v190_bool_gt_float:", v190_bool_gt_float)
-print("v191_bool_ge_float:", v191_bool_ge_float)
-print("v192_bool_and_float:", v192_bool_and_float)
-print("v193_bool_or_float:", v193_bool_or_float)
-print("v194_bool_add_bool:", v194_bool_add_bool)
-print("v195_bool_sub_bool:", v195_bool_sub_bool)
-print("v196_bool_mul_bool:", v196_bool_mul_bool)
-print("v197_bool_div_bool:", v197_bool_div_bool)
-print("v198_bool_floordiv_bool:", v198_bool_floordiv_bool)
-print("v199_bool_mod_bool:", v199_bool_mod_bool)
-print("v200_bool_pow_bool:", v200_bool_pow_bool)
-print("v201_bool_bitand_bool:", v201_bool_bitand_bool)
-print("v202_bool_bitor_bool:", v202_bool_bitor_bool)
-print("v203_bool_bitxor_bool:", v203_bool_bitxor_bool)
-print("v204_bool_lshift_bool:", v204_bool_lshift_bool)
-print("v205_bool_rshift_bool:", v205_bool_rshift_bool)
-print("v206_bool_eq_bool:", v206_bool_eq_bool)
-print("v207_bool_ne_bool:", v207_bool_ne_bool)
-print("v208_bool_lt_bool:", v208_bool_lt_bool)
-print("v209_bool_le_bool:", v209_bool_le_bool)
-print("v210_bool_gt_bool:", v210_bool_gt_bool)
-print("v211_bool_ge_bool:", v211_bool_ge_bool)
-print("v212_bool_and_bool:", v212_bool_and_bool)
-print("v213_bool_or_bool:", v213_bool_or_bool)
-print("v214_bool_mul_str:", v214_bool_mul_str)
-print("v215_bool_eq_str:", v215_bool_eq_str)
-print("v216_bool_ne_str:", v216_bool_ne_str)
-print("v217_bool_and_str:", v217_bool_and_str)
-print("v218_bool_or_str:", v218_bool_or_str)
-print("v219_bool_mul_bytes:", v219_bool_mul_bytes)
-print("v220_bool_eq_bytes:", v220_bool_eq_bytes)
-print("v221_bool_ne_bytes:", v221_bool_ne_bytes)
-print("v222_bool_in_bytes:", v222_bool_in_bytes)
-print("v223_bool_notin_bytes:", v223_bool_notin_bytes)
-print("v224_bool_and_bytes:", v224_bool_and_bytes)
-print("v225_bool_or_bytes:", v225_bool_or_bytes)
-print("v226_bool_mul_list:", v226_bool_mul_list)
-print("v227_bool_eq_list:", v227_bool_eq_list)
-print("v228_bool_ne_list:", v228_bool_ne_list)
-print("v229_bool_in_list:", v229_bool_in_list)
-print("v230_bool_notin_list:", v230_bool_notin_list)
-print("v231_bool_and_list:", v231_bool_and_list)
-print("v232_bool_or_list:", v232_bool_or_list)
-print("v233_bool_eq_dict:", v233_bool_eq_dict)
-print("v234_bool_ne_dict:", v234_bool_ne_dict)
-print("v235_bool_in_dict:", v235_bool_in_dict)
-print("v236_bool_notin_dict:", v236_bool_notin_dict)
-print("v237_bool_and_dict:", v237_bool_and_dict)
-print("v238_bool_or_dict:", v238_bool_or_dict)
-print("v239_bool_eq_set:", v239_bool_eq_set)
-print("v240_bool_ne_set:", v240_bool_ne_set)
-print("v241_bool_in_set:", v241_bool_in_set)
-print("v242_bool_notin_set:", v242_bool_notin_set)
-print("v243_bool_and_set:", v243_bool_and_set)
-print("v244_bool_or_set:", v244_bool_or_set)
-print("v245_bool_eq_none:", v245_bool_eq_none)
-print("v246_bool_ne_none:", v246_bool_ne_none)
-print("v247_bool_and_none:", v247_bool_and_none)
-print("v248_bool_or_none:", v248_bool_or_none)
-print("v249_str_mul_int:", v249_str_mul_int)
-print("v250_str_eq_int:", v250_str_eq_int)
-print("v251_str_ne_int:", v251_str_ne_int)
-print("v252_str_and_int:", v252_str_and_int)
-print("v253_str_or_int:", v253_str_or_int)
-print("v254_str_eq_float:", v254_str_eq_float)
-print("v255_str_ne_float:", v255_str_ne_float)
-print("v256_str_and_float:", v256_str_and_float)
-print("v257_str_or_float:", v257_str_or_float)
-print("v258_str_mul_bool:", v258_str_mul_bool)
-print("v259_str_eq_bool:", v259_str_eq_bool)
-print("v260_str_ne_bool:", v260_str_ne_bool)
-print("v261_str_and_bool:", v261_str_and_bool)
-print("v262_str_or_bool:", v262_str_or_bool)
-print("v263_str_add_str:", v263_str_add_str)
-print("v264_str_eq_str:", v264_str_eq_str)
-print("v265_str_ne_str:", v265_str_ne_str)
-print("v266_str_lt_str:", v266_str_lt_str)
-print("v267_str_le_str:", v267_str_le_str)
-print("v268_str_gt_str:", v268_str_gt_str)
-print("v269_str_ge_str:", v269_str_ge_str)
-print("v270_str_in_str:", v270_str_in_str)
-print("v271_str_notin_str:", v271_str_notin_str)
-print("v272_str_and_str:", v272_str_and_str)
-print("v273_str_or_str:", v273_str_or_str)
-print("v274_str_mod_bytes:", v274_str_mod_bytes)
-print("v275_str_eq_bytes:", v275_str_eq_bytes)
-print("v276_str_ne_bytes:", v276_str_ne_bytes)
-print("v277_str_and_bytes:", v277_str_and_bytes)
-print("v278_str_or_bytes:", v278_str_or_bytes)
-print("v279_str_mod_list:", v279_str_mod_list)
-print("v280_str_eq_list:", v280_str_eq_list)
-print("v281_str_ne_list:", v281_str_ne_list)
-print("v282_str_and_list:", v282_str_and_list)
-print("v283_str_or_list:", v283_str_or_list)
-print("v284_str_mod_dict:", v284_str_mod_dict)
-print("v285_str_eq_dict:", v285_str_eq_dict)
-print("v286_str_ne_dict:", v286_str_ne_dict)
-print("v287_str_and_dict:", v287_str_and_dict)
-print("v288_str_or_dict:", v288_str_or_dict)
-print("v289_str_eq_set:", v289_str_eq_set)
-print("v290_str_ne_set:", v290_str_ne_set)
-print("v291_str_and_set:", v291_str_and_set)
-print("v292_str_or_set:", v292_str_or_set)
-print("v293_str_eq_none:", v293_str_eq_none)
-print("v294_str_ne_none:", v294_str_ne_none)
-print("v295_str_and_none:", v295_str_and_none)
-print("v296_str_or_none:", v296_str_or_none)
-print("v297_bytes_mul_int:", v297_bytes_mul_int)
-print("v298_bytes_eq_int:", v298_bytes_eq_int)
-print("v299_bytes_ne_int:", v299_bytes_ne_int)
-print("v300_bytes_and_int:", v300_bytes_and_int)
-print("v301_bytes_or_int:", v301_bytes_or_int)
-print("v302_bytes_eq_float:", v302_bytes_eq_float)
-print("v303_bytes_ne_float:", v303_bytes_ne_float)
-print("v304_bytes_and_float:", v304_bytes_and_float)
-print("v305_bytes_or_float:", v305_bytes_or_float)
-print("v306_bytes_mul_bool:", v306_bytes_mul_bool)
-print("v307_bytes_eq_bool:", v307_bytes_eq_bool)
-print("v308_bytes_ne_bool:", v308_bytes_ne_bool)
-print("v309_bytes_and_bool:", v309_bytes_and_bool)
-print("v310_bytes_or_bool:", v310_bytes_or_bool)
-print("v311_bytes_eq_str:", v311_bytes_eq_str)
-print("v312_bytes_ne_str:", v312_bytes_ne_str)
-print("v313_bytes_and_str:", v313_bytes_and_str)
-print("v314_bytes_or_str:", v314_bytes_or_str)
-print("v315_bytes_add_bytes:", v315_bytes_add_bytes)
-print("v316_bytes_eq_bytes:", v316_bytes_eq_bytes)
-print("v317_bytes_ne_bytes:", v317_bytes_ne_bytes)
-print("v318_bytes_lt_bytes:", v318_bytes_lt_bytes)
-print("v319_bytes_le_bytes:", v319_bytes_le_bytes)
-print("v320_bytes_gt_bytes:", v320_bytes_gt_bytes)
-print("v321_bytes_ge_bytes:", v321_bytes_ge_bytes)
-print("v322_bytes_in_bytes:", v322_bytes_in_bytes)
-print("v323_bytes_notin_bytes:", v323_bytes_notin_bytes)
-print("v324_bytes_and_bytes:", v324_bytes_and_bytes)
-print("v325_bytes_or_bytes:", v325_bytes_or_bytes)
-print("v326_bytes_eq_list:", v326_bytes_eq_list)
-print("v327_bytes_ne_list:", v327_bytes_ne_list)
-print("v328_bytes_and_list:", v328_bytes_and_list)
-print("v329_bytes_or_list:", v329_bytes_or_list)
-print("v330_bytes_eq_dict:", v330_bytes_eq_dict)
-print("v331_bytes_ne_dict:", v331_bytes_ne_dict)
-print("v332_bytes_and_dict:", v332_bytes_and_dict)
-print("v333_bytes_or_dict:", v333_bytes_or_dict)
-print("v334_bytes_eq_set:", v334_bytes_eq_set)
-print("v335_bytes_ne_set:", v335_bytes_ne_set)
-print("v336_bytes_and_set:", v336_bytes_and_set)
-print("v337_bytes_or_set:", v337_bytes_or_set)
-print("v338_bytes_eq_none:", v338_bytes_eq_none)
-print("v339_bytes_ne_none:", v339_bytes_ne_none)
-print("v340_bytes_and_none:", v340_bytes_and_none)
-print("v341_bytes_or_none:", v341_bytes_or_none)
-print("v342_list_mul_int:", v342_list_mul_int)
-print("v343_list_eq_int:", v343_list_eq_int)
-print("v344_list_ne_int:", v344_list_ne_int)
-print("v345_list_and_int:", v345_list_and_int)
-print("v346_list_or_int:", v346_list_or_int)
-print("v347_list_eq_float:", v347_list_eq_float)
-print("v348_list_ne_float:", v348_list_ne_float)
-print("v349_list_and_float:", v349_list_and_float)
-print("v350_list_or_float:", v350_list_or_float)
-print("v351_list_mul_bool:", v351_list_mul_bool)
-print("v352_list_eq_bool:", v352_list_eq_bool)
-print("v353_list_ne_bool:", v353_list_ne_bool)
-print("v354_list_and_bool:", v354_list_and_bool)
-print("v355_list_or_bool:", v355_list_or_bool)
-print("v356_list_eq_str:", v356_list_eq_str)
-print("v357_list_ne_str:", v357_list_ne_str)
-print("v358_list_and_str:", v358_list_and_str)
-print("v359_list_or_str:", v359_list_or_str)
-print("v360_list_eq_bytes:", v360_list_eq_bytes)
-print("v361_list_ne_bytes:", v361_list_ne_bytes)
-print("v362_list_and_bytes:", v362_list_and_bytes)
-print("v363_list_or_bytes:", v363_list_or_bytes)
-print("v364_list_add_list:", v364_list_add_list)
-print("v365_list_eq_list:", v365_list_eq_list)
-print("v366_list_ne_list:", v366_list_ne_list)
-print("v367_list_lt_list:", v367_list_lt_list)
-print("v368_list_le_list:", v368_list_le_list)
-print("v369_list_gt_list:", v369_list_gt_list)
-print("v370_list_ge_list:", v370_list_ge_list)
-print("v371_list_and_list:", v371_list_and_list)
-print("v372_list_or_list:", v372_list_or_list)
-print("v373_list_eq_dict:", v373_list_eq_dict)
-print("v374_list_ne_dict:", v374_list_ne_dict)
-print("v375_list_and_dict:", v375_list_and_dict)
-print("v376_list_or_dict:", v376_list_or_dict)
-print("v377_list_eq_set:", v377_list_eq_set)
-print("v378_list_ne_set:", v378_list_ne_set)
-print("v379_list_and_set:", v379_list_and_set)
-print("v380_list_or_set:", v380_list_or_set)
-print("v381_list_eq_none:", v381_list_eq_none)
-print("v382_list_ne_none:", v382_list_ne_none)
-print("v383_list_and_none:", v383_list_and_none)
-print("v384_list_or_none:", v384_list_or_none)
-print("v385_dict_eq_int:", v385_dict_eq_int)
-print("v386_dict_ne_int:", v386_dict_ne_int)
-print("v387_dict_and_int:", v387_dict_and_int)
-print("v388_dict_or_int:", v388_dict_or_int)
-print("v389_dict_eq_float:", v389_dict_eq_float)
-print("v390_dict_ne_float:", v390_dict_ne_float)
-print("v391_dict_and_float:", v391_dict_and_float)
-print("v392_dict_or_float:", v392_dict_or_float)
-print("v393_dict_eq_bool:", v393_dict_eq_bool)
-print("v394_dict_ne_bool:", v394_dict_ne_bool)
-print("v395_dict_and_bool:", v395_dict_and_bool)
-print("v396_dict_or_bool:", v396_dict_or_bool)
-print("v397_dict_eq_str:", v397_dict_eq_str)
-print("v398_dict_ne_str:", v398_dict_ne_str)
-print("v399_dict_and_str:", v399_dict_and_str)
-print("v400_dict_or_str:", v400_dict_or_str)
-print("v401_dict_eq_bytes:", v401_dict_eq_bytes)
-print("v402_dict_ne_bytes:", v402_dict_ne_bytes)
-print("v403_dict_and_bytes:", v403_dict_and_bytes)
-print("v404_dict_or_bytes:", v404_dict_or_bytes)
-print("v405_dict_eq_list:", v405_dict_eq_list)
-print("v406_dict_ne_list:", v406_dict_ne_list)
-print("v407_dict_and_list:", v407_dict_and_list)
-print("v408_dict_or_list:", v408_dict_or_list)
-print("v409_dict_bitor_dict:", v409_dict_bitor_dict)
-print("v410_dict_and_dict:", v410_dict_and_dict)
-print("v411_dict_or_dict:", v411_dict_or_dict)
-print("v412_dict_eq_set:", v412_dict_eq_set)
-print("v413_dict_ne_set:", v413_dict_ne_set)
-print("v414_dict_and_set:", v414_dict_and_set)
-print("v415_dict_or_set:", v415_dict_or_set)
-print("v416_dict_eq_none:", v416_dict_eq_none)
-print("v417_dict_ne_none:", v417_dict_ne_none)
-print("v418_dict_and_none:", v418_dict_and_none)
-print("v419_dict_or_none:", v419_dict_or_none)
-print("v420_set_eq_int:", v420_set_eq_int)
-print("v421_set_ne_int:", v421_set_ne_int)
-print("v422_set_and_int:", v422_set_and_int)
-print("v423_set_or_int:", v423_set_or_int)
-print("v424_set_eq_float:", v424_set_eq_float)
-print("v425_set_ne_float:", v425_set_ne_float)
-print("v426_set_and_float:", v426_set_and_float)
-print("v427_set_or_float:", v427_set_or_float)
-print("v428_set_eq_bool:", v428_set_eq_bool)
-print("v429_set_ne_bool:", v429_set_ne_bool)
-print("v430_set_and_bool:", v430_set_and_bool)
-print("v431_set_or_bool:", v431_set_or_bool)
-print("v432_set_eq_str:", v432_set_eq_str)
-print("v433_set_ne_str:", v433_set_ne_str)
-print("v434_set_and_str:", v434_set_and_str)
-print("v435_set_or_str:", v435_set_or_str)
-print("v436_set_eq_bytes:", v436_set_eq_bytes)
-print("v437_set_ne_bytes:", v437_set_ne_bytes)
-print("v438_set_and_bytes:", v438_set_and_bytes)
-print("v439_set_or_bytes:", v439_set_or_bytes)
-print("v440_set_eq_list:", v440_set_eq_list)
-print("v441_set_ne_list:", v441_set_ne_list)
-print("v442_set_and_list:", v442_set_and_list)
-print("v443_set_or_list:", v443_set_or_list)
-print("v444_set_eq_dict:", v444_set_eq_dict)
-print("v445_set_ne_dict:", v445_set_ne_dict)
-print("v446_set_and_dict:", v446_set_and_dict)
-print("v447_set_or_dict:", v447_set_or_dict)
-print("v448_set_sub_set:", v448_set_sub_set)
-print("v449_set_bitand_set:", v449_set_bitand_set)
-print("v450_set_bitor_set:", v450_set_bitor_set)
-print("v451_set_bitxor_set:", v451_set_bitxor_set)
-print("v452_set_eq_set:", v452_set_eq_set)
-print("v453_set_ne_set:", v453_set_ne_set)
-print("v454_set_lt_set:", v454_set_lt_set)
-print("v455_set_le_set:", v455_set_le_set)
-print("v456_set_gt_set:", v456_set_gt_set)
-print("v457_set_ge_set:", v457_set_ge_set)
-print("v458_set_and_set:", v458_set_and_set)
-print("v459_set_or_set:", v459_set_or_set)
-print("v460_set_eq_none:", v460_set_eq_none)
-print("v461_set_ne_none:", v461_set_ne_none)
-print("v462_set_and_none:", v462_set_and_none)
-print("v463_set_or_none:", v463_set_or_none)
-print("v464_none_eq_int:", v464_none_eq_int)
-print("v465_none_ne_int:", v465_none_ne_int)
-print("v466_none_and_int:", v466_none_and_int)
-print("v467_none_or_int:", v467_none_or_int)
-print("v468_none_eq_float:", v468_none_eq_float)
-print("v469_none_ne_float:", v469_none_ne_float)
-print("v470_none_and_float:", v470_none_and_float)
-print("v471_none_or_float:", v471_none_or_float)
-print("v472_none_eq_bool:", v472_none_eq_bool)
-print("v473_none_ne_bool:", v473_none_ne_bool)
-print("v474_none_and_bool:", v474_none_and_bool)
-print("v475_none_or_bool:", v475_none_or_bool)
-print("v476_none_eq_str:", v476_none_eq_str)
-print("v477_none_ne_str:", v477_none_ne_str)
-print("v478_none_and_str:", v478_none_and_str)
-print("v479_none_or_str:", v479_none_or_str)
-print("v480_none_eq_bytes:", v480_none_eq_bytes)
-print("v481_none_ne_bytes:", v481_none_ne_bytes)
-print("v482_none_and_bytes:", v482_none_and_bytes)
-print("v483_none_or_bytes:", v483_none_or_bytes)
-print("v484_none_eq_list:", v484_none_eq_list)
-print("v485_none_ne_list:", v485_none_ne_list)
-print("v486_none_and_list:", v486_none_and_list)
-print("v487_none_or_list:", v487_none_or_list)
-print("v488_none_eq_dict:", v488_none_eq_dict)
-print("v489_none_ne_dict:", v489_none_ne_dict)
-print("v490_none_and_dict:", v490_none_and_dict)
-print("v491_none_or_dict:", v491_none_or_dict)
-print("v492_none_eq_set:", v492_none_eq_set)
-print("v493_none_ne_set:", v493_none_ne_set)
-print("v494_none_and_set:", v494_none_and_set)
-print("v495_none_or_set:", v495_none_or_set)
-print("v496_none_eq_none:", v496_none_eq_none)
-print("v497_none_ne_none:", v497_none_ne_none)
-print("v498_none_and_none:", v498_none_and_none)
-print("v499_none_or_none:", v499_none_or_none)
+print("v20_int_is_int:", v20_int_is_int)
+print("v21_int_isnot_int:", v21_int_isnot_int)
+print("v22_int_add_float:", v22_int_add_float)
+print("v23_int_sub_float:", v23_int_sub_float)
+print("v24_int_mul_float:", v24_int_mul_float)
+print("v25_int_div_float:", v25_int_div_float)
+print("v26_int_floordiv_float:", v26_int_floordiv_float)
+print("v27_int_mod_float:", v27_int_mod_float)
+print("v28_int_pow_float:", v28_int_pow_float)
+print("v29_int_eq_float:", v29_int_eq_float)
+print("v30_int_ne_float:", v30_int_ne_float)
+print("v31_int_lt_float:", v31_int_lt_float)
+print("v32_int_le_float:", v32_int_le_float)
+print("v33_int_gt_float:", v33_int_gt_float)
+print("v34_int_ge_float:", v34_int_ge_float)
+print("v35_int_and_float:", v35_int_and_float)
+print("v36_int_or_float:", v36_int_or_float)
+print("v37_int_is_float:", v37_int_is_float)
+print("v38_int_isnot_float:", v38_int_isnot_float)
+print("v39_int_add_bool:", v39_int_add_bool)
+print("v40_int_sub_bool:", v40_int_sub_bool)
+print("v41_int_mul_bool:", v41_int_mul_bool)
+print("v42_int_div_bool:", v42_int_div_bool)
+print("v43_int_floordiv_bool:", v43_int_floordiv_bool)
+print("v44_int_mod_bool:", v44_int_mod_bool)
+print("v45_int_pow_bool:", v45_int_pow_bool)
+print("v46_int_bitand_bool:", v46_int_bitand_bool)
+print("v47_int_bitor_bool:", v47_int_bitor_bool)
+print("v48_int_bitxor_bool:", v48_int_bitxor_bool)
+print("v49_int_lshift_bool:", v49_int_lshift_bool)
+print("v50_int_rshift_bool:", v50_int_rshift_bool)
+print("v51_int_eq_bool:", v51_int_eq_bool)
+print("v52_int_ne_bool:", v52_int_ne_bool)
+print("v53_int_lt_bool:", v53_int_lt_bool)
+print("v54_int_le_bool:", v54_int_le_bool)
+print("v55_int_gt_bool:", v55_int_gt_bool)
+print("v56_int_ge_bool:", v56_int_ge_bool)
+print("v57_int_and_bool:", v57_int_and_bool)
+print("v58_int_or_bool:", v58_int_or_bool)
+print("v59_int_is_bool:", v59_int_is_bool)
+print("v60_int_isnot_bool:", v60_int_isnot_bool)
+print("v61_int_mul_str:", v61_int_mul_str)
+print("v62_int_eq_str:", v62_int_eq_str)
+print("v63_int_ne_str:", v63_int_ne_str)
+print("v64_int_and_str:", v64_int_and_str)
+print("v65_int_or_str:", v65_int_or_str)
+print("v66_int_is_str:", v66_int_is_str)
+print("v67_int_isnot_str:", v67_int_isnot_str)
+print("v68_int_mul_bytes:", v68_int_mul_bytes)
+print("v69_int_eq_bytes:", v69_int_eq_bytes)
+print("v70_int_ne_bytes:", v70_int_ne_bytes)
+print("v71_int_in_bytes:", v71_int_in_bytes)
+print("v72_int_notin_bytes:", v72_int_notin_bytes)
+print("v73_int_and_bytes:", v73_int_and_bytes)
+print("v74_int_or_bytes:", v74_int_or_bytes)
+print("v75_int_is_bytes:", v75_int_is_bytes)
+print("v76_int_isnot_bytes:", v76_int_isnot_bytes)
+print("v77_int_mul_list:", v77_int_mul_list)
+print("v78_int_eq_list:", v78_int_eq_list)
+print("v79_int_ne_list:", v79_int_ne_list)
+print("v80_int_in_list:", v80_int_in_list)
+print("v81_int_notin_list:", v81_int_notin_list)
+print("v82_int_and_list:", v82_int_and_list)
+print("v83_int_or_list:", v83_int_or_list)
+print("v84_int_is_list:", v84_int_is_list)
+print("v85_int_isnot_list:", v85_int_isnot_list)
+print("v86_int_eq_dict:", v86_int_eq_dict)
+print("v87_int_ne_dict:", v87_int_ne_dict)
+print("v88_int_in_dict:", v88_int_in_dict)
+print("v89_int_notin_dict:", v89_int_notin_dict)
+print("v90_int_and_dict:", v90_int_and_dict)
+print("v91_int_or_dict:", v91_int_or_dict)
+print("v92_int_is_dict:", v92_int_is_dict)
+print("v93_int_isnot_dict:", v93_int_isnot_dict)
+print("v94_int_eq_set:", v94_int_eq_set)
+print("v95_int_ne_set:", v95_int_ne_set)
+print("v96_int_in_set:", v96_int_in_set)
+print("v97_int_notin_set:", v97_int_notin_set)
+print("v98_int_and_set:", v98_int_and_set)
+print("v99_int_or_set:", v99_int_or_set)
+print("v100_int_is_set:", v100_int_is_set)
+print("v101_int_isnot_set:", v101_int_isnot_set)
+print("v102_int_eq_none:", v102_int_eq_none)
+print("v103_int_ne_none:", v103_int_ne_none)
+print("v104_int_and_none:", v104_int_and_none)
+print("v105_int_or_none:", v105_int_or_none)
+print("v106_int_is_none:", v106_int_is_none)
+print("v107_int_isnot_none:", v107_int_isnot_none)
+print("v108_float_add_int:", v108_float_add_int)
+print("v109_float_sub_int:", v109_float_sub_int)
+print("v110_float_mul_int:", v110_float_mul_int)
+print("v111_float_div_int:", v111_float_div_int)
+print("v112_float_floordiv_int:", v112_float_floordiv_int)
+print("v113_float_mod_int:", v113_float_mod_int)
+print("v114_float_pow_int:", v114_float_pow_int)
+print("v115_float_eq_int:", v115_float_eq_int)
+print("v116_float_ne_int:", v116_float_ne_int)
+print("v117_float_lt_int:", v117_float_lt_int)
+print("v118_float_le_int:", v118_float_le_int)
+print("v119_float_gt_int:", v119_float_gt_int)
+print("v120_float_ge_int:", v120_float_ge_int)
+print("v121_float_and_int:", v121_float_and_int)
+print("v122_float_or_int:", v122_float_or_int)
+print("v123_float_is_int:", v123_float_is_int)
+print("v124_float_isnot_int:", v124_float_isnot_int)
+print("v125_float_add_float:", v125_float_add_float)
+print("v126_float_sub_float:", v126_float_sub_float)
+print("v127_float_mul_float:", v127_float_mul_float)
+print("v128_float_div_float:", v128_float_div_float)
+print("v129_float_floordiv_float:", v129_float_floordiv_float)
+print("v130_float_mod_float:", v130_float_mod_float)
+print("v131_float_pow_float:", v131_float_pow_float)
+print("v132_float_eq_float:", v132_float_eq_float)
+print("v133_float_ne_float:", v133_float_ne_float)
+print("v134_float_lt_float:", v134_float_lt_float)
+print("v135_float_le_float:", v135_float_le_float)
+print("v136_float_gt_float:", v136_float_gt_float)
+print("v137_float_ge_float:", v137_float_ge_float)
+print("v138_float_and_float:", v138_float_and_float)
+print("v139_float_or_float:", v139_float_or_float)
+print("v140_float_is_float:", v140_float_is_float)
+print("v141_float_isnot_float:", v141_float_isnot_float)
+print("v142_float_add_bool:", v142_float_add_bool)
+print("v143_float_sub_bool:", v143_float_sub_bool)
+print("v144_float_mul_bool:", v144_float_mul_bool)
+print("v145_float_div_bool:", v145_float_div_bool)
+print("v146_float_floordiv_bool:", v146_float_floordiv_bool)
+print("v147_float_mod_bool:", v147_float_mod_bool)
+print("v148_float_pow_bool:", v148_float_pow_bool)
+print("v149_float_eq_bool:", v149_float_eq_bool)
+print("v150_float_ne_bool:", v150_float_ne_bool)
+print("v151_float_lt_bool:", v151_float_lt_bool)
+print("v152_float_le_bool:", v152_float_le_bool)
+print("v153_float_gt_bool:", v153_float_gt_bool)
+print("v154_float_ge_bool:", v154_float_ge_bool)
+print("v155_float_and_bool:", v155_float_and_bool)
+print("v156_float_or_bool:", v156_float_or_bool)
+print("v157_float_is_bool:", v157_float_is_bool)
+print("v158_float_isnot_bool:", v158_float_isnot_bool)
+print("v159_float_eq_str:", v159_float_eq_str)
+print("v160_float_ne_str:", v160_float_ne_str)
+print("v161_float_and_str:", v161_float_and_str)
+print("v162_float_or_str:", v162_float_or_str)
+print("v163_float_is_str:", v163_float_is_str)
+print("v164_float_isnot_str:", v164_float_isnot_str)
+print("v165_float_eq_bytes:", v165_float_eq_bytes)
+print("v166_float_ne_bytes:", v166_float_ne_bytes)
+print("v167_float_and_bytes:", v167_float_and_bytes)
+print("v168_float_or_bytes:", v168_float_or_bytes)
+print("v169_float_is_bytes:", v169_float_is_bytes)
+print("v170_float_isnot_bytes:", v170_float_isnot_bytes)
+print("v171_float_eq_list:", v171_float_eq_list)
+print("v172_float_ne_list:", v172_float_ne_list)
+print("v173_float_and_list:", v173_float_and_list)
+print("v174_float_or_list:", v174_float_or_list)
+print("v175_float_is_list:", v175_float_is_list)
+print("v176_float_isnot_list:", v176_float_isnot_list)
+print("v177_float_eq_dict:", v177_float_eq_dict)
+print("v178_float_ne_dict:", v178_float_ne_dict)
+print("v179_float_and_dict:", v179_float_and_dict)
+print("v180_float_or_dict:", v180_float_or_dict)
+print("v181_float_is_dict:", v181_float_is_dict)
+print("v182_float_isnot_dict:", v182_float_isnot_dict)
+print("v183_float_eq_set:", v183_float_eq_set)
+print("v184_float_ne_set:", v184_float_ne_set)
+print("v185_float_and_set:", v185_float_and_set)
+print("v186_float_or_set:", v186_float_or_set)
+print("v187_float_is_set:", v187_float_is_set)
+print("v188_float_isnot_set:", v188_float_isnot_set)
+print("v189_float_eq_none:", v189_float_eq_none)
+print("v190_float_ne_none:", v190_float_ne_none)
+print("v191_float_and_none:", v191_float_and_none)
+print("v192_float_or_none:", v192_float_or_none)
+print("v193_float_is_none:", v193_float_is_none)
+print("v194_float_isnot_none:", v194_float_isnot_none)
+print("v195_bool_add_int:", v195_bool_add_int)
+print("v196_bool_sub_int:", v196_bool_sub_int)
+print("v197_bool_mul_int:", v197_bool_mul_int)
+print("v198_bool_div_int:", v198_bool_div_int)
+print("v199_bool_floordiv_int:", v199_bool_floordiv_int)
+print("v200_bool_mod_int:", v200_bool_mod_int)
+print("v201_bool_pow_int:", v201_bool_pow_int)
+print("v202_bool_bitand_int:", v202_bool_bitand_int)
+print("v203_bool_bitor_int:", v203_bool_bitor_int)
+print("v204_bool_bitxor_int:", v204_bool_bitxor_int)
+print("v205_bool_lshift_int:", v205_bool_lshift_int)
+print("v206_bool_rshift_int:", v206_bool_rshift_int)
+print("v207_bool_eq_int:", v207_bool_eq_int)
+print("v208_bool_ne_int:", v208_bool_ne_int)
+print("v209_bool_lt_int:", v209_bool_lt_int)
+print("v210_bool_le_int:", v210_bool_le_int)
+print("v211_bool_gt_int:", v211_bool_gt_int)
+print("v212_bool_ge_int:", v212_bool_ge_int)
+print("v213_bool_and_int:", v213_bool_and_int)
+print("v214_bool_or_int:", v214_bool_or_int)
+print("v215_bool_is_int:", v215_bool_is_int)
+print("v216_bool_isnot_int:", v216_bool_isnot_int)
+print("v217_bool_add_float:", v217_bool_add_float)
+print("v218_bool_sub_float:", v218_bool_sub_float)
+print("v219_bool_mul_float:", v219_bool_mul_float)
+print("v220_bool_div_float:", v220_bool_div_float)
+print("v221_bool_floordiv_float:", v221_bool_floordiv_float)
+print("v222_bool_mod_float:", v222_bool_mod_float)
+print("v223_bool_pow_float:", v223_bool_pow_float)
+print("v224_bool_eq_float:", v224_bool_eq_float)
+print("v225_bool_ne_float:", v225_bool_ne_float)
+print("v226_bool_lt_float:", v226_bool_lt_float)
+print("v227_bool_le_float:", v227_bool_le_float)
+print("v228_bool_gt_float:", v228_bool_gt_float)
+print("v229_bool_ge_float:", v229_bool_ge_float)
+print("v230_bool_and_float:", v230_bool_and_float)
+print("v231_bool_or_float:", v231_bool_or_float)
+print("v232_bool_is_float:", v232_bool_is_float)
+print("v233_bool_isnot_float:", v233_bool_isnot_float)
+print("v234_bool_add_bool:", v234_bool_add_bool)
+print("v235_bool_sub_bool:", v235_bool_sub_bool)
+print("v236_bool_mul_bool:", v236_bool_mul_bool)
+print("v237_bool_div_bool:", v237_bool_div_bool)
+print("v238_bool_floordiv_bool:", v238_bool_floordiv_bool)
+print("v239_bool_mod_bool:", v239_bool_mod_bool)
+print("v240_bool_pow_bool:", v240_bool_pow_bool)
+print("v241_bool_bitand_bool:", v241_bool_bitand_bool)
+print("v242_bool_bitor_bool:", v242_bool_bitor_bool)
+print("v243_bool_bitxor_bool:", v243_bool_bitxor_bool)
+print("v244_bool_lshift_bool:", v244_bool_lshift_bool)
+print("v245_bool_rshift_bool:", v245_bool_rshift_bool)
+print("v246_bool_eq_bool:", v246_bool_eq_bool)
+print("v247_bool_ne_bool:", v247_bool_ne_bool)
+print("v248_bool_lt_bool:", v248_bool_lt_bool)
+print("v249_bool_le_bool:", v249_bool_le_bool)
+print("v250_bool_gt_bool:", v250_bool_gt_bool)
+print("v251_bool_ge_bool:", v251_bool_ge_bool)
+print("v252_bool_and_bool:", v252_bool_and_bool)
+print("v253_bool_or_bool:", v253_bool_or_bool)
+print("v254_bool_is_bool:", v254_bool_is_bool)
+print("v255_bool_isnot_bool:", v255_bool_isnot_bool)
+print("v256_bool_mul_str:", v256_bool_mul_str)
+print("v257_bool_eq_str:", v257_bool_eq_str)
+print("v258_bool_ne_str:", v258_bool_ne_str)
+print("v259_bool_and_str:", v259_bool_and_str)
+print("v260_bool_or_str:", v260_bool_or_str)
+print("v261_bool_is_str:", v261_bool_is_str)
+print("v262_bool_isnot_str:", v262_bool_isnot_str)
+print("v263_bool_mul_bytes:", v263_bool_mul_bytes)
+print("v264_bool_eq_bytes:", v264_bool_eq_bytes)
+print("v265_bool_ne_bytes:", v265_bool_ne_bytes)
+print("v266_bool_in_bytes:", v266_bool_in_bytes)
+print("v267_bool_notin_bytes:", v267_bool_notin_bytes)
+print("v268_bool_and_bytes:", v268_bool_and_bytes)
+print("v269_bool_or_bytes:", v269_bool_or_bytes)
+print("v270_bool_is_bytes:", v270_bool_is_bytes)
+print("v271_bool_isnot_bytes:", v271_bool_isnot_bytes)
+print("v272_bool_mul_list:", v272_bool_mul_list)
+print("v273_bool_eq_list:", v273_bool_eq_list)
+print("v274_bool_ne_list:", v274_bool_ne_list)
+print("v275_bool_in_list:", v275_bool_in_list)
+print("v276_bool_notin_list:", v276_bool_notin_list)
+print("v277_bool_and_list:", v277_bool_and_list)
+print("v278_bool_or_list:", v278_bool_or_list)
+print("v279_bool_is_list:", v279_bool_is_list)
+print("v280_bool_isnot_list:", v280_bool_isnot_list)
+print("v281_bool_eq_dict:", v281_bool_eq_dict)
+print("v282_bool_ne_dict:", v282_bool_ne_dict)
+print("v283_bool_in_dict:", v283_bool_in_dict)
+print("v284_bool_notin_dict:", v284_bool_notin_dict)
+print("v285_bool_and_dict:", v285_bool_and_dict)
+print("v286_bool_or_dict:", v286_bool_or_dict)
+print("v287_bool_is_dict:", v287_bool_is_dict)
+print("v288_bool_isnot_dict:", v288_bool_isnot_dict)
+print("v289_bool_eq_set:", v289_bool_eq_set)
+print("v290_bool_ne_set:", v290_bool_ne_set)
+print("v291_bool_in_set:", v291_bool_in_set)
+print("v292_bool_notin_set:", v292_bool_notin_set)
+print("v293_bool_and_set:", v293_bool_and_set)
+print("v294_bool_or_set:", v294_bool_or_set)
+print("v295_bool_is_set:", v295_bool_is_set)
+print("v296_bool_isnot_set:", v296_bool_isnot_set)
+print("v297_bool_eq_none:", v297_bool_eq_none)
+print("v298_bool_ne_none:", v298_bool_ne_none)
+print("v299_bool_and_none:", v299_bool_and_none)
+print("v300_bool_or_none:", v300_bool_or_none)
+print("v301_bool_is_none:", v301_bool_is_none)
+print("v302_bool_isnot_none:", v302_bool_isnot_none)
+print("v303_str_mul_int:", v303_str_mul_int)
+print("v304_str_eq_int:", v304_str_eq_int)
+print("v305_str_ne_int:", v305_str_ne_int)
+print("v306_str_and_int:", v306_str_and_int)
+print("v307_str_or_int:", v307_str_or_int)
+print("v308_str_is_int:", v308_str_is_int)
+print("v309_str_isnot_int:", v309_str_isnot_int)
+print("v310_str_eq_float:", v310_str_eq_float)
+print("v311_str_ne_float:", v311_str_ne_float)
+print("v312_str_and_float:", v312_str_and_float)
+print("v313_str_or_float:", v313_str_or_float)
+print("v314_str_is_float:", v314_str_is_float)
+print("v315_str_isnot_float:", v315_str_isnot_float)
+print("v316_str_mul_bool:", v316_str_mul_bool)
+print("v317_str_eq_bool:", v317_str_eq_bool)
+print("v318_str_ne_bool:", v318_str_ne_bool)
+print("v319_str_and_bool:", v319_str_and_bool)
+print("v320_str_or_bool:", v320_str_or_bool)
+print("v321_str_is_bool:", v321_str_is_bool)
+print("v322_str_isnot_bool:", v322_str_isnot_bool)
+print("v323_str_add_str:", v323_str_add_str)
+print("v324_str_eq_str:", v324_str_eq_str)
+print("v325_str_ne_str:", v325_str_ne_str)
+print("v326_str_lt_str:", v326_str_lt_str)
+print("v327_str_le_str:", v327_str_le_str)
+print("v328_str_gt_str:", v328_str_gt_str)
+print("v329_str_ge_str:", v329_str_ge_str)
+print("v330_str_in_str:", v330_str_in_str)
+print("v331_str_notin_str:", v331_str_notin_str)
+print("v332_str_and_str:", v332_str_and_str)
+print("v333_str_or_str:", v333_str_or_str)
+print("v334_str_is_str:", v334_str_is_str)
+print("v335_str_isnot_str:", v335_str_isnot_str)
+print("v336_str_mod_bytes:", v336_str_mod_bytes)
+print("v337_str_eq_bytes:", v337_str_eq_bytes)
+print("v338_str_ne_bytes:", v338_str_ne_bytes)
+print("v339_str_and_bytes:", v339_str_and_bytes)
+print("v340_str_or_bytes:", v340_str_or_bytes)
+print("v341_str_is_bytes:", v341_str_is_bytes)
+print("v342_str_isnot_bytes:", v342_str_isnot_bytes)
+print("v343_str_eq_list:", v343_str_eq_list)
+print("v344_str_ne_list:", v344_str_ne_list)
+print("v345_str_and_list:", v345_str_and_list)
+print("v346_str_or_list:", v346_str_or_list)
+print("v347_str_is_list:", v347_str_is_list)
+print("v348_str_isnot_list:", v348_str_isnot_list)
+print("v349_str_eq_dict:", v349_str_eq_dict)
+print("v350_str_ne_dict:", v350_str_ne_dict)
+print("v351_str_and_dict:", v351_str_and_dict)
+print("v352_str_or_dict:", v352_str_or_dict)
+print("v353_str_is_dict:", v353_str_is_dict)
+print("v354_str_isnot_dict:", v354_str_isnot_dict)
+print("v355_str_eq_set:", v355_str_eq_set)
+print("v356_str_ne_set:", v356_str_ne_set)
+print("v357_str_and_set:", v357_str_and_set)
+print("v358_str_or_set:", v358_str_or_set)
+print("v359_str_is_set:", v359_str_is_set)
+print("v360_str_isnot_set:", v360_str_isnot_set)
+print("v361_str_eq_none:", v361_str_eq_none)
+print("v362_str_ne_none:", v362_str_ne_none)
+print("v363_str_and_none:", v363_str_and_none)
+print("v364_str_or_none:", v364_str_or_none)
+print("v365_str_is_none:", v365_str_is_none)
+print("v366_str_isnot_none:", v366_str_isnot_none)
+print("v367_bytes_mul_int:", v367_bytes_mul_int)
+print("v368_bytes_eq_int:", v368_bytes_eq_int)
+print("v369_bytes_ne_int:", v369_bytes_ne_int)
+print("v370_bytes_and_int:", v370_bytes_and_int)
+print("v371_bytes_or_int:", v371_bytes_or_int)
+print("v372_bytes_is_int:", v372_bytes_is_int)
+print("v373_bytes_isnot_int:", v373_bytes_isnot_int)
+print("v374_bytes_eq_float:", v374_bytes_eq_float)
+print("v375_bytes_ne_float:", v375_bytes_ne_float)
+print("v376_bytes_and_float:", v376_bytes_and_float)
+print("v377_bytes_or_float:", v377_bytes_or_float)
+print("v378_bytes_is_float:", v378_bytes_is_float)
+print("v379_bytes_isnot_float:", v379_bytes_isnot_float)
+print("v380_bytes_mul_bool:", v380_bytes_mul_bool)
+print("v381_bytes_eq_bool:", v381_bytes_eq_bool)
+print("v382_bytes_ne_bool:", v382_bytes_ne_bool)
+print("v383_bytes_and_bool:", v383_bytes_and_bool)
+print("v384_bytes_or_bool:", v384_bytes_or_bool)
+print("v385_bytes_is_bool:", v385_bytes_is_bool)
+print("v386_bytes_isnot_bool:", v386_bytes_isnot_bool)
+print("v387_bytes_eq_str:", v387_bytes_eq_str)
+print("v388_bytes_ne_str:", v388_bytes_ne_str)
+print("v389_bytes_and_str:", v389_bytes_and_str)
+print("v390_bytes_or_str:", v390_bytes_or_str)
+print("v391_bytes_is_str:", v391_bytes_is_str)
+print("v392_bytes_isnot_str:", v392_bytes_isnot_str)
+print("v393_bytes_add_bytes:", v393_bytes_add_bytes)
+print("v394_bytes_eq_bytes:", v394_bytes_eq_bytes)
+print("v395_bytes_ne_bytes:", v395_bytes_ne_bytes)
+print("v396_bytes_lt_bytes:", v396_bytes_lt_bytes)
+print("v397_bytes_le_bytes:", v397_bytes_le_bytes)
+print("v398_bytes_gt_bytes:", v398_bytes_gt_bytes)
+print("v399_bytes_ge_bytes:", v399_bytes_ge_bytes)
+print("v400_bytes_in_bytes:", v400_bytes_in_bytes)
+print("v401_bytes_notin_bytes:", v401_bytes_notin_bytes)
+print("v402_bytes_and_bytes:", v402_bytes_and_bytes)
+print("v403_bytes_or_bytes:", v403_bytes_or_bytes)
+print("v404_bytes_is_bytes:", v404_bytes_is_bytes)
+print("v405_bytes_isnot_bytes:", v405_bytes_isnot_bytes)
+print("v406_bytes_eq_list:", v406_bytes_eq_list)
+print("v407_bytes_ne_list:", v407_bytes_ne_list)
+print("v408_bytes_and_list:", v408_bytes_and_list)
+print("v409_bytes_or_list:", v409_bytes_or_list)
+print("v410_bytes_is_list:", v410_bytes_is_list)
+print("v411_bytes_isnot_list:", v411_bytes_isnot_list)
+print("v412_bytes_eq_dict:", v412_bytes_eq_dict)
+print("v413_bytes_ne_dict:", v413_bytes_ne_dict)
+print("v414_bytes_and_dict:", v414_bytes_and_dict)
+print("v415_bytes_or_dict:", v415_bytes_or_dict)
+print("v416_bytes_is_dict:", v416_bytes_is_dict)
+print("v417_bytes_isnot_dict:", v417_bytes_isnot_dict)
+print("v418_bytes_eq_set:", v418_bytes_eq_set)
+print("v419_bytes_ne_set:", v419_bytes_ne_set)
+print("v420_bytes_and_set:", v420_bytes_and_set)
+print("v421_bytes_or_set:", v421_bytes_or_set)
+print("v422_bytes_is_set:", v422_bytes_is_set)
+print("v423_bytes_isnot_set:", v423_bytes_isnot_set)
+print("v424_bytes_eq_none:", v424_bytes_eq_none)
+print("v425_bytes_ne_none:", v425_bytes_ne_none)
+print("v426_bytes_and_none:", v426_bytes_and_none)
+print("v427_bytes_or_none:", v427_bytes_or_none)
+print("v428_bytes_is_none:", v428_bytes_is_none)
+print("v429_bytes_isnot_none:", v429_bytes_isnot_none)
+print("v430_list_mul_int:", v430_list_mul_int)
+print("v431_list_eq_int:", v431_list_eq_int)
+print("v432_list_ne_int:", v432_list_ne_int)
+print("v433_list_and_int:", v433_list_and_int)
+print("v434_list_or_int:", v434_list_or_int)
+print("v435_list_is_int:", v435_list_is_int)
+print("v436_list_isnot_int:", v436_list_isnot_int)
+print("v437_list_eq_float:", v437_list_eq_float)
+print("v438_list_ne_float:", v438_list_ne_float)
+print("v439_list_and_float:", v439_list_and_float)
+print("v440_list_or_float:", v440_list_or_float)
+print("v441_list_is_float:", v441_list_is_float)
+print("v442_list_isnot_float:", v442_list_isnot_float)
+print("v443_list_mul_bool:", v443_list_mul_bool)
+print("v444_list_eq_bool:", v444_list_eq_bool)
+print("v445_list_ne_bool:", v445_list_ne_bool)
+print("v446_list_and_bool:", v446_list_and_bool)
+print("v447_list_or_bool:", v447_list_or_bool)
+print("v448_list_is_bool:", v448_list_is_bool)
+print("v449_list_isnot_bool:", v449_list_isnot_bool)
+print("v450_list_eq_str:", v450_list_eq_str)
+print("v451_list_ne_str:", v451_list_ne_str)
+print("v452_list_and_str:", v452_list_and_str)
+print("v453_list_or_str:", v453_list_or_str)
+print("v454_list_is_str:", v454_list_is_str)
+print("v455_list_isnot_str:", v455_list_isnot_str)
+print("v456_list_eq_bytes:", v456_list_eq_bytes)
+print("v457_list_ne_bytes:", v457_list_ne_bytes)
+print("v458_list_and_bytes:", v458_list_and_bytes)
+print("v459_list_or_bytes:", v459_list_or_bytes)
+print("v460_list_is_bytes:", v460_list_is_bytes)
+print("v461_list_isnot_bytes:", v461_list_isnot_bytes)
+print("v462_list_add_list:", v462_list_add_list)
+print("v463_list_eq_list:", v463_list_eq_list)
+print("v464_list_ne_list:", v464_list_ne_list)
+print("v465_list_lt_list:", v465_list_lt_list)
+print("v466_list_le_list:", v466_list_le_list)
+print("v467_list_gt_list:", v467_list_gt_list)
+print("v468_list_ge_list:", v468_list_ge_list)
+print("v469_list_and_list:", v469_list_and_list)
+print("v470_list_or_list:", v470_list_or_list)
+print("v471_list_is_list:", v471_list_is_list)
+print("v472_list_isnot_list:", v472_list_isnot_list)
+print("v473_list_eq_dict:", v473_list_eq_dict)
+print("v474_list_ne_dict:", v474_list_ne_dict)
+print("v475_list_and_dict:", v475_list_and_dict)
+print("v476_list_or_dict:", v476_list_or_dict)
+print("v477_list_is_dict:", v477_list_is_dict)
+print("v478_list_isnot_dict:", v478_list_isnot_dict)
+print("v479_list_eq_set:", v479_list_eq_set)
+print("v480_list_ne_set:", v480_list_ne_set)
+print("v481_list_and_set:", v481_list_and_set)
+print("v482_list_or_set:", v482_list_or_set)
+print("v483_list_is_set:", v483_list_is_set)
+print("v484_list_isnot_set:", v484_list_isnot_set)
+print("v485_list_eq_none:", v485_list_eq_none)
+print("v486_list_ne_none:", v486_list_ne_none)
+print("v487_list_and_none:", v487_list_and_none)
+print("v488_list_or_none:", v488_list_or_none)
+print("v489_list_is_none:", v489_list_is_none)
+print("v490_list_isnot_none:", v490_list_isnot_none)
+print("v491_dict_eq_int:", v491_dict_eq_int)
+print("v492_dict_ne_int:", v492_dict_ne_int)
+print("v493_dict_and_int:", v493_dict_and_int)
+print("v494_dict_or_int:", v494_dict_or_int)
+print("v495_dict_is_int:", v495_dict_is_int)
+print("v496_dict_isnot_int:", v496_dict_isnot_int)
+print("v497_dict_eq_float:", v497_dict_eq_float)
+print("v498_dict_ne_float:", v498_dict_ne_float)
+print("v499_dict_and_float:", v499_dict_and_float)
+print("v500_dict_or_float:", v500_dict_or_float)
+print("v501_dict_is_float:", v501_dict_is_float)
+print("v502_dict_isnot_float:", v502_dict_isnot_float)
+print("v503_dict_eq_bool:", v503_dict_eq_bool)
+print("v504_dict_ne_bool:", v504_dict_ne_bool)
+print("v505_dict_and_bool:", v505_dict_and_bool)
+print("v506_dict_or_bool:", v506_dict_or_bool)
+print("v507_dict_is_bool:", v507_dict_is_bool)
+print("v508_dict_isnot_bool:", v508_dict_isnot_bool)
+print("v509_dict_eq_str:", v509_dict_eq_str)
+print("v510_dict_ne_str:", v510_dict_ne_str)
+print("v511_dict_and_str:", v511_dict_and_str)
+print("v512_dict_or_str:", v512_dict_or_str)
+print("v513_dict_is_str:", v513_dict_is_str)
+print("v514_dict_isnot_str:", v514_dict_isnot_str)
+print("v515_dict_eq_bytes:", v515_dict_eq_bytes)
+print("v516_dict_ne_bytes:", v516_dict_ne_bytes)
+print("v517_dict_and_bytes:", v517_dict_and_bytes)
+print("v518_dict_or_bytes:", v518_dict_or_bytes)
+print("v519_dict_is_bytes:", v519_dict_is_bytes)
+print("v520_dict_isnot_bytes:", v520_dict_isnot_bytes)
+print("v521_dict_eq_list:", v521_dict_eq_list)
+print("v522_dict_ne_list:", v522_dict_ne_list)
+print("v523_dict_and_list:", v523_dict_and_list)
+print("v524_dict_or_list:", v524_dict_or_list)
+print("v525_dict_is_list:", v525_dict_is_list)
+print("v526_dict_isnot_list:", v526_dict_isnot_list)
+print("v527_dict_bitor_dict:", v527_dict_bitor_dict)
+print("v528_dict_and_dict:", v528_dict_and_dict)
+print("v529_dict_or_dict:", v529_dict_or_dict)
+print("v530_dict_is_dict:", v530_dict_is_dict)
+print("v531_dict_isnot_dict:", v531_dict_isnot_dict)
+print("v532_dict_eq_set:", v532_dict_eq_set)
+print("v533_dict_ne_set:", v533_dict_ne_set)
+print("v534_dict_and_set:", v534_dict_and_set)
+print("v535_dict_or_set:", v535_dict_or_set)
+print("v536_dict_is_set:", v536_dict_is_set)
+print("v537_dict_isnot_set:", v537_dict_isnot_set)
+print("v538_dict_eq_none:", v538_dict_eq_none)
+print("v539_dict_ne_none:", v539_dict_ne_none)
+print("v540_dict_and_none:", v540_dict_and_none)
+print("v541_dict_or_none:", v541_dict_or_none)
+print("v542_dict_is_none:", v542_dict_is_none)
+print("v543_dict_isnot_none:", v543_dict_isnot_none)
+print("v544_set_eq_int:", v544_set_eq_int)
+print("v545_set_ne_int:", v545_set_ne_int)
+print("v546_set_and_int:", v546_set_and_int)
+print("v547_set_or_int:", v547_set_or_int)
+print("v548_set_is_int:", v548_set_is_int)
+print("v549_set_isnot_int:", v549_set_isnot_int)
+print("v550_set_eq_float:", v550_set_eq_float)
+print("v551_set_ne_float:", v551_set_ne_float)
+print("v552_set_and_float:", v552_set_and_float)
+print("v553_set_or_float:", v553_set_or_float)
+print("v554_set_is_float:", v554_set_is_float)
+print("v555_set_isnot_float:", v555_set_isnot_float)
+print("v556_set_eq_bool:", v556_set_eq_bool)
+print("v557_set_ne_bool:", v557_set_ne_bool)
+print("v558_set_and_bool:", v558_set_and_bool)
+print("v559_set_or_bool:", v559_set_or_bool)
+print("v560_set_is_bool:", v560_set_is_bool)
+print("v561_set_isnot_bool:", v561_set_isnot_bool)
+print("v562_set_eq_str:", v562_set_eq_str)
+print("v563_set_ne_str:", v563_set_ne_str)
+print("v564_set_and_str:", v564_set_and_str)
+print("v565_set_or_str:", v565_set_or_str)
+print("v566_set_is_str:", v566_set_is_str)
+print("v567_set_isnot_str:", v567_set_isnot_str)
+print("v568_set_eq_bytes:", v568_set_eq_bytes)
+print("v569_set_ne_bytes:", v569_set_ne_bytes)
+print("v570_set_and_bytes:", v570_set_and_bytes)
+print("v571_set_or_bytes:", v571_set_or_bytes)
+print("v572_set_is_bytes:", v572_set_is_bytes)
+print("v573_set_isnot_bytes:", v573_set_isnot_bytes)
+print("v574_set_eq_list:", v574_set_eq_list)
+print("v575_set_ne_list:", v575_set_ne_list)
+print("v576_set_and_list:", v576_set_and_list)
+print("v577_set_or_list:", v577_set_or_list)
+print("v578_set_is_list:", v578_set_is_list)
+print("v579_set_isnot_list:", v579_set_isnot_list)
+print("v580_set_eq_dict:", v580_set_eq_dict)
+print("v581_set_ne_dict:", v581_set_ne_dict)
+print("v582_set_and_dict:", v582_set_and_dict)
+print("v583_set_or_dict:", v583_set_or_dict)
+print("v584_set_is_dict:", v584_set_is_dict)
+print("v585_set_isnot_dict:", v585_set_isnot_dict)
+print("v586_set_sub_set:", v586_set_sub_set)
+print("v587_set_bitand_set:", v587_set_bitand_set)
+print("v588_set_bitor_set:", v588_set_bitor_set)
+print("v589_set_bitxor_set:", v589_set_bitxor_set)
+print("v590_set_eq_set:", v590_set_eq_set)
+print("v591_set_ne_set:", v591_set_ne_set)
+print("v592_set_lt_set:", v592_set_lt_set)
+print("v593_set_le_set:", v593_set_le_set)
+print("v594_set_gt_set:", v594_set_gt_set)
+print("v595_set_ge_set:", v595_set_ge_set)
+print("v596_set_and_set:", v596_set_and_set)
+print("v597_set_or_set:", v597_set_or_set)
+print("v598_set_is_set:", v598_set_is_set)
+print("v599_set_isnot_set:", v599_set_isnot_set)
+print("v600_set_eq_none:", v600_set_eq_none)
+print("v601_set_ne_none:", v601_set_ne_none)
+print("v602_set_and_none:", v602_set_and_none)
+print("v603_set_or_none:", v603_set_or_none)
+print("v604_set_is_none:", v604_set_is_none)
+print("v605_set_isnot_none:", v605_set_isnot_none)
+print("v606_none_eq_int:", v606_none_eq_int)
+print("v607_none_ne_int:", v607_none_ne_int)
+print("v608_none_and_int:", v608_none_and_int)
+print("v609_none_or_int:", v609_none_or_int)
+print("v610_none_is_int:", v610_none_is_int)
+print("v611_none_isnot_int:", v611_none_isnot_int)
+print("v612_none_eq_float:", v612_none_eq_float)
+print("v613_none_ne_float:", v613_none_ne_float)
+print("v614_none_and_float:", v614_none_and_float)
+print("v615_none_or_float:", v615_none_or_float)
+print("v616_none_is_float:", v616_none_is_float)
+print("v617_none_isnot_float:", v617_none_isnot_float)
+print("v618_none_eq_bool:", v618_none_eq_bool)
+print("v619_none_ne_bool:", v619_none_ne_bool)
+print("v620_none_and_bool:", v620_none_and_bool)
+print("v621_none_or_bool:", v621_none_or_bool)
+print("v622_none_is_bool:", v622_none_is_bool)
+print("v623_none_isnot_bool:", v623_none_isnot_bool)
+print("v624_none_eq_str:", v624_none_eq_str)
+print("v625_none_ne_str:", v625_none_ne_str)
+print("v626_none_and_str:", v626_none_and_str)
+print("v627_none_or_str:", v627_none_or_str)
+print("v628_none_is_str:", v628_none_is_str)
+print("v629_none_isnot_str:", v629_none_isnot_str)
+print("v630_none_eq_bytes:", v630_none_eq_bytes)
+print("v631_none_ne_bytes:", v631_none_ne_bytes)
+print("v632_none_and_bytes:", v632_none_and_bytes)
+print("v633_none_or_bytes:", v633_none_or_bytes)
+print("v634_none_is_bytes:", v634_none_is_bytes)
+print("v635_none_isnot_bytes:", v635_none_isnot_bytes)
+print("v636_none_eq_list:", v636_none_eq_list)
+print("v637_none_ne_list:", v637_none_ne_list)
+print("v638_none_and_list:", v638_none_and_list)
+print("v639_none_or_list:", v639_none_or_list)
+print("v640_none_is_list:", v640_none_is_list)
+print("v641_none_isnot_list:", v641_none_isnot_list)
+print("v642_none_eq_dict:", v642_none_eq_dict)
+print("v643_none_ne_dict:", v643_none_ne_dict)
+print("v644_none_and_dict:", v644_none_and_dict)
+print("v645_none_or_dict:", v645_none_or_dict)
+print("v646_none_is_dict:", v646_none_is_dict)
+print("v647_none_isnot_dict:", v647_none_isnot_dict)
+print("v648_none_eq_set:", v648_none_eq_set)
+print("v649_none_ne_set:", v649_none_ne_set)
+print("v650_none_and_set:", v650_none_and_set)
+print("v651_none_or_set:", v651_none_or_set)
+print("v652_none_is_set:", v652_none_is_set)
+print("v653_none_isnot_set:", v653_none_isnot_set)
+print("v654_none_eq_none:", v654_none_eq_none)
+print("v655_none_ne_none:", v655_none_ne_none)
+print("v656_none_and_none:", v656_none_and_none)
+print("v657_none_or_none:", v657_none_or_none)
+print("v658_none_is_none:", v658_none_is_none)
+print("v659_none_isnot_none:", v659_none_isnot_none)
 print("u0_int_neg:", u0_int_neg)
 print("u1_int_pos:", u1_int_pos)
 print("u2_int_bitnot:", u2_int_bitnot)

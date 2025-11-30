@@ -685,7 +685,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is' between Int and {:?}", rhs.ty)),
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::IsNot => match &rhs.ty {
             PyType::Int => Ok(PyValue::bool(
@@ -699,7 +700,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is not' between Int and {:?}", rhs.ty)),
+            // Different types are never identical, so is not returns true
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
 
         // Logical and/or - same type returns same type, different types return bool

@@ -184,6 +184,34 @@ pub fn binary_op<'a, 'ctx>(
             }
         }
 
+        // Identity operators - dict is dict compares pointer identity
+        BinaryOp::Is => match &rhs.ty {
+            PyType::Dict(_, _) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::EQ, lhs_ptr, rhs_ptr, "is")
+                        .unwrap()
+                        .into(),
+                ))
+            }
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+        },
+        BinaryOp::IsNot => match &rhs.ty {
+            PyType::Dict(_, _) => {
+                let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                Ok(PyValue::bool(
+                    cg.builder
+                        .build_int_compare(IntPredicate::NE, lhs_ptr, rhs_ptr, "isnot")
+                        .unwrap()
+                        .into(),
+                ))
+            }
+            // Different types are never identical, so is not returns true
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+        },
+
         _ => Err(format!("Operator {:?} not supported on dict", op)),
     }
 }

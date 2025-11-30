@@ -184,30 +184,36 @@ pub fn binary_op<'a, 'ctx>(
                     .into(),
             ))
         }
-        BinaryOp::Is => {
-            // If types are incompatible, return False directly (Python semantics)
-            match coerce_rhs(rhs) {
-                Ok(rhs_float) => Ok(PyValue::bool(
-                    cg.builder
-                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "is")
-                        .unwrap()
-                        .into(),
-                )),
-                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
-            }
-        }
-        BinaryOp::IsNot => {
-            // If types are incompatible, return True directly (Python semantics)
-            match coerce_rhs(rhs) {
-                Ok(rhs_float) => Ok(PyValue::bool(
-                    cg.builder
-                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "isnot")
-                        .unwrap()
-                        .into(),
-                )),
-                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
-            }
-        }
+        BinaryOp::Is => match &rhs.ty {
+            PyType::Float => Ok(PyValue::bool(
+                cg.builder
+                    .build_float_compare(
+                        FloatPredicate::OEQ,
+                        lhs_float,
+                        rhs.runtime_value().into_float_value(),
+                        "is",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+        },
+        BinaryOp::IsNot => match &rhs.ty {
+            PyType::Float => Ok(PyValue::bool(
+                cg.builder
+                    .build_float_compare(
+                        FloatPredicate::ONE,
+                        lhs_float,
+                        rhs.runtime_value().into_float_value(),
+                        "isnot",
+                    )
+                    .unwrap()
+                    .into(),
+            )),
+            // Different types are never identical, so is not returns true
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+        },
 
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {

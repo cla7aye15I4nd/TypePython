@@ -55,6 +55,9 @@ BINARY_OPS = {
     # Logical and/or - TypePython returns bool, wrap with bool() for Python compat
     "and": ("and", "use 'and' with", lambda a, b: a and b),
     "or": ("or", "use 'or' with", lambda a, b: a or b),
+    # Identity operators
+    "is": ("is", "identity check with", lambda a, b: a is b),
+    "isnot": ("is not", "identity check with", lambda a, b: a is not b),
 }
 
 # Unary operators
@@ -67,6 +70,14 @@ UNARY_OPS = {
 # Operations that TypePython doesn't support (even if Python allows them)
 # Format: set of (left_type, op, right_type) tuples
 UNSUPPORTED_OPS = {
+    ("str", "mod", "bool"),
+    ("str", "mod", "int"),
+    ("str", "mod", "float"),
+    ("str", "mod", "list"),
+    ("str", "mod", "dict"),
+    ("str", "mod", "set"),
+    ("str", "mod", "none"),
+    ("str", "mod", "str"),
     # bytes % formatting is not supported
     ("bytes", "mod", "bytes"),
     ("bytes", "mod", "list"),
@@ -214,7 +225,7 @@ def get_type_annotation(type_key: str) -> str:
 
 def get_result_type(left_type: str, right_type: str, op: str) -> str:
     """Determine the expected result type for a binary operation."""
-    if op in ("eq", "ne", "lt", "le", "gt", "ge", "in", "notin"):
+    if op in ("eq", "ne", "lt", "le", "gt", "ge", "in", "notin", "is", "isnot"):
         return "bool"
     # and/or: same type returns same type, different types return bool
     if op in ("and", "or"):
@@ -341,6 +352,10 @@ def generate_valid_line(left_type: str, right_type: str, op: str, idx: int) -> s
         return f"{var_name}: bool = {left_example} in {right_example}"
     elif op == "notin":
         return f"{var_name}: bool = {left_example} not in {right_example}"
+    elif op == "is":
+        return f"{var_name}: bool = {left_example} is {right_example}"
+    elif op == "isnot":
+        return f"{var_name}: bool = {left_example} is not {right_example}"
     elif op in ("and", "or"):
         # TypePython: same type returns same type, different types return bool
         # Wrap with bool() only for different types (for Python compat)

@@ -60,7 +60,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is' between None and {:?}", rhs.ty)),
+            // Different types are never identical
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::IsNot => match &rhs.ty {
             PyType::None => Ok(PyValue::bool(
@@ -74,7 +75,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap()
                     .into(),
             )),
-            _ => Err(format!("Cannot use 'is not' between None and {:?}", rhs.ty)),
+            // Different types are never identical, so is not returns true
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         // Membership: None in list/dict/set - always False (can't have None in int collections)
         BinaryOp::In => match &rhs.ty {
