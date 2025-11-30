@@ -1816,3 +1816,73 @@ sds str_format_set(const char* fmt, PySetStr* set) {
     sdsfree(set_repr);
     return result;
 }
+
+// ============================================================================
+// String Iteration Support
+// ============================================================================
+
+// Get character at index as a new single-character string
+// Returns NULL if index out of bounds
+sds str_char_at(const char* s, int64_t index) {
+    if (s == NULL) return NULL;
+    size_t len = strlen(s);
+    if (index < 0) index = len + index;
+    if (index < 0 || (size_t)index >= len) return NULL;
+    return sdsnewlen(s + index, 1);
+}
+
+// ============================================================================
+// any() and all() builtins for strings
+// ============================================================================
+
+// any(str) - returns true if any character is non-zero (always true for non-empty strings)
+// In Python, any character has a truthy value
+int64_t str_any(const char* s) {
+    if (s == NULL || s[0] == '\0') return 0;
+    // Any non-empty string has truthy characters
+    return 1;
+}
+
+// all(str) - returns true if all characters are truthy (always true for non-empty strings)
+// Empty string returns True for all()
+int64_t str_all(const char* s) {
+    // Empty string or NULL returns True for all()
+    return 1;
+}
+
+// ============================================================================
+// repr() builtin - returns string representation of an object
+// ============================================================================
+
+// repr(int) - returns string like "42"
+sds repr_int(int64_t value) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%lld", (long long)value);
+    return sdsnew(buf);
+}
+
+// repr(float) - returns string like "3.14"
+sds repr_float(double value) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", value);
+    return sdsnew(buf);
+}
+
+// repr(bool) - returns "True" or "False"
+sds repr_bool(int64_t value) {
+    return sdsnew(value ? "True" : "False");
+}
+
+// repr(str) - returns string with quotes like "'hello'"
+sds repr_str(const char* s) {
+    if (s == NULL) return sdsnew("''");
+    sds result = sdsnew("'");
+    result = sdscat(result, s);
+    result = sdscat(result, "'");
+    return result;
+}
+
+// repr(None) - returns "None"
+sds repr_none(void) {
+    return sdsnew("None");
+}

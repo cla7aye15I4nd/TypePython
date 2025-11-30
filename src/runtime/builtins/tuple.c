@@ -228,3 +228,152 @@ PyTuple* tuple_repeat(PyTuple* tuple, int64_t n) {
     }
     return result;
 }
+
+// ============================================================================
+// divmod - returns a PyTuple with (quotient, remainder)
+// ============================================================================
+
+#include <math.h>
+
+PyTuple* divmod_int(int64_t a, int64_t b) {
+    PyTuple* result = tuple_new(2);
+    if (result == NULL) return NULL;
+
+    // Python-style floor division and modulo
+    int64_t q = a / b;
+    int64_t r = a % b;
+
+    // Adjust for Python semantics (floor division)
+    if ((r != 0) && ((a < 0) != (b < 0))) {
+        q -= 1;
+        r += b;
+    }
+
+    result->data[0] = q;
+    result->data[1] = r;
+
+    return result;
+}
+
+// divmod for floats - returns a PyTuple with (quotient, remainder) stored as doubles
+PyTuple* divmod_float(double a, double b) {
+    PyTuple* result = tuple_new(2);
+    if (result == NULL) return NULL;
+
+    // Python-style floor division and modulo for floats
+    double q = floor(a / b);
+    double r = a - q * b;
+
+    // Store doubles in the int64_t array (type punning)
+    double* data = (double*)result->data;
+    data[0] = q;
+    data[1] = r;
+
+    return result;
+}
+
+// ============================================================================
+// tuple() constructor from iterables
+// ============================================================================
+
+// Forward declarations for list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int64_t* data;
+} PyListTuple;
+
+// Forward declarations for string list
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    char** data;
+} PyStrListTuple;
+
+// Forward declaration for set
+#define SET_OCCUPIED_TUPLE 1
+typedef struct {
+    int64_t key;
+    uint8_t state;
+} SetEntryTuple;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    SetEntryTuple* entries;
+} PySetTuple;
+
+// Forward declaration for dict
+#define DICT_OCCUPIED_TUPLE 1
+typedef struct {
+    int64_t key;
+    int64_t value;
+    uint8_t state;
+} DictEntryTuple;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    DictEntryTuple* entries;
+} PyDictTuple;
+
+// Create tuple from string (character ordinals)
+PyTuple* tuple_from_str(const char* s) {
+    if (s == NULL) return tuple_new(0);
+    size_t len = strlen(s);
+    PyTuple* result = tuple_new(len);
+    if (result == NULL) return NULL;
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    return result;
+}
+
+// Create tuple from bytes (byte values)
+PyTuple* tuple_from_bytes(const char* s) {
+    if (s == NULL) return tuple_new(0);
+    size_t len = strlen(s);
+    PyTuple* result = tuple_new(len);
+    if (result == NULL) return NULL;
+    for (size_t i = 0; i < len; i++) {
+        result->data[i] = (int64_t)(unsigned char)s[i];
+    }
+    return result;
+}
+
+// Create tuple from list of ints
+PyTuple* tuple_from_list(PyListTuple* list) {
+    if (list == NULL) return tuple_new(0);
+    PyTuple* result = tuple_new(list->len);
+    if (result == NULL) return NULL;
+    memcpy(result->data, list->data, list->len * sizeof(int64_t));
+    return result;
+}
+
+// Create tuple from set of ints
+PyTuple* tuple_from_set(PySetTuple* set) {
+    if (set == NULL || set->len == 0) return tuple_new(0);
+    PyTuple* result = tuple_new(set->len);
+    if (result == NULL) return NULL;
+    int64_t j = 0;
+    for (int64_t i = 0; i < set->capacity && j < set->len; i++) {
+        if (set->entries[i].state == SET_OCCUPIED_TUPLE) {
+            result->data[j++] = set->entries[i].key;
+        }
+    }
+    return result;
+}
+
+// Create tuple from dict keys (int keys)
+PyTuple* tuple_from_dict(PyDictTuple* dict) {
+    if (dict == NULL || dict->len == 0) return tuple_new(0);
+    PyTuple* result = tuple_new(dict->len);
+    if (result == NULL) return NULL;
+    int64_t j = 0;
+    for (int64_t i = 0; i < dict->capacity && j < dict->len; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED_TUPLE) {
+            result->data[j++] = dict->entries[i].key;
+        }
+    }
+    return result;
+}

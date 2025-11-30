@@ -10,6 +10,7 @@ pub enum Type {
     Str,
     Bytes, // C-style null-terminated strings
     None,
+    Range,                      // range type
     List(Box<Type>),            // List[int], etc.
     Dict(Box<Type>, Box<Type>), // Dict[str, int], etc.
     Set(Box<Type>),             // Set[int], etc.
@@ -67,6 +68,17 @@ pub struct Parameter {
     pub param_type: Type,
 }
 
+/// Exception handler for try/except blocks
+#[derive(Debug, Clone)]
+pub struct ExceptHandler {
+    /// Exception types to catch (empty = bare except)
+    pub exception_types: Vec<String>,
+    /// Binding name for "as e" syntax
+    pub name: Option<String>,
+    /// Handler body
+    pub body: Vec<Statement>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Statement {
     VarDecl {
@@ -94,9 +106,10 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     For {
-        target: String,
+        targets: Vec<String>, // Single var: ["x"], tuple unpacking: ["x", "y"]
         iter: Expression,
         body: Vec<Statement>,
+        else_block: Option<Vec<Statement>>, // Optional else clause
     },
     Return(Option<Expression>),
     Break,
@@ -104,6 +117,31 @@ pub enum Statement {
     Pass,
     Delete(Expression),
     Expr(Expression),
+    /// Try-except-finally statement
+    Try {
+        body: Vec<Statement>,
+        handlers: Vec<ExceptHandler>,
+        else_block: Option<Vec<Statement>>,
+        finally_block: Option<Vec<Statement>>,
+    },
+    /// Raise statement
+    Raise {
+        exception: Option<Expression>,
+        cause: Option<Expression>, // for "raise X from Y"
+    },
+    /// Assert statement
+    Assert {
+        test: Expression,
+        msg: Option<Expression>,
+    },
+    /// Global statement - declares variables as global
+    Global {
+        names: Vec<String>,
+    },
+    /// Nonlocal statement - declares variables as nonlocal
+    Nonlocal {
+        names: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -160,6 +198,11 @@ pub enum Expression {
         start: Option<Box<Expression>>,
         stop: Option<Box<Expression>>,
         step: Option<Box<Expression>>,
+    },
+    /// Yield expression for generators
+    Yield {
+        value: Option<Box<Expression>>,
+        is_from: bool, // yield from vs plain yield
     },
 }
 

@@ -1,5 +1,6 @@
 pub mod builtin;
 pub mod builtins;
+pub mod generator;
 pub mod types;
 mod visitor;
 
@@ -10,9 +11,9 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{AnyValue, BasicValueEnum, FunctionValue, PointerValue};
 use std::collections::{HashMap, HashSet};
-use types::{CgCtx, PyType, PyValue};
+use types::{CgCtx, EnumerateSource, PyType, PyValue};
 
 /// Context for tracking loop control flow (break/continue)
 pub(crate) struct LoopContext<'ctx> {
@@ -44,6 +45,14 @@ pub struct CodeGen<'ctx> {
     pub used_builtin_modules: HashSet<String>,
     /// Registered classes: name -> ClassInfo
     pub(crate) classes: HashMap<String, ClassInfo>,
+    /// Generator functions: mangled_name -> yield type
+    pub(crate) generator_functions: HashSet<String>,
+    /// Variables declared as global in current function scope
+    pub(crate) global_vars: HashSet<String>,
+    /// Variables declared as nonlocal in current function scope
+    pub(crate) nonlocal_vars: HashSet<String>,
+    /// Module-level variables (LLVM global pointers)
+    pub(crate) module_vars: HashMap<String, (PointerValue<'ctx>, PyType)>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -84,6 +93,10 @@ impl<'ctx> CodeGen<'ctx> {
             loop_stack: Vec::new(),
             used_builtin_modules: HashSet::new(),
             classes: HashMap::new(),
+            generator_functions: HashSet::new(),
+            global_vars: HashSet::new(),
+            nonlocal_vars: HashSet::new(),
+            module_vars: HashMap::new(),
         }
     }
 
@@ -95,7 +108,7 @@ impl<'ctx> CodeGen<'ctx> {
     /// Mangle function name with module name
     /// Format: {module_name}_{function_name}
     /// Replaces special characters in module name (., <, >) with underscores
-    fn mangle_function_name(&self, module_name: &str, function_name: &str) -> String {
+    pub(crate) fn mangle_function_name(&self, module_name: &str, function_name: &str) -> String {
         let clean_module = module_name
             .replace(".", "_")
             .replace("<", "")
@@ -187,7 +200,89 @@ impl<'ctx> CodeGen<'ctx> {
                     .map(|v| (*v).into())
                     .collect();
                 for arg in args {
-                    arg_values.push(self.evaluate_expression(arg)?.value().into());
+                    let arg_val = self.evaluate_expression(arg)?;
+                    // For bool_list_append and bool_set_add, convert i1 to i8 for C ABI compatibility
+                    let converted = if (function_info.mangled_name.contains("bool_list_append")
+                        || function_info.mangled_name.contains("bool_set_add")
+                        || function_info.mangled_name.contains("bool_set_remove")
+                        || function_info.mangled_name.contains("bool_set_discard"))
+                        && matches!(arg_val.ty(), PyType::Bool)
+                    {
+                        self.cg
+                            .builder
+                            .build_int_z_extend(
+                                arg_val.value().into_int_value(),
+                                self.cg.ctx.i8_type(),
+                                "bool_to_i8",
+                            )
+                            .unwrap()
+                            .into()
+                    } else if (function_info.mangled_name.contains("float_list_append")
+                        || function_info.mangled_name.contains("float_set_add")
+                        || function_info.mangled_name.contains("float_set_remove")
+                        || function_info.mangled_name.contains("float_set_discard"))
+                        && matches!(arg_val.ty(), PyType::Int)
+                    {
+                        // Convert int to float for float_* methods
+                        self.cg
+                            .builder
+                            .build_signed_int_to_float(
+                                arg_val.value().into_int_value(),
+                                self.cg.ctx.f64_type(),
+                                "int_to_float",
+                            )
+                            .unwrap()
+                            .into()
+                    } else {
+                        arg_val.value().into()
+                    };
+                    arg_values.push(converted);
+                }
+
+                // Add default arguments for certain methods when not provided
+                // list.pop() without args should pass -1 to pop from end
+                if function_info.mangled_name.contains("list_pop") && args.is_empty() {
+                    arg_values.push(self.cg.ctx.i64_type().const_int(-1i64 as u64, true).into());
+                }
+                // set.pop() without args doesn't need extra args (set_pop takes only set ptr)
+                // dict.pop() requires a key, so no default needed
+
+                // bytes.strip/lstrip/rstrip() without args should pass NULL for chars
+                if (function_info.mangled_name.contains("bytes_strip")
+                    || function_info.mangled_name.contains("bytes_lstrip")
+                    || function_info.mangled_name.contains("bytes_rstrip"))
+                    && args.is_empty()
+                {
+                    let null_ptr = self
+                        .cg
+                        .ctx
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null();
+                    arg_values.push(null_ptr.into());
+                }
+
+                // bytes.center/ljust/rjust() without fillchar should pass NULL
+                if (function_info.mangled_name.contains("bytes_center")
+                    || function_info.mangled_name.contains("bytes_ljust")
+                    || function_info.mangled_name.contains("bytes_rjust"))
+                    && args.len() == 1
+                {
+                    let null_ptr = self
+                        .cg
+                        .ctx
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null();
+                    arg_values.push(null_ptr.into());
+                }
+
+                // str.split() without separator should pass NULL to split on whitespace
+                if function_info.mangled_name.contains("str_split") && args.is_empty() {
+                    let null_ptr = self
+                        .cg
+                        .ctx
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null();
+                    arg_values.push(null_ptr.into());
                 }
 
                 let call_site = self
@@ -204,8 +299,14 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Bool => Ok(self.extract_bool_call_result(call_site)),
                     PyType::Bytes => Ok(self.extract_bytes_call_result(call_site)),
                     PyType::Str => Ok(self.extract_str_call_result(call_site)),
-                    PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
-                        // Container types return pointers
+                    PyType::List(_)
+                    | PyType::Dict(_, _)
+                    | PyType::Set(_)
+                    | PyType::Generator(_)
+                    | PyType::DictKeysIter(_)
+                    | PyType::DictValuesIter(_)
+                    | PyType::DictItemsIter(_, _) => {
+                        // Container types, generators, and iterators return pointers
                         let ptr_val = self.extract_ptr_call_result(call_site);
                         Ok(PyValue::new(ptr_val.value(), return_type.clone(), None))
                     }
@@ -354,9 +455,15 @@ impl<'ctx> CodeGen<'ctx> {
                             // list[index] returns the element at that index
                             self.list_getitem(obj.value(), idx.value(), elem_type.as_ref())
                         }
-                        PyType::Dict(_, val_type) => {
+                        PyType::Dict(key_type, val_type) => {
                             // dict[key] returns the value at that key
-                            self.dict_getitem(obj.value(), idx.value(), val_type.as_ref())
+                            // Select the appropriate getitem function based on key type
+                            self.dict_getitem_typed(
+                                obj.value(),
+                                idx.value(),
+                                key_type.as_ref(),
+                                val_type.as_ref(),
+                            )
                         }
                         PyType::Set(_) => {
                             Err("Set does not support subscript operation".to_string())
@@ -368,6 +475,14 @@ impl<'ctx> CodeGen<'ctx> {
                             let elem_type = elem_types.first().unwrap_or(&PyType::Int);
                             self.tuple_getitem(obj.value(), idx.value(), elem_type)
                         }
+                        PyType::Str => {
+                            // str[index] returns a single-character string
+                            self.str_getitem(obj.value(), idx.value())
+                        }
+                        PyType::Range => {
+                            // range[index] returns the element at that index
+                            self.range_getitem(obj.value(), idx.value())
+                        }
                         _ => Err(format!(
                             "Subscript operation not supported for type {:?}",
                             obj.ty()
@@ -377,6 +492,18 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Expression::Slice { .. } => {
                 Err("Slice expression must be used inside subscript".to_string())
+            }
+            Expression::Yield { value, is_from } => {
+                // For now, yield is not fully supported
+                // Full implementation requires generator transformation
+                let _ = is_from;
+                if let Some(val_expr) = value {
+                    let val = self.evaluate_expression(val_expr)?;
+                    // TODO: Implement generator yield
+                    Ok(val)
+                } else {
+                    Ok(PyValue::none(self.cg.ctx.i32_type().const_zero()))
+                }
             }
         }
     }
@@ -394,19 +521,35 @@ impl<'ctx> CodeGen<'ctx> {
             })
             .collect();
 
-        let fn_type = match func.return_type {
-            Type::None => self.cg.ctx.void_type().fn_type(&param_types, false),
-            _ => {
-                let return_py_type =
-                    PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
-                let return_type = return_py_type.to_llvm(self.cg.ctx);
-                return_type.fn_type(&param_types, false)
+        // Check if this is a generator function
+        let is_gen = generator::is_generator_function(func);
+
+        let fn_type = if is_gen {
+            // Generator functions return a pointer to the generator object
+            self.cg
+                .ctx
+                .ptr_type(inkwell::AddressSpace::default())
+                .fn_type(&param_types, false)
+        } else {
+            match func.return_type {
+                Type::None => self.cg.ctx.void_type().fn_type(&param_types, false),
+                _ => {
+                    let return_py_type =
+                        PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
+                    let return_type = return_py_type.to_llvm(self.cg.ctx);
+                    return_type.fn_type(&param_types, false)
+                }
             }
         };
 
         // Mangle function name with current module name
         let mangled_name = self.mangle_function_name(&self.module_name, &func.name);
         let function = self.cg.module.add_function(&mangled_name, fn_type, None);
+
+        // Register generator functions
+        if is_gen {
+            self.generator_functions.insert(mangled_name.clone());
+        }
 
         // Set parameter names
         for (i, param) in func.params.iter().enumerate() {
@@ -423,6 +566,9 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         statements: &[Statement],
     ) -> Result<(), String> {
+        // Note: module-level globals are created in visit_program_impl before functions
+        // are compiled, so they're available for the global keyword
+
         let i32_type = self.cg.ctx.i32_type();
         let fn_type = i32_type.fn_type(&[], false);
         let function = self.cg.module.add_function("main", fn_type, None);
@@ -585,27 +731,66 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub(crate) fn generate_for_statement(
         &mut self,
-        target: &str,
+        targets: &[String],
         iter_expr: &Expression,
         body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         // Evaluate the iterable expression
         let iter_val = self.evaluate_expression(iter_expr)?;
 
+        // Handle tuple unpacking: for x, y in ...
+        if targets.len() > 1 {
+            return self.generate_tuple_unpacking_for_loop(targets, iter_val, body, else_block);
+        }
+
+        // Single target case
+        let target = targets.first().map(|s| s.as_str()).unwrap_or("_");
+
         match iter_val.ty() {
             PyType::Range => {
                 // For range iteration, we use the range_iter functions
-                self.generate_range_for_loop(target, iter_val, body)
+                self.generate_range_for_loop(target, iter_val, body, else_block)
             }
             PyType::List(elem_type) => {
                 // For list iteration, iterate using index
-                self.generate_list_for_loop(target, iter_val, &elem_type, body)
+                self.generate_list_for_loop(target, iter_val, &elem_type, body, else_block)
             }
             PyType::Tuple(elem_types) => {
                 // For tuple iteration, iterate using index
                 // Use the first element type (or Int for empty tuples)
                 let elem_type = elem_types.first().cloned().unwrap_or(PyType::Int);
-                self.generate_tuple_for_loop(target, iter_val, &elem_type, body)
+                self.generate_tuple_for_loop(target, iter_val, &elem_type, body, else_block)
+            }
+            PyType::Generator(elem_type) => {
+                // For generator iteration, use generator_next
+                self.generate_generator_for_loop(target, iter_val, &elem_type, body, else_block)
+            }
+            PyType::Str => {
+                // For string iteration, iterate over characters
+                self.generate_str_for_loop(target, iter_val, body, else_block)
+            }
+            PyType::Bytes => {
+                // For bytes iteration, iterate over byte values
+                self.generate_bytes_for_loop(target, iter_val, body, else_block)
+            }
+            PyType::Set(elem_type) => {
+                // For set iteration, use set iterator
+                self.generate_set_for_loop(target, iter_val, &elem_type, body, else_block)
+            }
+            PyType::Dict(key_type, _value_type) => {
+                // For dict iteration, iterate over keys
+                self.generate_dict_for_loop(target, iter_val, &key_type, body, else_block)
+            }
+            PyType::DictKeysIter(key_type) => {
+                // For dict.keys() iteration
+                self.generate_dict_keys_iter_for_loop(target, iter_val, &key_type, body, else_block)
+            }
+            PyType::DictValuesIter(val_type) => {
+                // For dict.values() iteration
+                self.generate_dict_values_iter_for_loop(
+                    target, iter_val, &val_type, body, else_block,
+                )
             }
             _ => Err(format!(
                 "for loop iteration not supported for type {:?}",
@@ -619,6 +804,7 @@ impl<'ctx> CodeGen<'ctx> {
         target: &str,
         range_val: PyValue<'ctx>,
         body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         use inkwell::values::AnyValue;
 
@@ -641,6 +827,11 @@ impl<'ctx> CodeGen<'ctx> {
         // Create basic blocks
         let cond_bb = self.cg.ctx.append_basic_block(function, "for_cond");
         let body_bb = self.cg.ctx.append_basic_block(function, "for_body");
+        let else_bb = if else_block.is_some() {
+            Some(self.cg.ctx.append_basic_block(function, "for_else"))
+        } else {
+            None
+        };
         let after_bb = self.cg.ctx.append_basic_block(function, "for_after");
 
         // Jump to condition check
@@ -668,9 +859,11 @@ impl<'ctx> CodeGen<'ctx> {
             .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
             .unwrap();
 
+        // Branch to body or else/after
+        let exit_target = else_bb.unwrap_or(after_bb);
         self.cg
             .builder
-            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .build_conditional_branch(cond_bool, body_bb, exit_target)
             .unwrap();
 
         // Body block
@@ -692,6 +885,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.variables.insert(target.to_string(), loop_var);
 
         // Push loop context for break/continue support
+        // break goes to after_bb (skipping else), continue goes to cond_bb
         self.loop_stack.push(LoopContext {
             continue_block: cond_bb,
             break_block: after_bb,
@@ -710,13 +904,38 @@ impl<'ctx> CodeGen<'ctx> {
             self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
         }
 
-        // After block - free iterator
+        // Else block (if present) - executes when loop completes normally
+        if let Some(else_bb) = else_bb {
+            self.cg.builder.position_at_end(else_bb);
+            // Free iterator before else block
+            let range_iter_free_fn = self.get_or_declare_c_builtin("range_iter_free");
+            self.cg
+                .builder
+                .build_call(range_iter_free_fn, &[iter_ptr.into()], "")
+                .unwrap();
+            // Generate else statements
+            if let Some(else_stmts) = else_block {
+                for stmt in else_stmts {
+                    self.visit_statement(stmt)?;
+                }
+            }
+            if !self.is_block_terminated() {
+                self.cg
+                    .builder
+                    .build_unconditional_branch(after_bb)
+                    .unwrap();
+            }
+        }
+
+        // After block - free iterator (only if no else block, otherwise already freed)
         self.cg.builder.position_at_end(after_bb);
-        let range_iter_free_fn = self.get_or_declare_c_builtin("range_iter_free");
-        self.cg
-            .builder
-            .build_call(range_iter_free_fn, &[iter_ptr.into()], "")
-            .unwrap();
+        if else_block.is_none() {
+            let range_iter_free_fn = self.get_or_declare_c_builtin("range_iter_free");
+            self.cg
+                .builder
+                .build_call(range_iter_free_fn, &[iter_ptr.into()], "")
+                .unwrap();
+        }
 
         Ok(())
     }
@@ -727,6 +946,7 @@ impl<'ctx> CodeGen<'ctx> {
         list_val: PyValue<'ctx>,
         elem_type: &PyType,
         body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         use inkwell::values::AnyValue;
 
@@ -759,6 +979,429 @@ impl<'ctx> CodeGen<'ctx> {
         let incr_bb = self.cg.ctx.append_basic_block(function, "for_incr");
         let after_bb = self.cg.ctx.append_basic_block(function, "for_after");
 
+        // Create else block if needed
+        let else_bb = if else_block.is_some() {
+            Some(self.cg.ctx.append_basic_block(function, "for_else"))
+        } else {
+            None
+        };
+
+        // The block to branch to when the loop condition is false (normal exit)
+        let normal_exit_bb = else_bb.unwrap_or(after_bb);
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - check index < len
+        self.cg.builder.position_at_end(cond_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::SLT, current_index, len, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, normal_exit_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Get element at current index
+        let elem_val = self.list_getitem(list_val.value(), current_index.into(), elem_type)?;
+        self.cg
+            .builder
+            .build_store(target_alloca, elem_val.value())
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(elem_val.value(), elem_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        // break goes to after_bb (skipping else), continue goes to incr_bb
+        self.loop_stack.push(LoopContext {
+            continue_block: incr_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump to increment
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(incr_bb).unwrap();
+        }
+
+        // Increment block
+        self.cg.builder.position_at_end(incr_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let next_index = self
+            .cg
+            .builder
+            .build_int_add(current_index, i64_type.const_int(1, false), "next_idx")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, next_index)
+            .unwrap();
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Generate else block if present
+        if let (Some(else_bb), Some(else_stmts)) = (else_bb, else_block) {
+            self.cg.builder.position_at_end(else_bb);
+            for stmt in else_stmts {
+                self.visit_statement(stmt)?;
+            }
+            if !self.is_block_terminated() {
+                self.cg
+                    .builder
+                    .build_unconditional_branch(after_bb)
+                    .unwrap();
+            }
+        }
+
+        // After block
+        self.cg.builder.position_at_end(after_bb);
+
+        Ok(())
+    }
+
+    fn generate_tuple_for_loop(
+        &mut self,
+        target: &str,
+        tuple_val: PyValue<'ctx>,
+        elem_type: &PyType,
+        body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+
+        // Get tuple length
+        let tuple_len_fn = self.get_or_declare_c_builtin("tuple_len");
+        let len_call = self
+            .cg
+            .builder
+            .build_call(tuple_len_fn, &[tuple_val.value().into()], "tuple_len")
+            .unwrap();
+        let len = len_call.as_any_value_enum().into_int_value();
+
+        // Allocate index counter
+        let index_alloca = self.cg.builder.build_alloca(i64_type, "for_index").unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, i64_type.const_zero())
+            .unwrap();
+
+        // Allocate loop variable
+        let elem_llvm_type = elem_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "for_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "for_body");
+        let incr_bb = self.cg.ctx.append_basic_block(function, "for_incr");
+        let after_bb = self.cg.ctx.append_basic_block(function, "for_after");
+
+        // Create else block if needed
+        let else_bb = if else_block.is_some() {
+            Some(self.cg.ctx.append_basic_block(function, "for_else"))
+        } else {
+            None
+        };
+
+        // The block to branch to when the loop condition is false (normal exit)
+        let normal_exit_bb = else_bb.unwrap_or(after_bb);
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - check index < len
+        self.cg.builder.position_at_end(cond_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::SLT, current_index, len, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, normal_exit_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Get element at current index
+        let elem_val = self.tuple_getitem(tuple_val.value(), current_index.into(), elem_type)?;
+        self.cg
+            .builder
+            .build_store(target_alloca, elem_val.value())
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(elem_val.value(), elem_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        // break goes to after_bb (skipping else), continue goes to incr_bb
+        self.loop_stack.push(LoopContext {
+            continue_block: incr_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump to increment
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(incr_bb).unwrap();
+        }
+
+        // Increment block
+        self.cg.builder.position_at_end(incr_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let next_index = self
+            .cg
+            .builder
+            .build_int_add(current_index, i64_type.const_int(1, false), "next_idx")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, next_index)
+            .unwrap();
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Generate else block if present
+        if let (Some(else_bb), Some(else_stmts)) = (else_bb, else_block) {
+            self.cg.builder.position_at_end(else_bb);
+            for stmt in else_stmts {
+                self.visit_statement(stmt)?;
+            }
+            if !self.is_block_terminated() {
+                self.cg
+                    .builder
+                    .build_unconditional_branch(after_bb)
+                    .unwrap();
+            }
+        }
+
+        // After block
+        self.cg.builder.position_at_end(after_bb);
+
+        Ok(())
+    }
+
+    fn generate_generator_for_loop(
+        &mut self,
+        target: &str,
+        gen_val: PyValue<'ctx>,
+        elem_type: &PyType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Get the generator pointer
+        let gen_ptr = gen_val.value().into_pointer_value();
+
+        // Allocate space for the loop variable and the output value
+        let elem_llvm_type = elem_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+        let out_value_alloca = self.cg.builder.build_alloca(i64_type, "gen_out").unwrap();
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "gen_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "gen_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "gen_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call generator_next
+        self.cg.builder.position_at_end(cond_bb);
+        let generator_next_fn = self.get_or_declare_generator_runtime_fn("generator_next");
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                generator_next_fn,
+                &[gen_ptr.into(), out_value_alloca.into()],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "gen_cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Load the yielded value
+        let yielded_value = self
+            .cg
+            .builder
+            .build_load(i64_type, out_value_alloca, "yielded")
+            .unwrap();
+
+        // Convert to element type if needed (for now, just use i64)
+        self.cg
+            .builder
+            .build_store(target_alloca, yielded_value)
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(yielded_value, elem_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block
+        self.cg.builder.position_at_end(after_bb);
+
+        // Suppress warning
+        let _ = ptr_type;
+
+        Ok(())
+    }
+
+    /// Get or declare a generator runtime function
+    fn get_or_declare_generator_runtime_fn(&mut self, name: &str) -> FunctionValue<'ctx> {
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+        let i64_type = self.cg.ctx.i64_type();
+        let void_type = self.cg.ctx.void_type();
+
+        // Use the mangled name with __builtin_tpy_ prefix
+        let mangled_name = format!("__builtin_tpy_{}", name);
+
+        if let Some(f) = self.cg.module.get_function(&mangled_name) {
+            return f;
+        }
+
+        // Mark generator module as used
+        self.used_builtin_modules.insert("generator".to_string());
+
+        let fn_type = match name {
+            "generator_new" => ptr_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
+            "generator_free" => void_type.fn_type(&[ptr_type.into()], false),
+            "generator_next" => i64_type.fn_type(&[ptr_type.into(), ptr_type.into()], false),
+            "generator_send" => {
+                i64_type.fn_type(&[ptr_type.into(), i64_type.into(), ptr_type.into()], false)
+            }
+            "generator_close" => void_type.fn_type(&[ptr_type.into()], false),
+            _ => panic!("Unknown generator function: {}", name),
+        };
+
+        self.cg.module.add_function(&mangled_name, fn_type, None)
+    }
+
+    /// Generate for loop over string (iterates over characters)
+    fn generate_str_for_loop(
+        &mut self,
+        target: &str,
+        str_val: PyValue<'ctx>,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Get string length
+        let str_len_fn = self.get_or_declare_c_builtin("str_len");
+        let len_call = self
+            .cg
+            .builder
+            .build_call(str_len_fn, &[str_val.value().into()], "str_len")
+            .unwrap();
+        let len = len_call.as_any_value_enum().into_int_value();
+
+        // Allocate index counter
+        let index_alloca = self.cg.builder.build_alloca(i64_type, "str_index").unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, i64_type.const_zero())
+            .unwrap();
+
+        // Allocate loop variable (pointer to char/string)
+        let target_alloca = self.create_entry_block_alloca_with_type(target, ptr_type.into());
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "str_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "str_body");
+        let incr_bb = self.cg.ctx.append_basic_block(function, "str_incr");
+        let after_bb = self.cg.ctx.append_basic_block(function, "str_after");
+
         // Jump to condition check
         self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
 
@@ -784,15 +1427,26 @@ impl<'ctx> CodeGen<'ctx> {
         // Body block
         self.cg.builder.position_at_end(body_bb);
 
-        // Get element at current index
-        let elem_val = self.list_getitem(list_val.value(), current_index.into(), elem_type)?;
+        // Get character at current index as a single-char string
+        let str_char_at_fn = self.get_or_declare_c_builtin("str_char_at");
+        let char_call = self
+            .cg
+            .builder
+            .build_call(
+                str_char_at_fn,
+                &[str_val.value().into(), current_index.into()],
+                "char_at",
+            )
+            .unwrap();
+        let char_ptr = char_call.as_any_value_enum().into_pointer_value();
+
         self.cg
             .builder
-            .build_store(target_alloca, elem_val.value())
+            .build_store(target_alloca, char_ptr)
             .unwrap();
 
         // Register the loop variable
-        let loop_var = PyValue::new(elem_val.value(), elem_type.clone(), Some(target_alloca));
+        let loop_var = PyValue::new(char_ptr.into(), PyType::Str, Some(target_alloca));
         self.variables.insert(target.to_string(), loop_var);
 
         // Push loop context for break/continue support
@@ -839,43 +1493,47 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn generate_tuple_for_loop(
+    /// Generate for loop over bytes (iterates over byte values as integers)
+    fn generate_bytes_for_loop(
         &mut self,
         target: &str,
-        tuple_val: PyValue<'ctx>,
-        elem_type: &PyType,
+        bytes_val: PyValue<'ctx>,
         body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         use inkwell::values::AnyValue;
 
         let function = self.current_function.unwrap();
         let i64_type = self.cg.ctx.i64_type();
 
-        // Get tuple length
-        let tuple_len_fn = self.get_or_declare_c_builtin("tuple_len");
+        // Get bytes length using str_len (bytes are stored as strings internally)
+        let str_len_fn = self.get_or_declare_c_builtin("str_len");
         let len_call = self
             .cg
             .builder
-            .build_call(tuple_len_fn, &[tuple_val.value().into()], "tuple_len")
+            .build_call(str_len_fn, &[bytes_val.value().into()], "bytes_len")
             .unwrap();
         let len = len_call.as_any_value_enum().into_int_value();
 
         // Allocate index counter
-        let index_alloca = self.cg.builder.build_alloca(i64_type, "for_index").unwrap();
+        let index_alloca = self
+            .cg
+            .builder
+            .build_alloca(i64_type, "bytes_index")
+            .unwrap();
         self.cg
             .builder
             .build_store(index_alloca, i64_type.const_zero())
             .unwrap();
 
-        // Allocate loop variable
-        let elem_llvm_type = elem_type.to_llvm(self.cg.ctx);
-        let target_alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+        // Allocate loop variable (int - byte value)
+        let target_alloca = self.create_entry_block_alloca_with_type(target, i64_type.into());
 
         // Create basic blocks
-        let cond_bb = self.cg.ctx.append_basic_block(function, "for_cond");
-        let body_bb = self.cg.ctx.append_basic_block(function, "for_body");
-        let incr_bb = self.cg.ctx.append_basic_block(function, "for_incr");
-        let after_bb = self.cg.ctx.append_basic_block(function, "for_after");
+        let cond_bb = self.cg.ctx.append_basic_block(function, "bytes_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "bytes_body");
+        let incr_bb = self.cg.ctx.append_basic_block(function, "bytes_incr");
+        let after_bb = self.cg.ctx.append_basic_block(function, "bytes_after");
 
         // Jump to condition check
         self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
@@ -902,15 +1560,26 @@ impl<'ctx> CodeGen<'ctx> {
         // Body block
         self.cg.builder.position_at_end(body_bb);
 
-        // Get element at current index
-        let elem_val = self.tuple_getitem(tuple_val.value(), current_index.into(), elem_type)?;
+        // Get byte value at current index using str_getitem (returns int)
+        let str_getitem_fn = self.get_or_declare_c_builtin("str_getitem");
+        let byte_call = self
+            .cg
+            .builder
+            .build_call(
+                str_getitem_fn,
+                &[bytes_val.value().into(), current_index.into()],
+                "byte_val",
+            )
+            .unwrap();
+        let byte_val = byte_call.as_any_value_enum().into_int_value();
+
         self.cg
             .builder
-            .build_store(target_alloca, elem_val.value())
+            .build_store(target_alloca, byte_val)
             .unwrap();
 
         // Register the loop variable
-        let loop_var = PyValue::new(elem_val.value(), elem_type.clone(), Some(target_alloca));
+        let loop_var = PyValue::new(byte_val.into(), PyType::Int, Some(target_alloca));
         self.variables.insert(target.to_string(), loop_var);
 
         // Push loop context for break/continue support
@@ -953,6 +1622,1470 @@ impl<'ctx> CodeGen<'ctx> {
 
         // After block
         self.cg.builder.position_at_end(after_bb);
+
+        Ok(())
+    }
+
+    /// Generate for loop over set (iterates over elements)
+    fn generate_set_for_loop(
+        &mut self,
+        target: &str,
+        set_val: PyValue<'ctx>,
+        elem_type: &PyType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Create iterator from set
+        let set_iter_fn = self.get_or_declare_c_builtin("set_iter");
+        let iter_call = self
+            .cg
+            .builder
+            .build_call(set_iter_fn, &[set_val.value().into()], "set_iter")
+            .unwrap();
+        let iter_ptr = iter_call.as_any_value_enum().into_pointer_value();
+
+        // Allocate space for the loop variable and the output value
+        let elem_llvm_type = elem_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+        let out_value_alloca = self.cg.builder.build_alloca(i64_type, "set_out").unwrap();
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "set_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "set_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "set_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call set_iter_next
+        self.cg.builder.position_at_end(cond_bb);
+        let set_iter_next_fn = self.get_or_declare_c_builtin("set_iter_next");
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                set_iter_next_fn,
+                &[iter_ptr.into(), out_value_alloca.into()],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Load the value from out_value and store to target
+        let current_val = self
+            .cg
+            .builder
+            .build_load(i64_type, out_value_alloca, "current")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(target_alloca, current_val)
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(current_val, elem_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        let set_iter_free_fn = self.get_or_declare_c_builtin("set_iter_free");
+        self.cg
+            .builder
+            .build_call(set_iter_free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        // Suppress warning
+        let _ = ptr_type;
+
+        Ok(())
+    }
+
+    /// Generate for loop over dict (iterates over keys)
+    fn generate_dict_for_loop(
+        &mut self,
+        target: &str,
+        dict_val: PyValue<'ctx>,
+        key_type: &PyType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Create iterator from dict
+        let dict_iter_fn = self.get_or_declare_c_builtin("dict_iter");
+        let iter_call = self
+            .cg
+            .builder
+            .build_call(dict_iter_fn, &[dict_val.value().into()], "dict_iter")
+            .unwrap();
+        let iter_ptr = iter_call.as_any_value_enum().into_pointer_value();
+
+        // Allocate space for the loop variable and the output value
+        let key_llvm_type = key_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, key_llvm_type);
+        let out_value_alloca = self.cg.builder.build_alloca(i64_type, "dict_out").unwrap();
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "dict_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "dict_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "dict_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call dict_iter_next
+        self.cg.builder.position_at_end(cond_bb);
+        let dict_iter_next_fn = self.get_or_declare_c_builtin("dict_iter_next");
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                dict_iter_next_fn,
+                &[iter_ptr.into(), out_value_alloca.into()],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Load the key value from out_value and store to target
+        let current_val = self
+            .cg
+            .builder
+            .build_load(i64_type, out_value_alloca, "current")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(target_alloca, current_val)
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(current_val, key_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        let dict_iter_free_fn = self.get_or_declare_c_builtin("dict_iter_free");
+        self.cg
+            .builder
+            .build_call(dict_iter_free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        // Suppress warning
+        let _ = ptr_type;
+
+        Ok(())
+    }
+
+    /// Generate for loop over dict.keys() iterator
+    fn generate_dict_keys_iter_for_loop(
+        &mut self,
+        target: &str,
+        iter_val: PyValue<'ctx>,
+        key_type: &PyType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // The iterator was already created by the method call, just use it directly
+        let iter_ptr = iter_val.value().into_pointer_value();
+
+        // Check if this is a string-keyed dict by looking at key_type
+        let is_str_keyed = matches!(key_type, PyType::Str);
+
+        // Allocate space for the loop variable
+        let key_llvm_type = key_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, key_llvm_type);
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "dict_keys_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "dict_keys_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "dict_keys_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block
+        self.cg.builder.position_at_end(cond_bb);
+
+        if is_str_keyed {
+            // String dict: call str_dict_keys_next
+            let exhausted_alloca = self
+                .cg
+                .builder
+                .build_alloca(self.cg.ctx.i8_type(), "exhausted")
+                .unwrap();
+            let next_fn = self.get_or_declare_c_builtin("str_dict_keys_next");
+            let next_call = self
+                .cg
+                .builder
+                .build_call(
+                    next_fn,
+                    &[iter_ptr.into(), exhausted_alloca.into()],
+                    "next_key",
+                )
+                .unwrap();
+            let next_ptr = next_call.as_any_value_enum().into_pointer_value();
+
+            // Check exhausted flag
+            let exhausted = self
+                .cg
+                .builder
+                .build_load(self.cg.ctx.i8_type(), exhausted_alloca, "exhausted_val")
+                .unwrap()
+                .into_int_value();
+            let cond_bool = self
+                .cg
+                .builder
+                .build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    exhausted,
+                    self.cg.ctx.i8_type().const_zero(),
+                    "not_exhausted",
+                )
+                .unwrap();
+
+            self.cg
+                .builder
+                .build_conditional_branch(cond_bool, body_bb, after_bb)
+                .unwrap();
+
+            // Body block
+            self.cg.builder.position_at_end(body_bb);
+            self.cg
+                .builder
+                .build_store(target_alloca, next_ptr)
+                .unwrap();
+
+            let loop_var = PyValue::new(next_ptr.into(), key_type.clone(), Some(target_alloca));
+            self.variables.insert(target.to_string(), loop_var);
+        } else {
+            // Int dict: call dict_iter_next
+            let out_value_alloca = self.cg.builder.build_alloca(i64_type, "dict_out").unwrap();
+            let next_fn = self.get_or_declare_c_builtin("dict_iter_next");
+            let has_next_call = self
+                .cg
+                .builder
+                .build_call(
+                    next_fn,
+                    &[iter_ptr.into(), out_value_alloca.into()],
+                    "has_next",
+                )
+                .unwrap();
+            let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+            let zero = i64_type.const_zero();
+            let cond_bool = self
+                .cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+                .unwrap();
+
+            self.cg
+                .builder
+                .build_conditional_branch(cond_bool, body_bb, after_bb)
+                .unwrap();
+
+            // Body block
+            self.cg.builder.position_at_end(body_bb);
+            let current_val = self
+                .cg
+                .builder
+                .build_load(i64_type, out_value_alloca, "current")
+                .unwrap();
+            self.cg
+                .builder
+                .build_store(target_alloca, current_val)
+                .unwrap();
+
+            let loop_var = PyValue::new(current_val, key_type.clone(), Some(target_alloca));
+            self.variables.insert(target.to_string(), loop_var);
+        }
+
+        // Push loop context
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        let free_fn_name = if is_str_keyed {
+            "str_dict_keys_free"
+        } else {
+            "dict_iter_free"
+        };
+        let free_fn = self.get_or_declare_c_builtin(free_fn_name);
+        self.cg
+            .builder
+            .build_call(free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        let _ = ptr_type;
+        Ok(())
+    }
+
+    /// Generate for loop over dict.values() iterator
+    fn generate_dict_values_iter_for_loop(
+        &mut self,
+        target: &str,
+        iter_val: PyValue<'ctx>,
+        val_type: &PyType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+
+        // The iterator was already created by the method call
+        let iter_ptr = iter_val.value().into_pointer_value();
+
+        // Determine if str-keyed dict (for now, use int dict values since value type determines behavior)
+        // Actually, we need to know the dict key type to call the right function
+        // For simplicity, check value type - if it's a string ptr, use str_dict_values
+        // But we actually can't know from value type alone. Let's assume int dict for now.
+        // TODO: Pass key type info through to determine correct C function
+
+        let val_llvm_type = val_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, val_llvm_type);
+        let out_value_alloca = self.cg.builder.build_alloca(i64_type, "val_out").unwrap();
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "dict_vals_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "dict_vals_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "dict_vals_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call dict_values_next
+        self.cg.builder.position_at_end(cond_bb);
+        let next_fn = self.get_or_declare_c_builtin("dict_values_next");
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                next_fn,
+                &[iter_ptr.into(), out_value_alloca.into()],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+        let current_val = self
+            .cg
+            .builder
+            .build_load(i64_type, out_value_alloca, "current")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(target_alloca, current_val)
+            .unwrap();
+
+        let loop_var = PyValue::new(current_val, val_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        let free_fn = self.get_or_declare_c_builtin("dict_values_free");
+        self.cg
+            .builder
+            .build_call(free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        Ok(())
+    }
+
+    /// Generate for loop over dict.items() with tuple unpacking
+    fn generate_dict_items_for_loop_unpacking(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        key_type: &PyType,
+        val_type: &PyType,
+        body: &[Statement],
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        if targets.len() != 2 {
+            return Err(format!(
+                "dict.items() unpacking requires exactly 2 variables, got {}",
+                targets.len()
+            ));
+        }
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // The iterator was already created by the method call
+        let iter_ptr = iter_val.value().into_pointer_value();
+
+        // Check if str-keyed
+        let is_str_keyed = matches!(*key_type, PyType::Str);
+
+        // Allocate loop variables
+        let key_llvm_type = key_type.to_llvm(self.cg.ctx);
+        let val_llvm_type = val_type.to_llvm(self.cg.ctx);
+        let key_alloca = self.create_entry_block_alloca_with_type(&targets[0], key_llvm_type);
+        let val_alloca = self.create_entry_block_alloca_with_type(&targets[1], val_llvm_type);
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "dict_items_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "dict_items_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "dict_items_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block
+        self.cg.builder.position_at_end(cond_bb);
+
+        if is_str_keyed {
+            // String dict: call str_dict_items_next
+            let key_out_alloca = self.cg.builder.build_alloca(ptr_type, "key_out").unwrap();
+            let val_out_alloca = self.cg.builder.build_alloca(i64_type, "val_out").unwrap();
+
+            let next_fn = self.get_or_declare_c_builtin("str_dict_items_next");
+            let has_next_call = self
+                .cg
+                .builder
+                .build_call(
+                    next_fn,
+                    &[
+                        iter_ptr.into(),
+                        key_out_alloca.into(),
+                        val_out_alloca.into(),
+                    ],
+                    "has_next",
+                )
+                .unwrap();
+            let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+            let zero = i64_type.const_zero();
+            let cond_bool = self
+                .cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+                .unwrap();
+
+            self.cg
+                .builder
+                .build_conditional_branch(cond_bool, body_bb, after_bb)
+                .unwrap();
+
+            // Body block
+            self.cg.builder.position_at_end(body_bb);
+
+            // Load key (char*) and value (int64)
+            let key_val = self
+                .cg
+                .builder
+                .build_load(ptr_type, key_out_alloca, "key")
+                .unwrap();
+            let val_val = self
+                .cg
+                .builder
+                .build_load(i64_type, val_out_alloca, "val")
+                .unwrap();
+
+            self.cg.builder.build_store(key_alloca, key_val).unwrap();
+            self.cg.builder.build_store(val_alloca, val_val).unwrap();
+
+            let key_var = PyValue::new(key_val, key_type.clone(), Some(key_alloca));
+            let val_var = PyValue::new(val_val, val_type.clone(), Some(val_alloca));
+            self.variables.insert(targets[0].clone(), key_var);
+            self.variables.insert(targets[1].clone(), val_var);
+        } else {
+            // Int dict: call dict_items_next
+            let key_out_alloca = self.cg.builder.build_alloca(i64_type, "key_out").unwrap();
+            let val_out_alloca = self.cg.builder.build_alloca(i64_type, "val_out").unwrap();
+
+            let next_fn = self.get_or_declare_c_builtin("dict_items_next");
+            let has_next_call = self
+                .cg
+                .builder
+                .build_call(
+                    next_fn,
+                    &[
+                        iter_ptr.into(),
+                        key_out_alloca.into(),
+                        val_out_alloca.into(),
+                    ],
+                    "has_next",
+                )
+                .unwrap();
+            let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+            let zero = i64_type.const_zero();
+            let cond_bool = self
+                .cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+                .unwrap();
+
+            self.cg
+                .builder
+                .build_conditional_branch(cond_bool, body_bb, after_bb)
+                .unwrap();
+
+            // Body block
+            self.cg.builder.position_at_end(body_bb);
+
+            let key_val = self
+                .cg
+                .builder
+                .build_load(i64_type, key_out_alloca, "key")
+                .unwrap();
+            let val_val = self
+                .cg
+                .builder
+                .build_load(i64_type, val_out_alloca, "val")
+                .unwrap();
+
+            self.cg.builder.build_store(key_alloca, key_val).unwrap();
+            self.cg.builder.build_store(val_alloca, val_val).unwrap();
+
+            let key_var = PyValue::new(key_val, key_type.clone(), Some(key_alloca));
+            let val_var = PyValue::new(val_val, val_type.clone(), Some(val_alloca));
+            self.variables.insert(targets[0].clone(), key_var);
+            self.variables.insert(targets[1].clone(), val_var);
+        }
+
+        // Push loop context
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        let free_fn_name = if is_str_keyed {
+            "str_dict_items_free"
+        } else {
+            "dict_items_free"
+        };
+        let free_fn = self.get_or_declare_c_builtin(free_fn_name);
+        self.cg
+            .builder
+            .build_call(free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        Ok(())
+    }
+
+    /// Generate for loop with tuple unpacking: for x, y in list_of_tuples
+    fn generate_tuple_unpacking_for_loop(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        // Handle different iterable types that yield tuples
+        match iter_val.ty() {
+            PyType::EnumerateIter(_src, elem_type) => {
+                // enumerate yields (int, T) tuples
+                let elem_types = vec![PyType::Int, elem_type.as_ref().clone()];
+                return self.generate_enumerate_for_loop_unpacking(
+                    targets,
+                    iter_val,
+                    &elem_types,
+                    body,
+                );
+            }
+            PyType::ZipIter(types) => {
+                // zip yields tuples of the zipped elements
+                return self.generate_zip_for_loop_unpacking(targets, iter_val, &types, body);
+            }
+            PyType::DictItemsIter(key_type, val_type) => {
+                // dict.items() yields (key, value) tuples
+                return self.generate_dict_items_for_loop_unpacking(
+                    targets, iter_val, &key_type, &val_type, body,
+                );
+            }
+            _ => {}
+        }
+
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+
+        // Determine the element type (should be a tuple)
+        let elem_types = match iter_val.ty() {
+            PyType::List(elem_type) => match elem_type.as_ref() {
+                PyType::Tuple(types) => types.clone(),
+                _ => {
+                    return Err(format!(
+                        "Tuple unpacking requires a list of tuples, got List({:?})",
+                        elem_type
+                    ))
+                }
+            },
+            PyType::Tuple(elem_types) => {
+                // Check if first element is a tuple
+                match elem_types.first() {
+                    Some(PyType::Tuple(types)) => types.clone(),
+                    _ => {
+                        return Err(format!(
+                            "Tuple unpacking requires iteration over tuples, got Tuple({:?})",
+                            elem_types
+                        ))
+                    }
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "Tuple unpacking not supported for type {:?}",
+                    iter_val.ty()
+                ))
+            }
+        };
+
+        // Check that number of targets matches tuple size
+        if targets.len() != elem_types.len() {
+            return Err(format!(
+                "Cannot unpack tuple of {} elements into {} variables",
+                elem_types.len(),
+                targets.len()
+            ));
+        }
+
+        // Get list length
+        let list_len_fn = self.get_or_declare_c_builtin("list_len");
+        let len_call = self
+            .cg
+            .builder
+            .build_call(list_len_fn, &[iter_val.value().into()], "list_len")
+            .unwrap();
+        let len = len_call.as_any_value_enum().into_int_value();
+
+        // Allocate index counter
+        let index_alloca = self.cg.builder.build_alloca(i64_type, "for_index").unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, i64_type.const_zero())
+            .unwrap();
+
+        // Allocate loop variables for each target
+        let mut target_allocas = Vec::new();
+        for (i, target) in targets.iter().enumerate() {
+            let elem_type = &elem_types[i];
+            let elem_llvm_type = elem_type.to_llvm(self.cg.ctx);
+            let alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+            target_allocas.push((alloca, elem_type.clone()));
+        }
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "unpack_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "unpack_body");
+        let incr_bb = self.cg.ctx.append_basic_block(function, "unpack_incr");
+        let after_bb = self.cg.ctx.append_basic_block(function, "unpack_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - check index < len
+        self.cg.builder.position_at_end(cond_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::SLT, current_index, len, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Get tuple element at current index
+        let tuple_elem_type = PyType::Tuple(elem_types.clone());
+        let tuple_val =
+            self.list_getitem(iter_val.value(), current_index.into(), &tuple_elem_type)?;
+
+        // Unpack the tuple into individual variables
+        for (i, (target, (alloca, elem_type))) in
+            targets.iter().zip(target_allocas.iter()).enumerate()
+        {
+            let idx = i64_type.const_int(i as u64, false);
+            let elem_val = self.tuple_getitem(tuple_val.value(), idx.into(), elem_type)?;
+            self.cg
+                .builder
+                .build_store(*alloca, elem_val.value())
+                .unwrap();
+
+            // Register the loop variable
+            let loop_var = PyValue::new(elem_val.value(), elem_type.clone(), Some(*alloca));
+            self.variables.insert(target.to_string(), loop_var);
+        }
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: incr_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump to increment
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(incr_bb).unwrap();
+        }
+
+        // Increment block
+        self.cg.builder.position_at_end(incr_bb);
+        let current_index = self
+            .cg
+            .builder
+            .build_load(i64_type, index_alloca, "idx")
+            .unwrap()
+            .into_int_value();
+        let next_index = self
+            .cg
+            .builder
+            .build_int_add(current_index, i64_type.const_int(1, false), "next_idx")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(index_alloca, next_index)
+            .unwrap();
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // After block
+        self.cg.builder.position_at_end(after_bb);
+
+        Ok(())
+    }
+
+    /// Generate for loop with tuple unpacking over enumerate iterator
+    /// for i, x in enumerate(items): ...
+    fn generate_enumerate_for_loop_unpacking(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        elem_types: &[PyType],
+        body: &[Statement],
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        if targets.len() != 2 {
+            return Err(format!(
+                "enumerate() unpacking requires exactly 2 targets, got {}",
+                targets.len()
+            ));
+        }
+
+        let function = self.current_function.unwrap();
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Get the enumerate iterator pointer
+        let iter_ptr = iter_val.value().into_pointer_value();
+
+        // Get the element type and source from EnumerateIter
+        let (source, inner_elem_type) = match iter_val.ty() {
+            PyType::EnumerateIter(src, elem) => (src.clone(), elem.as_ref().clone()),
+            _ => return Err("Expected EnumerateIter type".to_string()),
+        };
+
+        // Choose the appropriate enumerate_next function based on source type
+        let enumerate_next_fn_name = match source {
+            EnumerateSource::List => "enumerate_list_next",
+            EnumerateSource::Str => "enumerate_str_next",
+            EnumerateSource::Bytes => "enumerate_bytes_next",
+        };
+        let enumerate_next_fn = self.get_or_declare_c_builtin(enumerate_next_fn_name);
+        let enumerate_free_fn = self.get_or_declare_c_builtin("enumerate_free");
+
+        // Allocate space for the output values
+        let out_index_alloca = self
+            .cg
+            .builder
+            .build_alloca(i64_type, "enum_index")
+            .unwrap();
+        let out_value_alloca = self
+            .cg
+            .builder
+            .build_alloca(i64_type, "enum_value")
+            .unwrap();
+
+        // Allocate loop variables
+        let idx_llvm_type = elem_types[0].to_llvm(self.cg.ctx);
+        let idx_target_alloca =
+            self.create_entry_block_alloca_with_type(&targets[0], idx_llvm_type);
+        let elem_llvm_type = elem_types[1].to_llvm(self.cg.ctx);
+        let elem_target_alloca =
+            self.create_entry_block_alloca_with_type(&targets[1], elem_llvm_type);
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "enum_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "enum_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "enum_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call enumerate_next
+        self.cg.builder.position_at_end(cond_bb);
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                enumerate_next_fn,
+                &[
+                    iter_ptr.into(),
+                    out_index_alloca.into(),
+                    out_value_alloca.into(),
+                ],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Load the index value and store to first target
+        let idx_val = self
+            .cg
+            .builder
+            .build_load(i64_type, out_index_alloca, "idx")
+            .unwrap();
+        self.cg
+            .builder
+            .build_store(idx_target_alloca, idx_val)
+            .unwrap();
+
+        // Register the index variable
+        let idx_var = PyValue::new(idx_val, PyType::Int, Some(idx_target_alloca));
+        self.variables.insert(targets[0].to_string(), idx_var);
+
+        // Load the element value and store to second target
+        let elem_val_raw = self
+            .cg
+            .builder
+            .build_load(i64_type, out_value_alloca, "elem")
+            .unwrap();
+
+        // Convert element value based on type
+        // enumerate_list_next returns values as i64 - for pointer types, convert back to ptr
+        let elem_val: inkwell::values::BasicValueEnum = match &inner_elem_type {
+            PyType::Str
+            | PyType::Bytes
+            | PyType::List(_)
+            | PyType::Dict(_, _)
+            | PyType::Set(_)
+            | PyType::Tuple(_) => {
+                // Pointer types are stored as i64, convert back
+                self.cg
+                    .builder
+                    .build_int_to_ptr(elem_val_raw.into_int_value(), ptr_type, "elem_ptr")
+                    .unwrap()
+                    .into()
+            }
+            _ => elem_val_raw,
+        };
+
+        self.cg
+            .builder
+            .build_store(elem_target_alloca, elem_val)
+            .unwrap();
+
+        // Register the element variable
+        let elem_pyval = PyValue::new(elem_val, inner_elem_type.clone(), Some(elem_target_alloca));
+        self.variables.insert(targets[1].to_string(), elem_pyval);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        self.cg
+            .builder
+            .build_call(enumerate_free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        Ok(())
+    }
+
+    /// Generate for loop with tuple unpacking over zip iterator
+    /// for x, y in zip(a, b): ...
+    /// for x, y, z in zip(a, b, c): ...
+    fn generate_zip_for_loop_unpacking(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        elem_types: &[PyType],
+        body: &[Statement],
+    ) -> Result<(), String> {
+        if targets.len() != elem_types.len() {
+            return Err(format!(
+                "zip() has {} iterables but {} targets",
+                elem_types.len(),
+                targets.len()
+            ));
+        }
+
+        if targets.len() == 2 {
+            self.generate_zip_two_for_loop(targets, iter_val, elem_types, body)
+        } else if targets.len() == 3 {
+            self.generate_zip_three_for_loop(targets, iter_val, elem_types, body)
+        } else {
+            Err(format!(
+                "zip() with {} iterables not yet supported",
+                targets.len()
+            ))
+        }
+    }
+
+    /// Generate for loop for zip of 2 iterables
+    fn generate_zip_two_for_loop(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        elem_types: &[PyType],
+        body: &[Statement],
+    ) -> Result<(), String> {
+        let function = self
+            .current_function
+            .ok_or("For loop outside of function")?;
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Get the zip iterator pointer
+        let iter_ptr = match &iter_val {
+            PyValue::ZipIter(storage, _) => match storage {
+                types::PtrStorage::Direct(ptr) => *ptr,
+                types::PtrStorage::Alloca(ptr) => self
+                    .cg
+                    .builder
+                    .build_load(ptr_type, *ptr, "load_iter")
+                    .unwrap()
+                    .into_pointer_value(),
+            },
+            _ => return Err("Expected ZipIter".to_string()),
+        };
+
+        // Determine which zip_next function to use based on element types
+        let both_str = matches!(elem_types[0], PyType::Str) && matches!(elem_types[1], PyType::Str);
+        let zip_next_fn_name = if both_str {
+            "zip_two_str_next"
+        } else {
+            "zip_two_list_next"
+        };
+        let zip_next_fn = self.get_or_declare_c_builtin(zip_next_fn_name);
+        let zip_free_fn = self.get_or_declare_c_builtin("zip_free");
+
+        // Allocate storage for loop variables
+        let out_val1_alloca = self.cg.builder.build_alloca(i64_type, "out_val1").unwrap();
+        let out_val2_alloca = self.cg.builder.build_alloca(i64_type, "out_val2").unwrap();
+
+        // Determine target allocas based on type
+        let target1_type = if matches!(
+            elem_types[0],
+            PyType::Str
+                | PyType::Bytes
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
+                | PyType::Tuple(_)
+        ) {
+            ptr_type.as_basic_type_enum()
+        } else {
+            i64_type.as_basic_type_enum()
+        };
+        let target2_type = if matches!(
+            elem_types[1],
+            PyType::Str
+                | PyType::Bytes
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
+                | PyType::Tuple(_)
+        ) {
+            ptr_type.as_basic_type_enum()
+        } else {
+            i64_type.as_basic_type_enum()
+        };
+
+        let target1_alloca = self
+            .cg
+            .builder
+            .build_alloca(target1_type, &targets[0])
+            .unwrap();
+        let target2_alloca = self
+            .cg
+            .builder
+            .build_alloca(target2_type, &targets[1])
+            .unwrap();
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "zip_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "zip_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "zip_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call zip_next
+        self.cg.builder.position_at_end(cond_bb);
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                zip_next_fn,
+                &[
+                    iter_ptr.into(),
+                    out_val1_alloca.into(),
+                    out_val2_alloca.into(),
+                ],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Load first value and store to first target
+        let val1_raw = self
+            .cg
+            .builder
+            .build_load(i64_type, out_val1_alloca, "val1")
+            .unwrap();
+
+        let val1: inkwell::values::BasicValueEnum = match &elem_types[0] {
+            PyType::Str
+            | PyType::Bytes
+            | PyType::List(_)
+            | PyType::Dict(_, _)
+            | PyType::Set(_)
+            | PyType::Tuple(_) => self
+                .cg
+                .builder
+                .build_int_to_ptr(val1_raw.into_int_value(), ptr_type, "val1_ptr")
+                .unwrap()
+                .into(),
+            _ => val1_raw,
+        };
+
+        self.cg.builder.build_store(target1_alloca, val1).unwrap();
+        let var1 = PyValue::new(val1, elem_types[0].clone(), Some(target1_alloca));
+        self.variables.insert(targets[0].clone(), var1);
+
+        // Load second value and store to second target
+        let val2_raw = self
+            .cg
+            .builder
+            .build_load(i64_type, out_val2_alloca, "val2")
+            .unwrap();
+
+        let val2: inkwell::values::BasicValueEnum = match &elem_types[1] {
+            PyType::Str
+            | PyType::Bytes
+            | PyType::List(_)
+            | PyType::Dict(_, _)
+            | PyType::Set(_)
+            | PyType::Tuple(_) => self
+                .cg
+                .builder
+                .build_int_to_ptr(val2_raw.into_int_value(), ptr_type, "val2_ptr")
+                .unwrap()
+                .into(),
+            _ => val2_raw,
+        };
+
+        self.cg.builder.build_store(target2_alloca, val2).unwrap();
+        let var2 = PyValue::new(val2, elem_types[1].clone(), Some(target2_alloca));
+        self.variables.insert(targets[1].clone(), var2);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        self.cg
+            .builder
+            .build_call(zip_free_fn, &[iter_ptr.into()], "")
+            .unwrap();
+
+        Ok(())
+    }
+
+    /// Generate for loop for zip of 3 iterables
+    fn generate_zip_three_for_loop(
+        &mut self,
+        targets: &[String],
+        iter_val: PyValue<'ctx>,
+        elem_types: &[PyType],
+        body: &[Statement],
+    ) -> Result<(), String> {
+        let function = self
+            .current_function
+            .ok_or("For loop outside of function")?;
+        let i64_type = self.cg.ctx.i64_type();
+        let ptr_type = self.cg.ctx.ptr_type(inkwell::AddressSpace::default());
+
+        // Get the zip iterator pointer
+        let iter_ptr = match &iter_val {
+            PyValue::ZipIter(storage, _) => match storage {
+                types::PtrStorage::Direct(ptr) => *ptr,
+                types::PtrStorage::Alloca(ptr) => self
+                    .cg
+                    .builder
+                    .build_load(ptr_type, *ptr, "load_iter")
+                    .unwrap()
+                    .into_pointer_value(),
+            },
+            _ => return Err("Expected ZipIter".to_string()),
+        };
+
+        let zip_next_fn = self.get_or_declare_c_builtin("zip_three_list_next");
+        let zip_free_fn = self.get_or_declare_c_builtin("zip_free");
+
+        // Allocate storage for loop variables
+        let out_val1_alloca = self.cg.builder.build_alloca(i64_type, "out_val1").unwrap();
+        let out_val2_alloca = self.cg.builder.build_alloca(i64_type, "out_val2").unwrap();
+        let out_val3_alloca = self.cg.builder.build_alloca(i64_type, "out_val3").unwrap();
+
+        // Determine target allocas based on type
+        let mut target_allocas = Vec::new();
+        for (i, elem_type) in elem_types.iter().enumerate() {
+            let target_type = if matches!(
+                elem_type,
+                PyType::Str
+                    | PyType::Bytes
+                    | PyType::List(_)
+                    | PyType::Dict(_, _)
+                    | PyType::Set(_)
+                    | PyType::Tuple(_)
+            ) {
+                ptr_type.as_basic_type_enum()
+            } else {
+                i64_type.as_basic_type_enum()
+            };
+            let alloca = self
+                .cg
+                .builder
+                .build_alloca(target_type, &targets[i])
+                .unwrap();
+            target_allocas.push(alloca);
+        }
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "zip_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "zip_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "zip_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call zip_next
+        self.cg.builder.position_at_end(cond_bb);
+        let has_next_call = self
+            .cg
+            .builder
+            .build_call(
+                zip_next_fn,
+                &[
+                    iter_ptr.into(),
+                    out_val1_alloca.into(),
+                    out_val2_alloca.into(),
+                    out_val3_alloca.into(),
+                ],
+                "has_next",
+            )
+            .unwrap();
+        let has_next = has_next_call.as_any_value_enum().into_int_value();
+
+        // Compare: has_next != 0
+        let zero = i64_type.const_zero();
+        let cond_bool = self
+            .cg
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, has_next, zero, "cond")
+            .unwrap();
+
+        self.cg
+            .builder
+            .build_conditional_branch(cond_bool, body_bb, after_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        let out_allocas = [out_val1_alloca, out_val2_alloca, out_val3_alloca];
+        for i in 0..3 {
+            let val_raw = self
+                .cg
+                .builder
+                .build_load(i64_type, out_allocas[i], &format!("val{}", i))
+                .unwrap();
+
+            let val: inkwell::values::BasicValueEnum = match &elem_types[i] {
+                PyType::Str
+                | PyType::Bytes
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
+                | PyType::Tuple(_) => self
+                    .cg
+                    .builder
+                    .build_int_to_ptr(val_raw.into_int_value(), ptr_type, &format!("val{}_ptr", i))
+                    .unwrap()
+                    .into(),
+                _ => val_raw,
+            };
+
+            self.cg.builder.build_store(target_allocas[i], val).unwrap();
+            let var = PyValue::new(val, elem_types[i].clone(), Some(target_allocas[i]));
+            self.variables.insert(targets[i].clone(), var);
+        }
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block - free iterator
+        self.cg.builder.position_at_end(after_bb);
+        self.cg
+            .builder
+            .build_call(zip_free_fn, &[iter_ptr.into()], "")
+            .unwrap();
 
         Ok(())
     }
@@ -1108,5 +3241,54 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
         false
+    }
+
+    /// Convert a PyValue to i64 for storage in containers (dict, list, tuple)
+    /// This handles type conversion: Float -> bitcast, Bool -> zext, Ptr -> ptrtoint
+    pub(crate) fn convert_value_to_i64(
+        &self,
+        val: &PyValue<'ctx>,
+    ) -> Result<inkwell::values::BasicValueEnum<'ctx>, String> {
+        match val.ty() {
+            PyType::Float => {
+                // Bitcast f64 to i64 (preserves bit pattern)
+                Ok(self
+                    .cg
+                    .builder
+                    .build_bit_cast(
+                        val.value().into_float_value(),
+                        self.cg.ctx.i64_type(),
+                        "val_to_i64",
+                    )
+                    .unwrap())
+            }
+            PyType::Bool => {
+                // Zero-extend i1 to i64
+                Ok(self
+                    .cg
+                    .builder
+                    .build_int_z_extend(
+                        val.value().into_int_value(),
+                        self.cg.ctx.i64_type(),
+                        "val_to_i64",
+                    )
+                    .unwrap()
+                    .into())
+            }
+            PyType::Str | PyType::Bytes | PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                // Cast pointer to i64
+                Ok(self
+                    .cg
+                    .builder
+                    .build_ptr_to_int(
+                        val.value().into_pointer_value(),
+                        self.cg.ctx.i64_type(),
+                        "val_to_i64",
+                    )
+                    .unwrap()
+                    .into())
+            }
+            _ => Ok(val.value()), // Int and other types stay as-is
+        }
     }
 }

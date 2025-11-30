@@ -33,6 +33,7 @@ echo -e "${YELLOW}[1/5]${NC} Checking for ELF files..."
 elf_files=$(git diff --cached --name-only --diff-filter=ACM | while read -r file; do
     if [ -f "$file" ] && file "$file" | grep -q "ELF"; then
         echo "$file"
+        rm -f "$file"
     fi
 done)
 if [ -n "$elf_files" ]; then

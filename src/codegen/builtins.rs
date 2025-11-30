@@ -21,6 +21,8 @@ impl BuiltinFunction {
     ) -> inkwell::types::BasicMetadataTypeEnum<'ctx> {
         match param_type {
             BuiltinType::I64 => context.i64_type().into(),
+            BuiltinType::I32 => context.i32_type().into(),
+            BuiltinType::I8 => context.i8_type().into(),
             BuiltinType::F64 => context.f64_type().into(),
             BuiltinType::Bool => context.bool_type().into(),
             BuiltinType::Ptr => context.ptr_type(inkwell::AddressSpace::default()).into(),
@@ -42,6 +44,8 @@ impl BuiltinFunction {
         match self.return_type {
             BuiltinType::Void => context.void_type().fn_type(&param_types, false),
             BuiltinType::I64 => context.i64_type().fn_type(&param_types, false),
+            BuiltinType::I32 => context.i32_type().fn_type(&param_types, false),
+            BuiltinType::I8 => context.i8_type().fn_type(&param_types, false),
             BuiltinType::F64 => context.f64_type().fn_type(&param_types, false),
             BuiltinType::Ptr => context
                 .ptr_type(inkwell::AddressSpace::default())

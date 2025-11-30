@@ -111,6 +111,32 @@ int64_t range_getitem(PyRange* range, int64_t index) {
     return range->start + index * range->step;
 }
 
+// Create a reversed range - returns a new range that iterates in reverse order
+// reversed(range(start, stop, step)) is equivalent to range(last_elem, start-step, -step)
+// where last_elem is the last element in the original range
+PyRange* range_reversed(PyRange* range) {
+    if (range == NULL) return NULL;
+
+    int64_t len = range_len(range);
+    if (len == 0) {
+        // Empty range reversed is still empty
+        return range_new(0, 0, 1);
+    }
+
+    // Calculate the last element in the original range
+    // last = start + (len - 1) * step
+    int64_t last = range->start + (len - 1) * range->step;
+
+    // Reversed range: start at last, go to start-step (exclusive), with negated step
+    // For range(0, 5, 1) -> reversed gives range(4, -1, -1)
+    // For range(0, 10, 2) -> [0,2,4,6,8] -> reversed is range(8, -2, -2) = [8,6,4,2,0]
+    int64_t new_start = last;
+    int64_t new_stop = range->start - range->step;
+    int64_t new_step = -range->step;
+
+    return range_new(new_start, new_stop, new_step);
+}
+
 // ============================================================================
 // Range Iterator Functions
 // ============================================================================
@@ -145,6 +171,37 @@ int64_t range_iter_next(PyRangeIter* iter, int64_t* out_value) {
     *out_value = iter->current;
     iter->current += range->step;
     return 1;
+}
+
+// Get next value with default - compatible signature with iter_next_list
+// Returns the next value, or default_value if exhausted
+// Sets *exhausted to 1 if exhausted, 0 otherwise (pass NULL to ignore)
+int64_t range_iter_next_default(PyRangeIter* iter, int64_t default_value, int8_t* exhausted) {
+    if (exhausted) *exhausted = 0;
+    if (iter == NULL || iter->range == NULL) {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    PyRange* range = iter->range;
+
+    // Check if we're past the end
+    if (range->step > 0) {
+        if (iter->current >= range->stop) {
+            if (exhausted) *exhausted = 1;
+            return default_value;
+        }
+    } else {
+        if (iter->current <= range->stop) {
+            if (exhausted) *exhausted = 1;
+            return default_value;
+        }
+    }
+
+    // Store current value and advance
+    int64_t result = iter->current;
+    iter->current += range->step;
+    return result;
 }
 
 // Free the iterator (does not free the range)

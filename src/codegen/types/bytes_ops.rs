@@ -228,6 +228,10 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val))
             }
+            // Bytes in list/set/tuple/dict of non-bytes is always False (type mismatch)
+            PyType::List(_) | PyType::Set(_) | PyType::Tuple(_) | PyType::Dict(_, _) => {
+                Ok(PyValue::bool(cg.ctx.bool_type().const_zero()))
+            }
             _ => Err(format!("Cannot use 'in' with Bytes and {:?}", rhs.ty())),
         },
         BinaryOp::NotIn => match &rhs.ty() {
@@ -250,6 +254,10 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
                 Ok(PyValue::bool(negated))
+            }
+            // Bytes not in list/set/tuple/dict of non-bytes is always True (type mismatch)
+            PyType::List(_) | PyType::Set(_) | PyType::Tuple(_) | PyType::Dict(_, _) => {
+                Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones()))
             }
             _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty())),
         },
@@ -344,6 +352,166 @@ pub fn binary_op<'ctx>(
             }
             // Different types are never identical, so is not returns true
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones())),
+        },
+
+        // Printf-style formatting (% operator)
+        // bytes % args works like str % args
+        BinaryOp::Mod => match &rhs.ty() {
+            PyType::Int => {
+                let format_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_int");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_int",
+                )))
+            }
+            PyType::Float => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_float");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_float",
+                )))
+            }
+            PyType::Bool => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_bool");
+                let bool_val = rhs.runtime_value().into_int_value();
+                let int_val = cg
+                    .builder
+                    .build_int_z_extend(bool_val, cg.ctx.i64_type(), "bool_to_int")
+                    .unwrap();
+                let call_site = cg
+                    .builder
+                    .build_call(format_fn, &[lhs_ptr.into(), int_val.into()], "bytes_format")
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_bool",
+                )))
+            }
+            PyType::Str => {
+                let format_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_str");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_str",
+                )))
+            }
+            PyType::Bytes => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_bytes",
+                )))
+            }
+            PyType::None => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_none");
+                let call_site = cg
+                    .builder
+                    .build_call(format_fn, &[lhs_ptr.into()], "bytes_format")
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_none",
+                )))
+            }
+            PyType::List(_) => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_list");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_list",
+                )))
+            }
+            PyType::Dict(_, _) => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_dict");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_dict",
+                )))
+            }
+            PyType::Set(_) => {
+                let format_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_set");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_set",
+                )))
+            }
+            PyType::Tuple(_) => {
+                let format_fn =
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_tuple");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "bytes_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::bytes(super::extract_ptr_result(
+                    call_site,
+                    "str_format_tuple",
+                )))
+            }
+            _ => Err(format!("Cannot format bytes with {:?}", rhs.ty())),
         },
 
         _ => Err(format!("Operator {:?} not supported for bytes type", op)),

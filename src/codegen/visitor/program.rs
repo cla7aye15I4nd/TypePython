@@ -23,6 +23,23 @@ impl<'ctx> CodeGen<'ctx> {
             self.visit_class(class)?;
         }
 
+        // Pre-pass: Create LLVM globals for module-level VarDecl statements
+        // This must happen before functions are compiled so they can use global keyword
+        for stmt in &program.statements {
+            if let Statement::VarDecl { name, var_type, .. } = stmt {
+                let py_type = PyType::from_ast_type(var_type)?;
+                let llvm_type = py_type.to_llvm(self.cg.ctx);
+
+                // Create a global variable with zero initializer
+                let global = self.cg.module.add_global(llvm_type, None, name);
+                global.set_initializer(&llvm_type.const_zero());
+
+                // Store in module_vars for lookup by global keyword
+                self.module_vars
+                    .insert(name.clone(), (global.as_pointer_value(), py_type));
+            }
+        }
+
         // First pass: Declare all functions (for mutual recursion support)
         for function in &program.functions {
             self.declare_function(function)?;
@@ -63,6 +80,9 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Clear variables for new function scope
         self.variables.clear();
+        // Clear global/nonlocal declarations for new function scope
+        self.global_vars.clear();
+        self.nonlocal_vars.clear();
 
         // Allocate space for parameters and store them
         for (i, param) in func.params.iter().enumerate() {
@@ -96,8 +116,21 @@ impl<'ctx> CodeGen<'ctx> {
                     let zero = self.cg.ctx.bool_type().const_zero();
                     self.cg.builder.build_return(Some(&zero)).unwrap();
                 }
-                _ => {
-                    return Err("Unsupported return type".to_string());
+                Type::Str
+                | Type::Bytes
+                | Type::List(_)
+                | Type::Dict(_, _)
+                | Type::Set(_)
+                | Type::Tuple(_)
+                | Type::Custom(_)
+                | Type::Range => {
+                    // Pointer types return null by default
+                    let null = self
+                        .cg
+                        .ctx
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null();
+                    self.cg.builder.build_return(Some(&null)).unwrap();
                 }
             }
         }

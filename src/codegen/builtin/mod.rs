@@ -52,6 +52,25 @@ impl<'ctx> CodeGen<'ctx> {
             "reversed" => MacroKind::Reversed,
             // Math builtins
             "divmod" => MacroKind::Divmod,
+            // Boolean builtins
+            "any" => MacroKind::Any,
+            "all" => MacroKind::All,
+            // Tuple constructor
+            "tuple" => MacroKind::Tuple,
+            // Iterator builtins
+            "enumerate" => MacroKind::Enumerate,
+            "zip" => MacroKind::Zip,
+            "filter" => MacroKind::Filter,
+            "iter" => MacroKind::Iter,
+            "next" => MacroKind::Next,
+            // Object introspection
+            "id" => MacroKind::Id,
+            "repr" => MacroKind::Repr,
+            // Frozenset constructor
+            "frozenset" => MacroKind::Frozenset,
+            // Attribute access builtins
+            "getattr" => MacroKind::Getattr,
+            "hasattr" => MacroKind::Hasattr,
             _ => return None,
         };
         Some(PyValue::macro_fn(kind))
@@ -95,6 +114,25 @@ impl<'ctx> CodeGen<'ctx> {
             MacroKind::Reversed => self.generate_reversed_call(args),
             // Math builtins
             MacroKind::Divmod => self.generate_divmod_call(args),
+            // Boolean builtins
+            MacroKind::Any => self.generate_any_call(args),
+            MacroKind::All => self.generate_all_call(args),
+            // Tuple constructor
+            MacroKind::Tuple => self.generate_tuple_call(args),
+            // Iterator builtins
+            MacroKind::Enumerate => self.generate_enumerate_call(args),
+            MacroKind::Zip => self.generate_zip_call(args),
+            MacroKind::Filter => self.generate_filter_call(args),
+            MacroKind::Iter => self.generate_iter_call(args),
+            MacroKind::Next => self.generate_next_call(args),
+            // Object introspection
+            MacroKind::Id => self.generate_id_call(args),
+            MacroKind::Repr => self.generate_repr_call(args),
+            // Frozenset constructor
+            MacroKind::Frozenset => self.generate_frozenset_call(args),
+            // Attribute access builtins
+            MacroKind::Getattr => self.generate_getattr_call(args),
+            MacroKind::Hasattr => self.generate_hasattr_call(args),
         }
     }
 

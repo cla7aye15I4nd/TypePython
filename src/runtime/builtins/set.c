@@ -648,6 +648,381 @@ void print_str_set(PyStrSet* set) {
     printf("}");
 }
 
+// --- String Set additional methods ---
+
+// Remove a string from the set (raises error if not found - we just ignore)
+void str_set_remove(PyStrSet* set, const char* key) {
+    if (set == NULL || key == NULL) return;
+    int64_t slot = str_set_find_slot(set, key, 0);
+    if (slot >= 0) {
+        free(set->entries[slot].key);
+        set->entries[slot].key = NULL;
+        set->entries[slot].state = SET_DELETED;
+        set->len--;
+    }
+}
+
+// Discard a string from the set (no error if not found)
+void str_set_discard(PyStrSet* set, const char* key) {
+    str_set_remove(set, key);  // Same implementation
+}
+
+// Clear all strings from the set
+void str_set_clear(PyStrSet* set) {
+    if (set == NULL) return;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            free(set->entries[i].key);
+            set->entries[i].key = NULL;
+            set->entries[i].state = SET_EMPTY;
+        }
+    }
+    set->len = 0;
+}
+
+// Pop an arbitrary string from the set
+const char* str_set_pop(PyStrSet* set) {
+    if (set == NULL || set->len == 0) return "";
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            const char* result = set->entries[i].key;
+            set->entries[i].key = NULL;
+            set->entries[i].state = SET_DELETED;
+            set->len--;
+            return result;
+        }
+    }
+    return "";
+}
+
+// Copy string set
+PyStrSet* str_set_copy(PyStrSet* set) {
+    if (set == NULL) return str_set_new();
+    PyStrSet* copy = (PyStrSet*)malloc(sizeof(PyStrSet));
+    if (copy == NULL) return NULL;
+    copy->capacity = set->capacity;
+    copy->len = 0;
+    copy->entries = (StrSetEntry*)calloc(copy->capacity, sizeof(StrSetEntry));
+    if (copy->entries == NULL) {
+        free(copy);
+        return NULL;
+    }
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            copy->entries[i].key = strdup(set->entries[i].key);
+            copy->entries[i].state = SET_OCCUPIED;
+            copy->len++;
+        }
+    }
+    return copy;
+}
+
+// ============================================================================
+// Float Set (PyFloatSet)
+// ============================================================================
+
+typedef struct {
+    double key;
+    uint8_t state;
+} FloatSetEntry;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    FloatSetEntry* entries;
+} PyFloatSet;
+
+// Hash function for float keys (bitcast to int64_t)
+static uint64_t hash_float(double key) {
+    union { double d; uint64_t i; } u;
+    u.d = key;
+    uint64_t h = u.i;
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
+
+static int64_t float_set_find_slot(PyFloatSet* set, double key, int for_insert) {
+    uint64_t hash = hash_float(key);
+    int64_t mask = set->capacity - 1;
+    int64_t index = hash & mask;
+    int64_t first_deleted = -1;
+
+    for (int64_t i = 0; i < set->capacity; i++) {
+        FloatSetEntry* entry = &set->entries[index];
+        if (entry->state == SET_EMPTY) {
+            return for_insert ? (first_deleted >= 0 ? first_deleted : index) : -1;
+        }
+        if (entry->state == SET_DELETED) {
+            if (first_deleted < 0) first_deleted = index;
+        } else if (entry->key == key) {
+            return index;
+        }
+        index = (index + 1) & mask;
+    }
+    return for_insert ? first_deleted : -1;
+}
+
+static void float_set_grow(PyFloatSet* set) {
+    int64_t old_capacity = set->capacity;
+    FloatSetEntry* old_entries = set->entries;
+    set->capacity *= 2;
+    set->entries = (FloatSetEntry*)calloc(set->capacity, sizeof(FloatSetEntry));
+    set->len = 0;
+    for (int64_t i = 0; i < old_capacity; i++) {
+        if (old_entries[i].state == SET_OCCUPIED) {
+            int64_t slot = float_set_find_slot(set, old_entries[i].key, 1);
+            set->entries[slot].key = old_entries[i].key;
+            set->entries[slot].state = SET_OCCUPIED;
+            set->len++;
+        }
+    }
+    free(old_entries);
+}
+
+PyFloatSet* float_set_new(void) {
+    PyFloatSet* set = (PyFloatSet*)malloc(sizeof(PyFloatSet));
+    if (set == NULL) return NULL;
+    set->capacity = INITIAL_CAPACITY;
+    set->len = 0;
+    set->entries = (FloatSetEntry*)calloc(set->capacity, sizeof(FloatSetEntry));
+    if (set->entries == NULL) {
+        free(set);
+        return NULL;
+    }
+    return set;
+}
+
+void float_set_add(PyFloatSet* set, double key) {
+    if (set == NULL) return;
+    if ((double)(set->len + 1) > set->capacity * LOAD_FACTOR) {
+        float_set_grow(set);
+    }
+    int64_t slot = float_set_find_slot(set, key, 1);
+    if (slot >= 0 && set->entries[slot].state != SET_OCCUPIED) {
+        set->entries[slot].key = key;
+        set->entries[slot].state = SET_OCCUPIED;
+        set->len++;
+    }
+}
+
+int64_t float_set_contains(PyFloatSet* set, double key) {
+    if (set == NULL) return 0;
+    int64_t slot = float_set_find_slot(set, key, 0);
+    return slot >= 0 ? 1 : 0;
+}
+
+void float_set_remove(PyFloatSet* set, double key) {
+    if (set == NULL) return;
+    int64_t slot = float_set_find_slot(set, key, 0);
+    if (slot >= 0) {
+        set->entries[slot].state = SET_DELETED;
+        set->len--;
+    }
+}
+
+void float_set_discard(PyFloatSet* set, double key) {
+    float_set_remove(set, key);
+}
+
+void float_set_clear(PyFloatSet* set) {
+    if (set == NULL) return;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        set->entries[i].state = SET_EMPTY;
+    }
+    set->len = 0;
+}
+
+double float_set_pop(PyFloatSet* set) {
+    if (set == NULL || set->len == 0) return 0.0;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            double result = set->entries[i].key;
+            set->entries[i].state = SET_DELETED;
+            set->len--;
+            return result;
+        }
+    }
+    return 0.0;
+}
+
+PyFloatSet* float_set_copy(PyFloatSet* set) {
+    if (set == NULL) return float_set_new();
+    PyFloatSet* copy = (PyFloatSet*)malloc(sizeof(PyFloatSet));
+    if (copy == NULL) return NULL;
+    copy->capacity = set->capacity;
+    copy->len = set->len;
+    copy->entries = (FloatSetEntry*)malloc(copy->capacity * sizeof(FloatSetEntry));
+    if (copy->entries == NULL) {
+        free(copy);
+        return NULL;
+    }
+    memcpy(copy->entries, set->entries, set->capacity * sizeof(FloatSetEntry));
+    return copy;
+}
+
+int64_t float_set_len(PyFloatSet* set) {
+    return set ? set->len : 0;
+}
+
+void print_float_set(PyFloatSet* set) {
+    if (set != NULL && set->len == 0) {
+        printf("set()");
+        return;
+    }
+    printf("{");
+    int first = 1;
+    if (set != NULL) {
+        for (int64_t i = 0; i < set->capacity; i++) {
+            if (set->entries[i].state == SET_OCCUPIED) {
+                if (!first) printf(", ");
+                printf("%g", set->entries[i].key);
+                first = 0;
+            }
+        }
+    }
+    printf("}");
+}
+
+// ============================================================================
+// Bool Set (PyBoolSet) - really just 0/1/both possible
+// ============================================================================
+
+typedef struct {
+    int8_t key;
+    uint8_t state;
+} BoolSetEntry;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    BoolSetEntry* entries;
+} PyBoolSet;
+
+static int64_t bool_set_find_slot(PyBoolSet* set, int8_t key, int for_insert) {
+    int64_t mask = set->capacity - 1;
+    int64_t index = (key ? 1 : 0) & mask;
+    int64_t first_deleted = -1;
+
+    for (int64_t i = 0; i < set->capacity; i++) {
+        BoolSetEntry* entry = &set->entries[index];
+        if (entry->state == SET_EMPTY) {
+            return for_insert ? (first_deleted >= 0 ? first_deleted : index) : -1;
+        }
+        if (entry->state == SET_DELETED) {
+            if (first_deleted < 0) first_deleted = index;
+        } else if (entry->key == (key ? 1 : 0)) {
+            return index;
+        }
+        index = (index + 1) & mask;
+    }
+    return for_insert ? first_deleted : -1;
+}
+
+PyBoolSet* bool_set_new(void) {
+    PyBoolSet* set = (PyBoolSet*)malloc(sizeof(PyBoolSet));
+    if (set == NULL) return NULL;
+    set->capacity = INITIAL_CAPACITY;
+    set->len = 0;
+    set->entries = (BoolSetEntry*)calloc(set->capacity, sizeof(BoolSetEntry));
+    if (set->entries == NULL) {
+        free(set);
+        return NULL;
+    }
+    return set;
+}
+
+void bool_set_add(PyBoolSet* set, int8_t key) {
+    if (set == NULL) return;
+    int64_t slot = bool_set_find_slot(set, key, 1);
+    if (slot >= 0 && set->entries[slot].state != SET_OCCUPIED) {
+        set->entries[slot].key = key ? 1 : 0;
+        set->entries[slot].state = SET_OCCUPIED;
+        set->len++;
+    }
+}
+
+int64_t bool_set_contains(PyBoolSet* set, int8_t key) {
+    if (set == NULL) return 0;
+    int64_t slot = bool_set_find_slot(set, key, 0);
+    return slot >= 0 ? 1 : 0;
+}
+
+void bool_set_remove(PyBoolSet* set, int8_t key) {
+    if (set == NULL) return;
+    int64_t slot = bool_set_find_slot(set, key, 0);
+    if (slot >= 0) {
+        set->entries[slot].state = SET_DELETED;
+        set->len--;
+    }
+}
+
+void bool_set_discard(PyBoolSet* set, int8_t key) {
+    bool_set_remove(set, key);
+}
+
+void bool_set_clear(PyBoolSet* set) {
+    if (set == NULL) return;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        set->entries[i].state = SET_EMPTY;
+    }
+    set->len = 0;
+}
+
+int8_t bool_set_pop(PyBoolSet* set) {
+    if (set == NULL || set->len == 0) return 0;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            int8_t result = set->entries[i].key;
+            set->entries[i].state = SET_DELETED;
+            set->len--;
+            return result;
+        }
+    }
+    return 0;
+}
+
+PyBoolSet* bool_set_copy(PyBoolSet* set) {
+    if (set == NULL) return bool_set_new();
+    PyBoolSet* copy = (PyBoolSet*)malloc(sizeof(PyBoolSet));
+    if (copy == NULL) return NULL;
+    copy->capacity = set->capacity;
+    copy->len = set->len;
+    copy->entries = (BoolSetEntry*)malloc(copy->capacity * sizeof(BoolSetEntry));
+    if (copy->entries == NULL) {
+        free(copy);
+        return NULL;
+    }
+    memcpy(copy->entries, set->entries, set->capacity * sizeof(BoolSetEntry));
+    return copy;
+}
+
+int64_t bool_set_len(PyBoolSet* set) {
+    return set ? set->len : 0;
+}
+
+void print_bool_set(PyBoolSet* set) {
+    if (set != NULL && set->len == 0) {
+        printf("set()");
+        return;
+    }
+    printf("{");
+    int first = 1;
+    if (set != NULL) {
+        for (int64_t i = 0; i < set->capacity; i++) {
+            if (set->entries[i].state == SET_OCCUPIED) {
+                if (!first) printf(", ");
+                printf("%s", set->entries[i].key ? "True" : "False");
+                first = 0;
+            }
+        }
+    }
+    printf("}");
+}
+
 // ============================================================================
 // Builtin Functions: sum, sorted
 // ============================================================================
@@ -790,5 +1165,181 @@ PySet* set_from_dict(PyDictFwd* dict) {
         }
     }
 
+    return result;
+}
+
+// ============================================================================
+// Set Iteration Support
+// ============================================================================
+
+typedef struct {
+    PySet* set;
+    int64_t slot_index;  // Current slot being checked
+} SetIterator;
+
+// Create a new iterator for the set
+SetIterator* set_iter(PySet* set) {
+    SetIterator* iter = (SetIterator*)malloc(sizeof(SetIterator));
+    if (iter == NULL) return NULL;
+    iter->set = set;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Get next element (returns 1 if has more, 0 if done)
+// Output value is stored in *out
+int64_t set_iter_next(SetIterator* iter, int64_t* out) {
+    if (iter == NULL || iter->set == NULL) return 0;
+
+    // Find next occupied slot
+    while (iter->slot_index < iter->set->capacity) {
+        if (iter->set->entries[iter->slot_index].state == SET_OCCUPIED) {
+            *out = iter->set->entries[iter->slot_index].key;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+// Free the iterator
+void set_iter_free(SetIterator* iter) {
+    free(iter);
+}
+
+// ============================================================================
+// any() and all() builtins for sets
+// ============================================================================
+
+// any(set) - returns true if any element is non-zero
+int64_t set_any(PySet* set) {
+    if (set == NULL || set->len == 0) return 0;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (set->entries[i].key != 0) return 1;
+        }
+    }
+    return 0;
+}
+
+// all(set) - returns true if all elements are non-zero
+int64_t set_all(PySet* set) {
+    if (set == NULL) return 1;
+    if (set->len == 0) return 1;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (set->entries[i].key == 0) return 0;
+        }
+    }
+    return 1;
+}
+
+// any(str_set) - returns true if any string is non-empty
+int64_t str_set_any(PyStrSet* set) {
+    if (set == NULL || set->len == 0) return 0;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (set->entries[i].key != NULL && set->entries[i].key[0] != '\0') return 1;
+        }
+    }
+    return 0;
+}
+
+// all(str_set) - returns true if all strings are non-empty
+int64_t str_set_all(PyStrSet* set) {
+    if (set == NULL) return 1;
+    if (set->len == 0) return 1;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (set->entries[i].key == NULL || set->entries[i].key[0] == '\0') return 0;
+        }
+    }
+    return 1;
+}
+
+// repr(set) - returns string like "{1, 2, 3}"
+char* repr_set(PySet* set) {
+    if (set == NULL || set->len == 0) return strdup("set()");
+
+    // Estimate size
+    size_t est_size = set->len * 22 + 3;
+    char* result = (char*)malloc(est_size);
+    if (result == NULL) return NULL;
+
+    strcpy(result, "{");
+    char buf[32];
+    int first = 1;
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            if (!first) strcat(result, ", ");
+            first = 0;
+            snprintf(buf, sizeof(buf), "%lld", (long long)set->entries[i].key);
+            strcat(result, buf);
+        }
+    }
+    strcat(result, "}");
+    return result;
+}
+
+// ============================================================================
+// frozenset() constructor
+// Frozenset is just a set that's treated as immutable
+// ============================================================================
+
+// frozenset from string (unique character ordinals)
+PySet* frozenset_from_str(const char* s) {
+    if (s == NULL) return set_new();
+    PySet* result = set_new();
+    size_t len = strlen(s);
+    for (size_t i = 0; i < len; i++) {
+        set_add(result, (int64_t)(unsigned char)s[i]);
+    }
+    return result;
+}
+
+// frozenset from bytes (unique byte values)
+PySet* frozenset_from_bytes(const char* s) {
+    return frozenset_from_str(s);  // Same as string
+}
+
+// frozenset from list (unique elements)
+PySet* frozenset_from_list(void* list_ptr) {
+    // Cast to our PyList-like structure
+    typedef struct { int64_t len; int64_t capacity; int64_t* data; } PyListFS;
+    PyListFS* list = (PyListFS*)list_ptr;
+    if (list == NULL) return set_new();
+    PySet* result = set_new();
+    for (int64_t i = 0; i < list->len; i++) {
+        set_add(result, list->data[i]);
+    }
+    return result;
+}
+
+// frozenset from set (copy)
+PySet* frozenset_from_set(PySet* set) {
+    if (set == NULL) return set_new();
+    PySet* result = set_new();
+    for (int64_t i = 0; i < set->capacity; i++) {
+        if (set->entries[i].state == SET_OCCUPIED) {
+            set_add(result, set->entries[i].key);
+        }
+    }
+    return result;
+}
+
+// frozenset from dict (unique keys)
+PySet* frozenset_from_dict(void* dict_ptr) {
+    // Dict keys as set elements - simplified for int keys
+    typedef struct { int64_t key; int64_t value; uint8_t state; } DictEntryFS;
+    typedef struct { int64_t len; int64_t capacity; DictEntryFS* entries; } PyDictFS;
+    PyDictFS* dict = (PyDictFS*)dict_ptr;
+    if (dict == NULL) return set_new();
+    PySet* result = set_new();
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == 1) {  // DICT_OCCUPIED
+            set_add(result, dict->entries[i].key);
+        }
+    }
     return result;
 }

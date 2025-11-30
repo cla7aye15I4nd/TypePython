@@ -51,13 +51,28 @@ pub trait Visitor {
                 else_block,
             } => self.visit_if(condition, then_block, elif_clauses, else_block),
             Statement::While { condition, body } => self.visit_while(condition, body),
-            Statement::For { target, iter, body } => self.visit_for(target, iter, body),
+            Statement::For {
+                targets,
+                iter,
+                body,
+                else_block,
+            } => self.visit_for(targets, iter, body, else_block),
             Statement::Return(expr) => self.visit_return(expr.as_ref()),
             Statement::Break => self.visit_break(),
             Statement::Continue => self.visit_continue(),
             Statement::Pass => self.visit_pass(),
             Statement::Delete(target) => self.visit_delete(target),
             Statement::Expr(expr) => self.visit_expr_statement(expr),
+            Statement::Try {
+                body,
+                handlers,
+                else_block,
+                finally_block,
+            } => self.visit_try(body, handlers, else_block, finally_block),
+            Statement::Raise { exception, cause } => self.visit_raise(exception, cause),
+            Statement::Assert { test, msg } => self.visit_assert(test, msg),
+            Statement::Global { names } => self.visit_global(names),
+            Statement::Nonlocal { names } => self.visit_nonlocal(names),
         }
     }
 
@@ -100,12 +115,13 @@ pub trait Visitor {
         body: &[Statement],
     ) -> Result<(), Self::Error>;
 
-    /// Visit for statement
+    /// Visit for statement (targets can be single var or tuple unpacking)
     fn visit_for(
         &mut self,
-        target: &str,
+        targets: &[String],
         iter: &Expression,
         body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
     ) -> Result<(), Self::Error>;
 
     /// Visit return statement
@@ -125,4 +141,33 @@ pub trait Visitor {
 
     /// Visit expression statement
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error>;
+
+    /// Visit try statement
+    fn visit_try(
+        &mut self,
+        body: &[Statement],
+        handlers: &[ExceptHandler],
+        else_block: &Option<Vec<Statement>>,
+        finally_block: &Option<Vec<Statement>>,
+    ) -> Result<(), Self::Error>;
+
+    /// Visit raise statement
+    fn visit_raise(
+        &mut self,
+        exception: &Option<Expression>,
+        cause: &Option<Expression>,
+    ) -> Result<(), Self::Error>;
+
+    /// Visit assert statement
+    fn visit_assert(
+        &mut self,
+        test: &Expression,
+        msg: &Option<Expression>,
+    ) -> Result<(), Self::Error>;
+
+    /// Visit global statement
+    fn visit_global(&mut self, names: &[String]) -> Result<(), Self::Error>;
+
+    /// Visit nonlocal statement
+    fn visit_nonlocal(&mut self, names: &[String]) -> Result<(), Self::Error>;
 }

@@ -159,18 +159,18 @@ v156_bool_gt_float: bool = True > 1.0
 v157_bool_ge_float: bool = True >= 1.0
 v158_bool_is_float: bool = True is 1.0
 v159_bool_isnot_float: bool = True is not 1.0
-v160_bool_add_bool: bool = True + True
-v161_bool_sub_bool: bool = True - True
-v162_bool_mul_bool: bool = True * True
+v160_bool_add_bool: int = True + True
+v161_bool_sub_bool: int = True - True
+v162_bool_mul_bool: int = True * True
 v163_bool_div_bool: float = True / True
-v164_bool_floordiv_bool: bool = True // True
-v165_bool_mod_bool: bool = True % True
-v166_bool_pow_bool: bool = True ** True
+v164_bool_floordiv_bool: int = True // True
+v165_bool_mod_bool: int = True % True
+v166_bool_pow_bool: int = True ** True
 v167_bool_bitand_bool: bool = True & True
 v168_bool_bitor_bool: bool = True | True
 v169_bool_bitxor_bool: bool = True ^ True
-v170_bool_lshift_bool: bool = True << True
-v171_bool_rshift_bool: bool = True >> True
+v170_bool_lshift_bool: int = True << True
+v171_bool_rshift_bool: int = True >> True
 v172_bool_lt_bool: bool = True < True
 v173_bool_le_bool: bool = True <= True
 v174_bool_gt_bool: bool = True > True

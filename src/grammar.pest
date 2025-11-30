@@ -37,6 +37,17 @@ IMPORT   = { "import" ~ kw_boundary }
 FROM     = { "from" ~ kw_boundary }
 AS       = { "as" ~ kw_boundary }
 SELF     = { "self" ~ kw_boundary }
+// Exception handling keywords
+TRY      = { "try" ~ kw_boundary }
+EXCEPT   = { "except" ~ kw_boundary }
+FINALLY  = { "finally" ~ kw_boundary }
+RAISE    = { "raise" ~ kw_boundary }
+ASSERT   = { "assert" ~ kw_boundary }
+// Generator keyword
+YIELD    = { "yield" ~ kw_boundary }
+// Scope keywords
+GLOBAL   = { "global" ~ kw_boundary }
+NONLOCAL = { "nonlocal" ~ kw_boundary }
 
 // --- Type keywords (Updated with boundaries) ---
 INT_TYPE   = { "int" ~ kw_boundary }
@@ -49,6 +60,7 @@ LIST_TYPE  = { "list" ~ kw_boundary }
 DICT_TYPE  = { "dict" ~ kw_boundary }
 SET_TYPE   = { "set" ~ kw_boundary }
 TUPLE_TYPE = { "tuple" ~ kw_boundary }
+RANGE_TYPE = { "range" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 // Note: list, dict, set, int, float, bool, str are NOT keywords - they are builtin function names
@@ -56,7 +68,8 @@ TUPLE_TYPE = { "tuple" ~ kw_boundary }
 // The type syntax list[int], dict[k, v], set[t] is parsed specially in type contexts
 keyword = {
     IF | ELIF | ELSE | WHILE | FOR | IN | DEF | CLASS | RETURN | BREAK | CONTINUE | PASS |
-    DEL | AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF
+    DEL | AND | OR | NOT | IS | TRUE | FALSE | NONE | IMPORT | FROM | AS | SELF |
+    TRY | EXCEPT | FINALLY | RAISE | ASSERT | YIELD | GLOBAL | NONLOCAL
 }
 
 // Identifiers (must not be keywords)
@@ -157,10 +170,15 @@ statement = {
     | if_stmt
     | while_stmt
     | for_stmt
+    | try_stmt
+    | raise_stmt
+    | assert_stmt
     | return_stmt
     | break_stmt
     | continue_stmt
     | pass_stmt
+    | global_stmt
+    | nonlocal_stmt
     | expr_stmt
 }
 
@@ -173,6 +191,10 @@ break_stmt = { BREAK ~ NEWLINE }
 continue_stmt = { CONTINUE ~ NEWLINE }
 pass_stmt = { PASS ~ NEWLINE }
 del_stmt = { DEL ~ WS+ ~ target ~ NEWLINE }
+raise_stmt = { RAISE ~ (WS+ ~ expression ~ (WS+ ~ FROM ~ WS+ ~ expression)?)? ~ NEWLINE }
+assert_stmt = { ASSERT ~ WS+ ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)? ~ NEWLINE }
+global_stmt = { GLOBAL ~ WS+ ~ ID ~ (WS* ~ COMMA ~ WS* ~ ID)* ~ NEWLINE }
+nonlocal_stmt = { NONLOCAL ~ WS+ ~ ID ~ (WS* ~ COMMA ~ WS* ~ ID)* ~ NEWLINE }
 expr_stmt = { expression ~ NEWLINE }
 
 // Core statement forms
@@ -206,9 +228,33 @@ else_clause = { ELSE ~ WS* ~ COLON ~ NEWLINE ~ block }
 
 while_stmt = { WHILE ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block }
 
+// For statement supports single ID or tuple unpacking: for x in ..., for x, y in ...
+// Also supports optional else clause: for ... else: ...
+for_target = { ID ~ (WS* ~ COMMA ~ WS* ~ ID)* }
 for_stmt = {
-    FOR ~ WS+ ~ ID ~ WS+ ~ IN ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block
+    FOR ~ WS+ ~ for_target ~ WS+ ~ IN ~ WS+ ~ expression ~ WS* ~ COLON ~ NEWLINE ~ block ~ for_else_clause?
 }
+for_else_clause = { ELSE ~ WS* ~ COLON ~ NEWLINE ~ block }
+
+// Try-except-finally statement
+try_stmt = {
+    TRY ~ WS* ~ COLON ~ NEWLINE ~ block ~
+    except_clause* ~
+    else_clause? ~
+    finally_clause?
+}
+
+except_clause = {
+    EXCEPT ~ (WS+ ~ exception_spec ~ (WS+ ~ AS ~ WS+ ~ ID)?)? ~ WS* ~ COLON ~ NEWLINE ~ block
+}
+
+// Exception specification: single type, tuple of types, or nothing (bare except)
+exception_spec = {
+    LPAREN ~ WS* ~ ID ~ (WS* ~ COMMA ~ WS* ~ ID)* ~ WS* ~ RPAREN  // Multiple exceptions: (ValueError, TypeError)
+    | ID                                                           // Single exception: ValueError
+}
+
+finally_clause = { FINALLY ~ WS* ~ COLON ~ NEWLINE ~ block }
 
 // Block: INDENT, then statements (with optional blank lines between), then DEDENT
 block = { INDENT ~ NEWLINE* ~ (statement ~ NEWLINE*)+ ~ DEDENT }
@@ -246,7 +292,8 @@ method_decl = {
     DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ method_param_list? ~ WS* ~ RPAREN ~ WS* ~ method_return_type? ~ WS* ~ COLON ~ NEWLINE ~ block
 }
 
-method_param_list = { method_param ~ (WS* ~ COMMA ~ WS* ~ method_param)* }
+method_param_list = { self_param ~ (WS* ~ COMMA ~ WS* ~ method_param)* | method_param ~ (WS* ~ COMMA ~ WS* ~ method_param)* }
+self_param = { SELF ~ (WS* ~ COLON ~ WS* ~ type_spec)? }
 method_param = { ID ~ WS* ~ COLON ~ WS* ~ type_spec }
 
 method_return_type = { ARROW ~ WS* ~ type_spec }
@@ -270,22 +317,30 @@ basic_type = {
     | STR_TYPE
     | BYTES_TYPE
     | NONE_TYPE
+    | RANGE_TYPE
 }
 
 // Full type specification - generic types must come first due to how parsing works
+// ID allows class type references like Fibonacci, MyClass, etc.
 type_spec = {
     list_type
     | dict_type
     | set_type
     | tuple_type
     | basic_type
+    | ID
 }
 
 // ============================================================================
 // Expressions (Precedence from lowest to highest)
 // ============================================================================
 
-expression = { logic_or_expr }
+// Yield expression has lowest precedence
+expression = { yield_expr | logic_or_expr }
+
+// Yield expression: yield value or yield from iterable
+// Uses logic_or_expr to avoid left recursion
+yield_expr = { YIELD ~ (WS+ ~ FROM)? ~ (WS+ ~ logic_or_expr)? }
 
 // Logical OR (lowest precedence)
 logic_or_expr = { logic_and_expr ~ (WS+ ~ OR ~ WS+ ~ logic_and_expr)* }
@@ -359,6 +414,7 @@ atom = {
     | set_literal
     | dict_literal
     | tuple_literal
+    | SELF
     | ID
     | LPAREN ~ WS* ~ expression ~ WS* ~ RPAREN
 }
@@ -390,5 +446,5 @@ set_literal = {
 
 // Additional expression helpers
 // These are only used in assignment targets - they match postfix expressions that actually have subscript/attribute access
-subscript_expr = { ID ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
-attribute_expr = { ID ~ (WS* ~ DOT ~ WS* ~ ID)+ }
+subscript_expr = { (SELF | ID) ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+attribute_expr = { (SELF | ID) ~ (WS* ~ DOT ~ WS* ~ ID)+ }

@@ -268,6 +268,7 @@ fn parse_llvm_return_type(type_str: &str) -> String {
             "void" => return "void".to_string(),
             "i64" => return "i64".to_string(),
             "i32" => return "i32".to_string(),
+            "i8" => return "i8".to_string(),
             "double" => return "f64".to_string(),
             "float" => return "f32".to_string(),
             "i1" => return "bool".to_string(),
@@ -307,6 +308,7 @@ fn parse_llvm_params(params_str: &str) -> Vec<String> {
         let rust_type = match llvm_type {
             "i64" => "i64",
             "i32" => "i32",
+            "i8" => "i8",
             "double" => "f64",
             "float" => "f32",
             "i1" => "bool",
@@ -358,6 +360,7 @@ fn generate_rust_code(modules: &HashMap<String, Vec<BuiltinFunction>>) -> String
     code.push_str("    Void,\n");
     code.push_str("    I64,\n");
     code.push_str("    I32,\n");
+    code.push_str("    I8,\n");
     code.push_str("    F64,\n");
     code.push_str("    F32,\n");
     code.push_str("    Bool,\n");
@@ -422,6 +425,7 @@ fn type_to_enum(type_str: &str) -> &'static str {
         "void" => "BuiltinType::Void",
         "i64" => "BuiltinType::I64",
         "i32" => "BuiltinType::I32",
+        "i8" => "BuiltinType::I8",
         "f64" => "BuiltinType::F64",
         "f32" => "BuiltinType::F32",
         "bool" => "BuiltinType::Bool",

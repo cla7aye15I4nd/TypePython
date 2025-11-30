@@ -948,6 +948,15 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
+            PyType::Range => {
+                let len_fn = self.get_or_declare_c_builtin("range_len");
+                let call = self
+                    .cg
+                    .builder
+                    .build_call(len_fn, &[val.value().into()], "len")
+                    .unwrap();
+                Ok(self.extract_int_call_result(call))
+            }
             _ => Err(format!("len() not supported for type {:?}", val.ty())),
         }
     }
@@ -1740,6 +1749,16 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::List(key_type.clone()),
                     None,
                 ))
+            }
+            PyType::Range => {
+                let reversed_fn = self.get_or_declare_c_builtin("range_reversed");
+                let call = self
+                    .cg
+                    .builder
+                    .build_call(reversed_fn, &[val.value().into()], "reversed")
+                    .unwrap();
+                let result = self.extract_ptr_call_result(call);
+                Ok(PyValue::new(result.value(), PyType::Range, None))
             }
             _ => Err(format!("reversed() not supported for type {:?}", val.ty())),
         }

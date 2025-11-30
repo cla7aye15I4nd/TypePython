@@ -524,6 +524,62 @@ PyStrDict* str_dict_merge(PyStrDict* dict1, PyStrDict* dict2) {
     return result;
 }
 
+// Get a value with default: dict.get(key, default)
+int64_t str_dict_get(PyStrDict* dict, const char* key, int64_t default_value) {
+    if (dict == NULL) return default_value;
+    int64_t slot = str_dict_find_slot(dict, key, 0);
+    if (slot < 0) return default_value;
+    return dict->entries[slot].value;
+}
+
+// Pop a value: dict.pop(key) - removes and returns the value
+int64_t str_dict_pop(PyStrDict* dict, const char* key) {
+    if (dict == NULL) return 0;
+    int64_t slot = str_dict_find_slot(dict, key, 0);
+    if (slot < 0) return 0;
+    int64_t value = dict->entries[slot].value;
+    free(dict->entries[slot].key);
+    dict->entries[slot].key = NULL;
+    dict->entries[slot].state = DICT_DELETED;
+    dict->len--;
+    return value;
+}
+
+// Clear all entries: dict.clear()
+void str_dict_clear(PyStrDict* dict) {
+    if (dict == NULL) return;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            free(dict->entries[i].key);
+            dict->entries[i].key = NULL;
+            dict->entries[i].state = DICT_EMPTY;
+        }
+    }
+    dict->len = 0;
+}
+
+// Update with another dict: dict.update(other)
+void str_dict_update(PyStrDict* dict, PyStrDict* other) {
+    if (dict == NULL || other == NULL) return;
+    for (int64_t i = 0; i < other->capacity; i++) {
+        if (other->entries[i].state == DICT_OCCUPIED) {
+            str_dict_setitem(dict, other->entries[i].key, other->entries[i].value);
+        }
+    }
+}
+
+// Set default: dict.setdefault(key, default) - insert if not present
+int64_t str_dict_setdefault(PyStrDict* dict, const char* key, int64_t default_value) {
+    if (dict == NULL) return default_value;
+    int64_t slot = str_dict_find_slot(dict, key, 0);
+    if (slot >= 0) {
+        return dict->entries[slot].value;
+    }
+    // Key not found, insert default
+    str_dict_setitem(dict, key, default_value);
+    return default_value;
+}
+
 void print_str_dict(PyStrDict* dict) {
     printf("{");
     if (dict != NULL) {
@@ -615,5 +671,325 @@ PyListDict* dict_reversed(PyDict* dict) {
         result->data[j - 1 - i] = tmp;
     }
 
+    return result;
+}
+
+// ============================================================================
+// Dict Iteration Support
+// ============================================================================
+
+typedef struct {
+    PyDict* dict;
+    int64_t slot_index;  // Current slot being checked
+} DictIterator;
+
+// Create a new iterator for the dict (iterates over keys)
+DictIterator* dict_iter(PyDict* dict) {
+    DictIterator* iter = (DictIterator*)malloc(sizeof(DictIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Get next key (returns 1 if has more, 0 if done)
+// Output key is stored in *out
+int64_t dict_iter_next(DictIterator* iter, int64_t* out) {
+    if (iter == NULL || iter->dict == NULL) return 0;
+
+    // Find next occupied slot
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            *out = iter->dict->entries[iter->slot_index].key;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+// Free the iterator
+void dict_iter_free(DictIterator* iter) {
+    free(iter);
+}
+
+// ============================================================================
+// Dict keys(), values(), items() View Iterators
+// ============================================================================
+
+// Keys iterator (same as dict_iter, but named differently for method call)
+DictIterator* dict_keys(PyDict* dict) {
+    return dict_iter(dict);
+}
+
+// Values iterator
+typedef struct {
+    PyDict* dict;
+    int64_t slot_index;
+} DictValuesIterator;
+
+DictValuesIterator* dict_values(PyDict* dict) {
+    DictValuesIterator* iter = (DictValuesIterator*)malloc(sizeof(DictValuesIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Get next value (returns 1 if has more, 0 if done)
+int64_t dict_values_next(DictValuesIterator* iter, int64_t* out) {
+    if (iter == NULL || iter->dict == NULL) return 0;
+
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            *out = iter->dict->entries[iter->slot_index].value;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+void dict_values_free(DictValuesIterator* iter) {
+    free(iter);
+}
+
+// Items iterator - returns key/value pairs
+typedef struct {
+    PyDict* dict;
+    int64_t slot_index;
+} DictItemsIterator;
+
+DictItemsIterator* dict_items(PyDict* dict) {
+    DictItemsIterator* iter = (DictItemsIterator*)malloc(sizeof(DictItemsIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Get next (key, value) pair. Returns 1 if has more, 0 if done.
+// key is returned via *key_out, value via *value_out
+int64_t dict_items_next(DictItemsIterator* iter, int64_t* key_out, int64_t* value_out) {
+    if (iter == NULL || iter->dict == NULL) return 0;
+
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            *key_out = iter->dict->entries[iter->slot_index].key;
+            *value_out = iter->dict->entries[iter->slot_index].value;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+void dict_items_free(DictItemsIterator* iter) {
+    free(iter);
+}
+
+// ============================================================================
+// String Dict keys(), values(), items() View Iterators
+// ============================================================================
+
+// String dict keys iterator
+typedef struct {
+    PyStrDict* dict;
+    int64_t slot_index;
+} StrDictIterator;
+
+StrDictIterator* str_dict_keys(PyStrDict* dict) {
+    StrDictIterator* iter = (StrDictIterator*)malloc(sizeof(StrDictIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Also use for str_dict_iter
+StrDictIterator* str_dict_iter(PyStrDict* dict) {
+    return str_dict_keys(dict);
+}
+
+// Get next key (returns char*, or NULL if done)
+char* str_dict_keys_next(StrDictIterator* iter, int8_t* exhausted) {
+    if (iter == NULL || iter->dict == NULL) {
+        *exhausted = 1;
+        return NULL;
+    }
+
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            char* key = iter->dict->entries[iter->slot_index].key;
+            iter->slot_index++;
+            *exhausted = 0;
+            return key;
+        }
+        iter->slot_index++;
+    }
+    *exhausted = 1;
+    return NULL;
+}
+
+void str_dict_keys_free(StrDictIterator* iter) {
+    free(iter);
+}
+
+// String dict values iterator
+typedef struct {
+    PyStrDict* dict;
+    int64_t slot_index;
+} StrDictValuesIterator;
+
+StrDictValuesIterator* str_dict_values(PyStrDict* dict) {
+    StrDictValuesIterator* iter = (StrDictValuesIterator*)malloc(sizeof(StrDictValuesIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+int64_t str_dict_values_next(StrDictValuesIterator* iter, int64_t* out) {
+    if (iter == NULL || iter->dict == NULL) return 0;
+
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            *out = iter->dict->entries[iter->slot_index].value;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+void str_dict_values_free(StrDictValuesIterator* iter) {
+    free(iter);
+}
+
+// String dict items iterator
+typedef struct {
+    PyStrDict* dict;
+    int64_t slot_index;
+} StrDictItemsIterator;
+
+StrDictItemsIterator* str_dict_items(PyStrDict* dict) {
+    StrDictItemsIterator* iter = (StrDictItemsIterator*)malloc(sizeof(StrDictItemsIterator));
+    if (iter == NULL) return NULL;
+    iter->dict = dict;
+    iter->slot_index = 0;
+    return iter;
+}
+
+// Get next (key, value) pair. Returns 1 if has more, 0 if done.
+// key is returned via *key_out (char*), value via *value_out (int64_t)
+int64_t str_dict_items_next(StrDictItemsIterator* iter, char** key_out, int64_t* value_out) {
+    if (iter == NULL || iter->dict == NULL) return 0;
+
+    while (iter->slot_index < iter->dict->capacity) {
+        if (iter->dict->entries[iter->slot_index].state == DICT_OCCUPIED) {
+            *key_out = iter->dict->entries[iter->slot_index].key;
+            *value_out = iter->dict->entries[iter->slot_index].value;
+            iter->slot_index++;
+            return 1;
+        }
+        iter->slot_index++;
+    }
+    return 0;
+}
+
+void str_dict_items_free(StrDictItemsIterator* iter) {
+    free(iter);
+}
+
+// ============================================================================
+// any() and all() builtins for dicts
+// ============================================================================
+
+// Forward declaration for int dict structure
+typedef struct {
+    int64_t key;
+    int64_t value;
+    uint8_t state;
+} IntDictEntry;
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    IntDictEntry* entries;
+} PyIntDict;
+
+// any(dict) - returns true if any key is non-zero (for int-keyed dicts)
+int64_t dict_any(PyIntDict* dict) {
+    if (dict == NULL || dict->len == 0) return 0;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (dict->entries[i].key != 0) return 1;
+        }
+    }
+    return 0;
+}
+
+// all(dict) - returns true if all keys are non-zero (for int-keyed dicts)
+int64_t dict_all(PyIntDict* dict) {
+    if (dict == NULL) return 1;
+    if (dict->len == 0) return 1;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (dict->entries[i].key == 0) return 0;
+        }
+    }
+    return 1;
+}
+
+// any(str_dict) - returns true if any key is non-empty
+int64_t str_dict_any(PyStrDict* dict) {
+    if (dict == NULL || dict->len == 0) return 0;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (dict->entries[i].key != NULL && dict->entries[i].key[0] != '\0') return 1;
+        }
+    }
+    return 0;
+}
+
+// all(str_dict) - returns true if all keys are non-empty
+int64_t str_dict_all(PyStrDict* dict) {
+    if (dict == NULL) return 1;
+    if (dict->len == 0) return 1;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (dict->entries[i].key == NULL || dict->entries[i].key[0] == '\0') return 0;
+        }
+    }
+    return 1;
+}
+
+// repr(dict) - returns string like "{'a': 1}"
+char* repr_str_dict(PyStrDict* dict) {
+    if (dict == NULL || dict->len == 0) return strdup("{}");
+
+    // Estimate size
+    size_t est_size = dict->len * 50 + 3;
+    char* result = (char*)malloc(est_size);
+    if (result == NULL) return NULL;
+
+    strcpy(result, "{");
+    char buf[64];
+    int first = 1;
+    for (int64_t i = 0; i < dict->capacity; i++) {
+        if (dict->entries[i].state == DICT_OCCUPIED) {
+            if (!first) strcat(result, ", ");
+            first = 0;
+            snprintf(buf, sizeof(buf), "'%s': %lld",
+                     dict->entries[i].key ? dict->entries[i].key : "",
+                     (long long)dict->entries[i].value);
+            strcat(result, buf);
+        }
+    }
+    strcat(result, "}");
     return result;
 }

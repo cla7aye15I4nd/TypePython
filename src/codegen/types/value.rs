@@ -73,6 +73,27 @@ pub enum PyType {
     Function,
     Module,
     Macro,
+    // Exception and generator types
+    Exception,              // Exception object
+    Generator(Box<PyType>), // Generator yielding type T
+    // Iterator types for builtins
+    EnumerateIter(EnumerateSource, Box<PyType>), // enumerate() iterator yielding (int, T)
+    ZipIter(Vec<PyType>),                        // zip() iterator yielding tuple of element types
+    FilterIter(Box<PyType>),                     // filter() iterator yielding T
+    GenericIter(Box<PyType>),                    // iter() returns an iterator yielding T
+    RangeIter,                                   // range iterator yielding Int
+    // Dict view iterators
+    DictKeysIter(Box<PyType>),   // dict.keys() iterator yielding key type
+    DictValuesIter(Box<PyType>), // dict.values() iterator yielding value type
+    DictItemsIter(Box<PyType>, Box<PyType>), // dict.items() iterator yielding (key, value) tuples
+}
+
+/// Source type for enumerate iterator - determines which C functions to use
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnumerateSource {
+    List,  // enumerate(list) - uses enumerate_list/enumerate_list_next
+    Str,   // enumerate(str) - uses enumerate_str/enumerate_str_next
+    Bytes, // enumerate(bytes) - uses enumerate_bytes/enumerate_bytes_next
 }
 
 impl PyType {
@@ -85,6 +106,7 @@ impl PyType {
             Type::Bytes => Ok(PyType::Bytes),
             Type::Str => Ok(PyType::Str),
             Type::None => Ok(PyType::None),
+            Type::Range => Ok(PyType::Range),
             Type::List(elem) => Ok(PyType::List(Box::new(PyType::from_ast_type(elem)?))),
             Type::Dict(k, v) => Ok(PyType::Dict(
                 Box::new(PyType::from_ast_type(k)?),
@@ -113,7 +135,17 @@ impl PyType {
             | PyType::Set(_)
             | PyType::Tuple(_)
             | PyType::Range
-            | PyType::Instance(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            | PyType::Instance(_)
+            | PyType::Exception
+            | PyType::Generator(_)
+            | PyType::EnumerateIter(_, _)
+            | PyType::ZipIter(_)
+            | PyType::FilterIter(_)
+            | PyType::GenericIter(_)
+            | PyType::RangeIter
+            | PyType::DictKeysIter(_)
+            | PyType::DictValuesIter(_)
+            | PyType::DictItemsIter(_, _) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
             PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
         }
     }
@@ -183,68 +215,238 @@ impl PyType {
                 "isupper" => Some(("str_isupper", PyType::Bool)),
                 // Transform - return str
                 "replace" => Some(("str_replace", PyType::Str)),
+                // Split - return list[str]
+                "split" => Some(("str_split", PyType::List(Box::new(PyType::Str)))),
+                // Join - return str (takes list[str] as argument)
+                "join" => Some(("str_list_join", PyType::Str)),
                 _ => None,
             },
-            PyType::List(elem_type) => match name {
-                // Mutating methods that return None
-                "append" => Some(("list_append", PyType::None)),
-                "insert" => Some(("list_insert", PyType::None)),
-                "extend" => Some(("list_extend", PyType::None)),
-                "remove" => Some(("list_remove", PyType::None)),
-                "clear" => Some(("list_clear", PyType::None)),
-                "reverse" => Some(("list_reverse", PyType::None)),
-                "sort" => Some(("list_sort", PyType::None)),
-                // Methods returning values
-                "pop" => Some(("list_pop", elem_type.as_ref().clone())),
-                "index" => Some(("list_index", PyType::Int)),
-                "count" => Some(("list_count", PyType::Int)),
-                // Methods returning new list
-                "copy" => Some(("list_copy", PyType::List(elem_type.clone()))),
-                _ => None,
-            },
-            PyType::Set(elem_type) => match name {
-                // Void methods (mutating in-place)
-                "add" => Some(("set_add", PyType::None)),
-                "remove" => Some(("set_remove", PyType::None)),
-                "discard" => Some(("set_discard", PyType::None)),
-                "clear" => Some(("set_clear", PyType::None)),
-                "update" => Some(("set_update", PyType::None)),
-                "difference_update" => Some(("set_difference_update", PyType::None)),
-                "intersection_update" => Some(("set_intersection_update", PyType::None)),
-                "symmetric_difference_update" => {
-                    Some(("set_symmetric_difference_update", PyType::None))
+            PyType::List(elem_type) => {
+                // Select the appropriate function based on element type
+                let type_prefix = match elem_type.as_ref() {
+                    PyType::Str => "str_list",
+                    PyType::Float => "float_list",
+                    PyType::Bool => "bool_list",
+                    _ => "list",
+                };
+                match name {
+                    // Mutating methods that return None
+                    "append" => Some((
+                        match type_prefix {
+                            "str_list" => "str_list_append",
+                            "float_list" => "float_list_append",
+                            "bool_list" => "bool_list_append",
+                            _ => "list_append",
+                        },
+                        PyType::None,
+                    )),
+                    "insert" => Some(("list_insert", PyType::None)),
+                    "extend" => Some(("list_extend", PyType::None)),
+                    "remove" => Some(("list_remove", PyType::None)),
+                    "clear" => Some((
+                        match type_prefix {
+                            "str_list" => "str_list_clear",
+                            "float_list" => "float_list_clear",
+                            "bool_list" => "bool_list_clear",
+                            _ => "list_clear",
+                        },
+                        PyType::None,
+                    )),
+                    "reverse" => Some(("list_reverse", PyType::None)),
+                    "sort" => Some(("list_sort", PyType::None)),
+                    // Methods returning values
+                    "pop" => Some((
+                        match type_prefix {
+                            "str_list" => "str_list_pop",
+                            "float_list" => "float_list_pop",
+                            "bool_list" => "bool_list_pop",
+                            _ => "list_pop",
+                        },
+                        elem_type.as_ref().clone(),
+                    )),
+                    "index" => Some(("list_index", PyType::Int)),
+                    "count" => Some(("list_count", PyType::Int)),
+                    // Methods returning new list
+                    "copy" => Some((
+                        match type_prefix {
+                            "str_list" => "str_list_copy",
+                            "float_list" => "float_list_copy",
+                            "bool_list" => "bool_list_copy",
+                            _ => "list_copy",
+                        },
+                        PyType::List(elem_type.clone()),
+                    )),
+                    _ => None,
                 }
-                // Methods returning an element
-                "pop" => Some(("set_pop", elem_type.as_ref().clone())),
-                // Methods returning new set
-                "copy" => Some(("set_copy", PyType::Set(elem_type.clone()))),
-                "union" => Some(("set_union", PyType::Set(elem_type.clone()))),
-                "intersection" => Some(("set_intersection", PyType::Set(elem_type.clone()))),
-                "difference" => Some(("set_difference", PyType::Set(elem_type.clone()))),
-                "symmetric_difference" => {
-                    Some(("set_symmetric_difference", PyType::Set(elem_type.clone())))
+            }
+            PyType::Set(elem_type) => {
+                // Select the appropriate function based on element type
+                let type_prefix = match elem_type.as_ref() {
+                    PyType::Str => "str_set",
+                    PyType::Float => "float_set",
+                    PyType::Bool => "bool_set",
+                    _ => "set",
+                };
+                match name {
+                    // Void methods (mutating in-place)
+                    "add" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_add",
+                            "float_set" => "float_set_add",
+                            "bool_set" => "bool_set_add",
+                            _ => "set_add",
+                        },
+                        PyType::None,
+                    )),
+                    "remove" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_remove",
+                            "float_set" => "float_set_remove",
+                            "bool_set" => "bool_set_remove",
+                            _ => "set_remove",
+                        },
+                        PyType::None,
+                    )),
+                    "discard" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_discard",
+                            "float_set" => "float_set_discard",
+                            "bool_set" => "bool_set_discard",
+                            _ => "set_discard",
+                        },
+                        PyType::None,
+                    )),
+                    "clear" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_clear",
+                            "float_set" => "float_set_clear",
+                            "bool_set" => "bool_set_clear",
+                            _ => "set_clear",
+                        },
+                        PyType::None,
+                    )),
+                    "update" => Some(("set_update", PyType::None)),
+                    "difference_update" => Some(("set_difference_update", PyType::None)),
+                    "intersection_update" => Some(("set_intersection_update", PyType::None)),
+                    "symmetric_difference_update" => {
+                        Some(("set_symmetric_difference_update", PyType::None))
+                    }
+                    // Methods returning an element
+                    "pop" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_pop",
+                            "float_set" => "float_set_pop",
+                            "bool_set" => "bool_set_pop",
+                            _ => "set_pop",
+                        },
+                        elem_type.as_ref().clone(),
+                    )),
+                    // Methods returning new set
+                    "copy" => Some((
+                        match type_prefix {
+                            "str_set" => "str_set_copy",
+                            "float_set" => "float_set_copy",
+                            "bool_set" => "bool_set_copy",
+                            _ => "set_copy",
+                        },
+                        PyType::Set(elem_type.clone()),
+                    )),
+                    "union" => Some(("set_union", PyType::Set(elem_type.clone()))),
+                    "intersection" => Some(("set_intersection", PyType::Set(elem_type.clone()))),
+                    "difference" => Some(("set_difference", PyType::Set(elem_type.clone()))),
+                    "symmetric_difference" => {
+                        Some(("set_symmetric_difference", PyType::Set(elem_type.clone())))
+                    }
+                    // Methods returning bool
+                    "issubset" => Some(("set_issubset", PyType::Bool)),
+                    "issuperset" => Some(("set_issuperset", PyType::Bool)),
+                    "isdisjoint" => Some(("set_isdisjoint", PyType::Bool)),
+                    _ => None,
                 }
-                // Methods returning bool
-                "issubset" => Some(("set_issubset", PyType::Bool)),
-                "issuperset" => Some(("set_issuperset", PyType::Bool)),
-                "isdisjoint" => Some(("set_isdisjoint", PyType::Bool)),
-                _ => None,
-            },
-            PyType::Dict(key_type, val_type) => match name {
-                // Methods returning values
-                "get" => Some(("dict_get", val_type.as_ref().clone())),
-                "pop" => Some(("dict_pop", val_type.as_ref().clone())),
-                "setdefault" => Some(("dict_setdefault", val_type.as_ref().clone())),
-                // Void methods
-                "clear" => Some(("dict_clear", PyType::None)),
-                "update" => Some(("dict_update", PyType::None)),
-                // Methods returning new dict
-                "copy" => Some((
-                    "dict_copy",
-                    PyType::Dict(key_type.clone(), val_type.clone()),
-                )),
-                _ => None,
-            },
+            }
+            PyType::Dict(key_type, val_type) => {
+                // Select the appropriate function based on key type
+                let is_str_keyed = matches!(key_type.as_ref(), PyType::Str);
+                match name {
+                    // Methods returning values - different C functions for str vs int keys
+                    "get" => Some((
+                        if is_str_keyed {
+                            "str_dict_get"
+                        } else {
+                            "dict_get"
+                        },
+                        val_type.as_ref().clone(),
+                    )),
+                    "pop" => Some((
+                        if is_str_keyed {
+                            "str_dict_pop"
+                        } else {
+                            "dict_pop"
+                        },
+                        val_type.as_ref().clone(),
+                    )),
+                    "setdefault" => Some((
+                        if is_str_keyed {
+                            "str_dict_setdefault"
+                        } else {
+                            "dict_setdefault"
+                        },
+                        val_type.as_ref().clone(),
+                    )),
+                    // Void methods
+                    "clear" => Some((
+                        if is_str_keyed {
+                            "str_dict_clear"
+                        } else {
+                            "dict_clear"
+                        },
+                        PyType::None,
+                    )),
+                    "update" => Some((
+                        if is_str_keyed {
+                            "str_dict_update"
+                        } else {
+                            "dict_update"
+                        },
+                        PyType::None,
+                    )),
+                    // Methods returning new dict
+                    "copy" => Some((
+                        if is_str_keyed {
+                            "str_dict_copy"
+                        } else {
+                            "dict_copy"
+                        },
+                        PyType::Dict(key_type.clone(), val_type.clone()),
+                    )),
+                    // View methods returning iterators
+                    "keys" => Some((
+                        if is_str_keyed {
+                            "str_dict_keys"
+                        } else {
+                            "dict_keys"
+                        },
+                        PyType::DictKeysIter(key_type.clone()),
+                    )),
+                    "values" => Some((
+                        if is_str_keyed {
+                            "str_dict_values"
+                        } else {
+                            "dict_values"
+                        },
+                        PyType::DictValuesIter(val_type.clone()),
+                    )),
+                    "items" => Some((
+                        if is_str_keyed {
+                            "str_dict_items"
+                        } else {
+                            "dict_items"
+                        },
+                        PyType::DictItemsIter(key_type.clone(), val_type.clone()),
+                    )),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }
@@ -395,6 +597,19 @@ pub enum MacroKind {
     Sorted,
     Reversed,
     Divmod,
+    Any,
+    All,
+    Tuple,
+    Enumerate,
+    Zip,
+    Filter,
+    Iter,
+    Next,
+    Id,
+    Repr,
+    Frozenset,
+    Getattr,
+    Hasattr,
 }
 
 // ============================================================================
@@ -421,6 +636,18 @@ pub enum PyValue<'ctx> {
     Range(PtrStorage<'ctx>),
     // Instance of a class
     Instance(PtrStorage<'ctx>, String), // pointer to instance, class name
+    // Generator type
+    Generator(PtrStorage<'ctx>, Box<PyType>), // pointer to generator, yield type
+    // Iterator types for builtins
+    EnumerateIter(PtrStorage<'ctx>, EnumerateSource, Box<PyType>), // enumerate iterator with source type
+    ZipIter(PtrStorage<'ctx>, Vec<PyType>),                        // zip iterator
+    FilterIter(PtrStorage<'ctx>, Box<PyType>),                     // filter iterator
+    GenericIter(PtrStorage<'ctx>, Box<PyType>),                    // generic iterator from iter()
+    RangeIter(PtrStorage<'ctx>),                                   // range iterator yielding Int
+    // Dict view iterators
+    DictKeysIter(PtrStorage<'ctx>, Box<PyType>), // dict.keys() iterator
+    DictValuesIter(PtrStorage<'ctx>, Box<PyType>), // dict.values() iterator
+    DictItemsIter(PtrStorage<'ctx>, Box<PyType>, Box<PyType>), // dict.items() iterator
     // Compile-time types
     Function(FunctionInfo<'ctx>),
     Module(ModuleInfo<'ctx>),
@@ -513,6 +740,61 @@ impl<'ctx> PyValue<'ctx> {
             (PyType::Instance(class_name), None) => {
                 PyValue::Instance(PtrStorage::Direct(value.into_pointer_value()), class_name)
             }
+            (PyType::Exception, Some(p)) => {
+                PyValue::Instance(PtrStorage::Alloca(p), "Exception".to_string())
+            }
+            (PyType::Exception, None) => PyValue::Instance(
+                PtrStorage::Direct(value.into_pointer_value()),
+                "Exception".to_string(),
+            ),
+            (PyType::Generator(elem), Some(p)) => PyValue::Generator(PtrStorage::Alloca(p), elem),
+            (PyType::Generator(elem), None) => {
+                PyValue::Generator(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::EnumerateIter(src, elem), Some(p)) => {
+                PyValue::EnumerateIter(PtrStorage::Alloca(p), src, elem)
+            }
+            (PyType::EnumerateIter(src, elem), None) => {
+                PyValue::EnumerateIter(PtrStorage::Direct(value.into_pointer_value()), src, elem)
+            }
+            (PyType::ZipIter(elem), Some(p)) => PyValue::ZipIter(PtrStorage::Alloca(p), elem),
+            (PyType::ZipIter(elem), None) => {
+                PyValue::ZipIter(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::FilterIter(elem), Some(p)) => PyValue::FilterIter(PtrStorage::Alloca(p), elem),
+            (PyType::FilterIter(elem), None) => {
+                PyValue::FilterIter(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::GenericIter(elem), Some(p)) => {
+                PyValue::GenericIter(PtrStorage::Alloca(p), elem)
+            }
+            (PyType::GenericIter(elem), None) => {
+                PyValue::GenericIter(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::RangeIter, Some(p)) => PyValue::RangeIter(PtrStorage::Alloca(p)),
+            (PyType::RangeIter, None) => {
+                PyValue::RangeIter(PtrStorage::Direct(value.into_pointer_value()))
+            }
+            (PyType::DictKeysIter(key_ty), Some(p)) => {
+                PyValue::DictKeysIter(PtrStorage::Alloca(p), key_ty)
+            }
+            (PyType::DictKeysIter(key_ty), None) => {
+                PyValue::DictKeysIter(PtrStorage::Direct(value.into_pointer_value()), key_ty)
+            }
+            (PyType::DictValuesIter(val_ty), Some(p)) => {
+                PyValue::DictValuesIter(PtrStorage::Alloca(p), val_ty)
+            }
+            (PyType::DictValuesIter(val_ty), None) => {
+                PyValue::DictValuesIter(PtrStorage::Direct(value.into_pointer_value()), val_ty)
+            }
+            (PyType::DictItemsIter(key_ty, val_ty), Some(p)) => {
+                PyValue::DictItemsIter(PtrStorage::Alloca(p), key_ty, val_ty)
+            }
+            (PyType::DictItemsIter(key_ty, val_ty), None) => PyValue::DictItemsIter(
+                PtrStorage::Direct(value.into_pointer_value()),
+                key_ty,
+                val_ty,
+            ),
             (PyType::Function, _) | (PyType::Module, _) | (PyType::Macro, _) => {
                 panic!("Use specific constructors for Function/Module/Macro")
             }
@@ -538,6 +820,19 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Tuple(_, elem) => PyType::Tuple(elem.clone()),
             PyValue::Range(_) => PyType::Range,
             PyValue::Instance(_, class_name) => PyType::Instance(class_name.clone()),
+            PyValue::Generator(_, elem) => PyType::Generator(elem.clone()),
+            PyValue::EnumerateIter(_, src, elem) => {
+                PyType::EnumerateIter(src.clone(), elem.clone())
+            }
+            PyValue::ZipIter(_, elem) => PyType::ZipIter(elem.clone()),
+            PyValue::FilterIter(_, elem) => PyType::FilterIter(elem.clone()),
+            PyValue::GenericIter(_, elem) => PyType::GenericIter(elem.clone()),
+            PyValue::RangeIter(_) => PyType::RangeIter,
+            PyValue::DictKeysIter(_, key_ty) => PyType::DictKeysIter(key_ty.clone()),
+            PyValue::DictValuesIter(_, val_ty) => PyType::DictValuesIter(val_ty.clone()),
+            PyValue::DictItemsIter(_, key_ty, val_ty) => {
+                PyType::DictItemsIter(key_ty.clone(), val_ty.clone())
+            }
             PyValue::Function(_) => PyType::Function,
             PyValue::Module(_) => PyType::Module,
             PyValue::Macro(_) => PyType::Macro,
@@ -578,6 +873,24 @@ impl<'ctx> PyValue<'ctx> {
             }
             PyValue::Instance(PtrStorage::Direct(v), _)
             | PyValue::Instance(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::Generator(PtrStorage::Direct(v), _)
+            | PyValue::Generator(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::EnumerateIter(PtrStorage::Direct(v), _, _)
+            | PyValue::EnumerateIter(PtrStorage::Alloca(v), _, _) => (*v).into(),
+            PyValue::ZipIter(PtrStorage::Direct(v), _)
+            | PyValue::ZipIter(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::FilterIter(PtrStorage::Direct(v), _)
+            | PyValue::FilterIter(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::GenericIter(PtrStorage::Direct(v), _)
+            | PyValue::GenericIter(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::RangeIter(PtrStorage::Direct(v))
+            | PyValue::RangeIter(PtrStorage::Alloca(v)) => (*v).into(),
+            PyValue::DictKeysIter(PtrStorage::Direct(v), _)
+            | PyValue::DictKeysIter(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::DictValuesIter(PtrStorage::Direct(v), _)
+            | PyValue::DictValuesIter(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::DictItemsIter(PtrStorage::Direct(v), _, _)
+            | PyValue::DictItemsIter(PtrStorage::Alloca(v), _, _) => (*v).into(),
             PyValue::Function(_) => {
                 // Functions don't have a direct LLVM value - use get_or_declare to call them
                 panic!("Function has no direct LLVM value - use get_or_declare to call it")
@@ -721,6 +1034,20 @@ impl<'ctx> PyValue<'ctx> {
                     .into_pointer_value();
                 PyValue::Tuple(PtrStorage::Direct(loaded), elem.clone())
             }
+            PyValue::Range(PtrStorage::Alloca(alloca)) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Range(PtrStorage::Direct(loaded))
+            }
+            PyValue::RangeIter(PtrStorage::Alloca(alloca)) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::RangeIter(PtrStorage::Direct(loaded))
+            }
             // Non-pointer types just return a clone
             _ => self.clone(),
         }
@@ -780,6 +1107,19 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Instance(_, _) => {
                 Err("Binary operations not supported on instances".to_string())
             }
+            PyValue::Generator(_, _) => {
+                Err("Binary operations not supported on generators".to_string())
+            }
+            PyValue::EnumerateIter(_, _, _)
+            | PyValue::ZipIter(_, _)
+            | PyValue::FilterIter(_, _)
+            | PyValue::GenericIter(_, _)
+            | PyValue::RangeIter(_)
+            | PyValue::DictKeysIter(_, _)
+            | PyValue::DictValuesIter(_, _)
+            | PyValue::DictItemsIter(_, _, _) => {
+                Err("Binary operations not supported on iterators".to_string())
+            }
             PyValue::Function(_) => Err("Binary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Binary operations not supported on modules".to_string()),
             PyValue::Macro(_) => Err("Binary operations not supported on macros".to_string()),
@@ -802,9 +1142,33 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, _, _) => super::dict_ops::unary_op(self, cg, op),
             PyValue::Set(_, _) => super::set_ops::unary_op(self, cg, op),
             PyValue::Tuple(_, _) => Err(format!("Unary operator {:?} not supported on tuple", op)),
-            PyValue::Range(_) => Err(format!("Unary operator {:?} not supported on range", op)),
+            PyValue::Range(_) => {
+                match op {
+                    UnaryOp::Not => {
+                        // not range: true if range is empty, false otherwise
+                        let bool_val = cg.value_to_bool(self);
+                        let negated = cg.builder.build_not(bool_val, "not_range").unwrap();
+                        Ok(PyValue::bool(negated))
+                    }
+                    _ => Err(format!("Unary operator {:?} not supported on range", op)),
+                }
+            }
             PyValue::Instance(_, _) => {
                 Err(format!("Unary operator {:?} not supported on instance", op))
+            }
+            PyValue::Generator(_, _) => Err(format!(
+                "Unary operator {:?} not supported on generator",
+                op
+            )),
+            PyValue::EnumerateIter(_, _, _)
+            | PyValue::ZipIter(_, _)
+            | PyValue::FilterIter(_, _)
+            | PyValue::GenericIter(_, _)
+            | PyValue::RangeIter(_)
+            | PyValue::DictKeysIter(_, _)
+            | PyValue::DictValuesIter(_, _)
+            | PyValue::DictItemsIter(_, _, _) => {
+                Err(format!("Unary operator {:?} not supported on iterator", op))
             }
             PyValue::Function(_) => Err("Unary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Unary operations not supported on modules".to_string()),
@@ -983,10 +1347,43 @@ impl<'ctx> CgCtx<'ctx> {
                     .unwrap()
             }
             PyValue::Tuple(_, _) => self.ctx.bool_type().const_int(1, false),
-            // Range is always truthy (even empty ranges are valid objects)
-            PyValue::Range(_) => self.ctx.bool_type().const_int(1, false),
+            // Range is truthy if it has at least one element
+            PyValue::Range(PtrStorage::Direct(v)) | PyValue::Range(PtrStorage::Alloca(v)) => {
+                // Need to load from alloca if necessary
+                let range_ptr = match val {
+                    PyValue::Range(PtrStorage::Alloca(alloca)) => {
+                        let ptr_type = self.ctx.ptr_type(inkwell::AddressSpace::default());
+                        self.builder
+                            .build_load(ptr_type, *alloca, "range_load")
+                            .unwrap()
+                            .into_pointer_value()
+                    }
+                    _ => *v,
+                };
+                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "range_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[range_ptr.into()], "range_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "range_len");
+                let zero = len.get_type().const_zero();
+                self.builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap()
+            }
             // Instances are always truthy (unless __bool__ is implemented)
             PyValue::Instance(_, _) => self.ctx.bool_type().const_int(1, false),
+            // Generators are always truthy
+            PyValue::Generator(_, _) => self.ctx.bool_type().const_int(1, false),
+            // Iterators are always truthy
+            PyValue::EnumerateIter(_, _, _)
+            | PyValue::ZipIter(_, _)
+            | PyValue::FilterIter(_, _)
+            | PyValue::GenericIter(_, _)
+            | PyValue::RangeIter(_)
+            | PyValue::DictKeysIter(_, _)
+            | PyValue::DictValuesIter(_, _)
+            | PyValue::DictItemsIter(_, _, _) => self.ctx.bool_type().const_int(1, false),
             PyValue::Function(_) | PyValue::Module(_) | PyValue::Macro(_) => {
                 self.ctx.bool_type().const_int(1, false)
             }

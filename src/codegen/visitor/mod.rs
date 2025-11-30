@@ -5,9 +5,11 @@
 /// - statements.rs: Statement visitor methods (var decl, assignment, if, while, return, etc.)
 /// - program.rs: Program and function visitor methods
 mod expressions;
+mod generator_codegen;
 mod program;
 mod statements;
 
+use super::generator::is_generator_function;
 use super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
@@ -21,6 +23,21 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     // Program-level methods
     fn visit_program(&mut self, program: &Program) -> Result<Self::Result, Self::Error> {
         self.visit_program_impl(program)
+    }
+
+    // Override visit_function to handle generators
+    fn visit_function(&mut self, function: &Function) -> Result<(), Self::Error> {
+        if is_generator_function(function) {
+            // Generate as a generator (coroutine-based)
+            self.generate_generator_function(function)
+        } else {
+            // Normal function - use default visitor behavior
+            self.enter_function(function)?;
+            for statement in &function.body {
+                self.visit_statement(statement)?;
+            }
+            self.exit_function(function)
+        }
     }
 
     // Function-level methods
@@ -87,11 +104,12 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
 
     fn visit_for(
         &mut self,
-        target: &str,
+        targets: &[String],
         iter: &Expression,
         body: &[Statement],
+        else_block: &Option<Vec<Statement>>,
     ) -> Result<(), Self::Error> {
-        self.visit_for_impl(target, iter, body)
+        self.visit_for_impl(targets, iter, body, else_block)
     }
 
     fn visit_return(&mut self, expr: Option<&Expression>) -> Result<(), Self::Error> {
@@ -117,5 +135,39 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
 
     fn visit_class(&mut self, class: &Class) -> Result<(), Self::Error> {
         self.visit_class_impl(class)
+    }
+
+    fn visit_try(
+        &mut self,
+        body: &[Statement],
+        handlers: &[ExceptHandler],
+        else_block: &Option<Vec<Statement>>,
+        finally_block: &Option<Vec<Statement>>,
+    ) -> Result<(), Self::Error> {
+        self.visit_try_impl(body, handlers, else_block, finally_block)
+    }
+
+    fn visit_raise(
+        &mut self,
+        exception: &Option<Expression>,
+        cause: &Option<Expression>,
+    ) -> Result<(), Self::Error> {
+        self.visit_raise_impl(exception, cause)
+    }
+
+    fn visit_assert(
+        &mut self,
+        test: &Expression,
+        msg: &Option<Expression>,
+    ) -> Result<(), Self::Error> {
+        self.visit_assert_impl(test, msg)
+    }
+
+    fn visit_global(&mut self, names: &[String]) -> Result<(), Self::Error> {
+        self.visit_global_impl(names)
+    }
+
+    fn visit_nonlocal(&mut self, names: &[String]) -> Result<(), Self::Error> {
+        self.visit_nonlocal_impl(names)
     }
 }

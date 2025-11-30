@@ -24,12 +24,19 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 
     cmd.arg("-o").arg(output_path);
 
-    cmd.output()
-        .map_err(|e| format!("Failed to run linker: {}", e))?
-        .status
-        .success()
-        .then_some(())
-        .ok_or_else(|| "Linking failed".to_string())
+    // Link against math library for functions like round(), pow(), etc.
+    cmd.arg("-lm");
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to run linker: {}", e))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Linking failed: {}", stderr))
+    }
 }
 
 /// Full pipeline: compile source file and all imports to executable

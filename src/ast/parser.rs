@@ -313,6 +313,7 @@ fn build_type(pair: Pair<Rule>) -> Type {
         Rule::dict_type => build_dict_type(inner),
         Rule::set_type => build_set_type(inner),
         Rule::tuple_type => build_tuple_type(inner),
+        Rule::ID => Type::Custom(inner.as_str().to_string()),
         _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
     }
 }
@@ -326,6 +327,7 @@ fn build_basic_type(pair: Pair<Rule>) -> Type {
         Rule::STR_TYPE => Type::Str,
         Rule::BYTES_TYPE => Type::Bytes,
         Rule::NONE_TYPE => Type::None,
+        Rule::RANGE_TYPE => Type::Range,
         _ => panic!("Unexpected rule in basic type: {:?}", inner.as_rule()),
     }
 }
@@ -403,11 +405,16 @@ fn build_statement(pair: Pair<Rule>) -> Statement {
             Rule::if_stmt => build_if_stmt(inner),
             Rule::while_stmt => build_while_stmt(inner),
             Rule::for_stmt => build_for_stmt(inner),
+            Rule::try_stmt => build_try_stmt(inner),
+            Rule::raise_stmt => build_raise_stmt(inner),
+            Rule::assert_stmt => build_assert_stmt(inner),
             Rule::return_stmt => build_return_stmt(inner),
             Rule::break_stmt => Statement::Break,
             Rule::continue_stmt => Statement::Continue,
             Rule::pass_stmt => Statement::Pass,
             Rule::del_stmt => build_del_stmt(inner),
+            Rule::global_stmt => build_global_stmt(inner),
+            Rule::nonlocal_stmt => build_nonlocal_stmt(inner),
             Rule::expr_stmt => {
                 Statement::Expr(build_expression(inner.into_inner().next().unwrap()))
             }
@@ -633,9 +640,14 @@ fn build_for_stmt(pair: Pair<Rule>) -> Statement {
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::FOR);
 
-    let id_pair = inner.next().unwrap();
-    assert_eq!(id_pair.as_rule(), Rule::ID);
-    let target = id_pair.as_str().to_string();
+    // Parse for_target which can be single ID or tuple of IDs
+    let target_pair = inner.next().unwrap();
+    assert_eq!(target_pair.as_rule(), Rule::for_target);
+    let targets: Vec<String> = target_pair
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::ID)
+        .map(|p| p.as_str().to_string())
+        .collect();
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::IN);
 
@@ -649,9 +661,211 @@ fn build_for_stmt(pair: Pair<Rule>) -> Statement {
     assert_eq!(block_pair.as_rule(), Rule::block);
     let body = build_block(block_pair);
 
-    assert_eq!(inner.next(), None);
+    // Parse optional else clause
+    let else_block = if let Some(else_clause) = inner.next() {
+        assert_eq!(else_clause.as_rule(), Rule::for_else_clause);
+        let mut else_inner = else_clause.into_inner();
+        assert_eq!(else_inner.next().unwrap().as_rule(), Rule::ELSE);
+        assert_eq!(else_inner.next().unwrap().as_rule(), Rule::COLON);
+        let else_block_pair = else_inner.next().unwrap();
+        assert_eq!(else_block_pair.as_rule(), Rule::block);
+        Some(build_block(else_block_pair))
+    } else {
+        None
+    };
 
-    Statement::For { target, iter, body }
+    Statement::For {
+        targets,
+        iter,
+        body,
+        else_block,
+    }
+}
+
+fn build_try_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::TRY);
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let block_pair = inner.next().unwrap();
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    let body = build_block(block_pair);
+
+    let mut handlers = Vec::new();
+    let mut else_block = None;
+    let mut finally_block = None;
+
+    for clause in inner {
+        match clause.as_rule() {
+            Rule::except_clause => {
+                handlers.push(build_except_clause(clause));
+            }
+            Rule::else_clause => {
+                else_block = Some(build_else_clause(clause));
+            }
+            Rule::finally_clause => {
+                finally_block = Some(build_finally_clause(clause));
+            }
+            _ => panic!("Unexpected rule in try stmt: {:?}", clause.as_rule()),
+        }
+    }
+
+    Statement::Try {
+        body,
+        handlers,
+        else_block,
+        finally_block,
+    }
+}
+
+fn build_except_clause(pair: Pair<Rule>) -> ExceptHandler {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::EXCEPT);
+
+    let mut exception_types = Vec::new();
+    let mut name = None;
+    let mut body = Vec::new();
+
+    for item in inner {
+        match item.as_rule() {
+            Rule::exception_spec => {
+                exception_types = build_exception_spec(item);
+            }
+            Rule::AS => {
+                // AS keyword, next should be ID
+            }
+            Rule::ID => {
+                name = Some(item.as_str().to_string());
+            }
+            Rule::COLON => {}
+            Rule::block => {
+                body = build_block(item);
+            }
+            _ => panic!("Unexpected rule in except clause: {:?}", item.as_rule()),
+        }
+    }
+
+    ExceptHandler {
+        exception_types,
+        name,
+        body,
+    }
+}
+
+fn build_exception_spec(pair: Pair<Rule>) -> Vec<String> {
+    let inner: Vec<_> = pair.into_inner().collect();
+
+    // Collect all IDs (exception type names)
+    inner
+        .into_iter()
+        .filter(|p| p.as_rule() == Rule::ID)
+        .map(|p| p.as_str().to_string())
+        .collect()
+}
+
+fn build_finally_clause(pair: Pair<Rule>) -> Vec<Statement> {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::FINALLY);
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let block_pair = inner.next().unwrap();
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    build_block(block_pair)
+}
+
+fn build_raise_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::RAISE);
+
+    let mut exception = None;
+    let mut cause = None;
+
+    for item in inner {
+        match item.as_rule() {
+            Rule::expression => {
+                if exception.is_none() {
+                    exception = Some(build_expression(item));
+                } else {
+                    // This is the cause (after FROM)
+                    cause = Some(build_expression(item));
+                }
+            }
+            Rule::FROM => {
+                // FROM keyword, next expression is the cause
+            }
+            Rule::NEWLINE => {}
+            _ => panic!("Unexpected rule in raise stmt: {:?}", item.as_rule()),
+        }
+    }
+
+    Statement::Raise { exception, cause }
+}
+
+fn build_assert_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::ASSERT);
+
+    let test_pair = inner.next().unwrap();
+    assert_eq!(test_pair.as_rule(), Rule::expression);
+    let test = build_expression(test_pair);
+
+    let mut msg = None;
+
+    for item in inner {
+        match item.as_rule() {
+            Rule::COMMA => {}
+            Rule::expression => {
+                msg = Some(build_expression(item));
+            }
+            Rule::NEWLINE => {}
+            _ => panic!("Unexpected rule in assert stmt: {:?}", item.as_rule()),
+        }
+    }
+
+    Statement::Assert { test, msg }
+}
+
+fn build_global_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::GLOBAL);
+
+    let mut names = Vec::new();
+    for item in inner {
+        match item.as_rule() {
+            Rule::ID => {
+                names.push(item.as_str().to_string());
+            }
+            Rule::COMMA | Rule::NEWLINE => {}
+            _ => panic!("Unexpected rule in global stmt: {:?}", item.as_rule()),
+        }
+    }
+
+    Statement::Global { names }
+}
+
+fn build_nonlocal_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::NONLOCAL);
+
+    let mut names = Vec::new();
+    for item in inner {
+        match item.as_rule() {
+            Rule::ID => {
+                names.push(item.as_str().to_string());
+            }
+            Rule::COMMA | Rule::NEWLINE => {}
+            _ => panic!("Unexpected rule in nonlocal stmt: {:?}", item.as_rule()),
+        }
+    }
+
+    Statement::Nonlocal { names }
 }
 
 fn build_return_stmt(pair: Pair<Rule>) -> Statement {
@@ -696,6 +910,7 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
             let inner = pair.into_inner().next().unwrap();
             build_expression(inner)
         }
+        Rule::yield_expr => build_yield_expr(pair),
         Rule::logic_or_expr => build_binary_chain(pair, BinaryOp::Or),
         Rule::logic_and_expr => build_binary_chain(pair, BinaryOp::And),
         Rule::logic_not_expr => build_logic_not_expr(pair),
@@ -710,8 +925,32 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
         Rule::power_expr => build_power_expr(pair),
         Rule::postfix_expr => build_postfix_expr(pair),
         Rule::subscript_expr => build_subscript_expr(pair),
+        Rule::attribute_expr => build_attribute_expr(pair),
         _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
     }
+}
+
+fn build_yield_expr(pair: Pair<Rule>) -> Expression {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::YIELD);
+
+    let mut is_from = false;
+    let mut value = None;
+
+    for item in inner {
+        match item.as_rule() {
+            Rule::FROM => {
+                is_from = true;
+            }
+            Rule::logic_or_expr => {
+                value = Some(Box::new(build_expression(item)));
+            }
+            _ => panic!("Unexpected rule in yield expr: {:?}", item.as_rule()),
+        }
+    }
+
+    Expression::Yield { value, is_from }
 }
 
 fn build_logic_not_expr(pair: Pair<Rule>) -> Expression {
@@ -983,10 +1222,16 @@ fn build_slice_expr(pair: Pair<Rule>) -> Expression {
 fn build_subscript_expr(pair: Pair<Rule>) -> Expression {
     let items: Vec<_> = pair.into_inner().collect();
 
-    // First item is the ID
+    // First item is the ID or SELF
     let id_pair = &items[0];
-    assert_eq!(id_pair.as_rule(), Rule::ID);
-    let mut expr = Expression::Var(id_pair.as_str().to_string());
+    let mut expr = match id_pair.as_rule() {
+        Rule::ID => Expression::Var(id_pair.as_str().to_string()),
+        Rule::SELF => Expression::Var("self".to_string()),
+        _ => panic!(
+            "Unexpected rule in subscript_expr base: {:?}",
+            id_pair.as_rule()
+        ),
+    };
 
     // Remaining items are subscript sequences: LBRACKET, expression, RBRACKET
     // Note: slices are handled through build_postfix_trailer, not here
@@ -998,6 +1243,36 @@ fn build_subscript_expr(pair: Pair<Rule>) -> Expression {
             };
         }
         // Skip LBRACKET and RBRACKET tokens
+    }
+
+    expr
+}
+
+/// Build an attribute expression from the standalone attribute_expr rule
+/// attribute_expr = { (SELF | ID) ~ (WS* ~ DOT ~ WS* ~ ID)+ }
+fn build_attribute_expr(pair: Pair<Rule>) -> Expression {
+    let items: Vec<_> = pair.into_inner().collect();
+
+    // First item is the ID or SELF
+    let first = &items[0];
+    let mut expr = match first.as_rule() {
+        Rule::ID => Expression::Var(first.as_str().to_string()),
+        Rule::SELF => Expression::Var("self".to_string()),
+        _ => panic!(
+            "Unexpected rule in attribute_expr base: {:?}",
+            first.as_rule()
+        ),
+    };
+
+    // Remaining ID items are attribute accesses (skip DOT tokens)
+    for item in items.iter().skip(1) {
+        if item.as_rule() == Rule::ID {
+            expr = Expression::Attribute {
+                object: Box::new(expr),
+                attr: item.as_str().to_string(),
+            };
+        }
+        // Skip DOT tokens
     }
 
     expr
@@ -1132,6 +1407,10 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
             Rule::ID => {
                 assert_eq!(inner.next(), None);
                 Expression::Var(first.as_str().to_string())
+            }
+            Rule::SELF => {
+                assert_eq!(inner.next(), None);
+                Expression::Var("self".to_string())
             }
             Rule::LPAREN => {
                 let expr_pair = inner.next().unwrap();

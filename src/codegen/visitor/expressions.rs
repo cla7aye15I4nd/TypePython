@@ -61,6 +61,17 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {
+        // If this variable is declared as global, look it up in module_vars first
+        if self.global_vars.contains(name) {
+            if let Some((ptr, py_type)) = self.module_vars.get(name).cloned() {
+                let llvm_type = py_type.to_llvm(self.cg.ctx);
+                let loaded = self.cg.builder.build_load(llvm_type, ptr, name).unwrap();
+                // Return with None ptr so it uses immediate value, not pointer
+                // The ptr is still stored in module_vars for assignments
+                return Ok(PyValue::new(loaded, py_type.clone(), None));
+            }
+        }
+
         // First check local variables (stack allocations)
         if let Some(var) = self.variables.get(name) {
             return Ok(var.load(&self.cg.builder, self.cg.ctx, name));
@@ -71,17 +82,26 @@ impl<'ctx> CodeGen<'ctx> {
         // placeholder functions from preprocessing
         let mangled_name = self.mangle_function_name(&self.module_name, name);
         if self.cg.module.get_function(&mangled_name).is_some() {
+            // Check if this is a generator function
+            let is_generator = self.generator_functions.contains(&mangled_name);
+
             // Get type info from global_variables if available (for correct return type)
-            let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
-                if global.ty() == crate::types::PyType::Function {
-                    let info = global.get_function();
-                    (info.param_types.clone(), info.return_type.clone())
+            let (param_types, mut return_type) =
+                if let Some(global) = self.global_variables.get(name) {
+                    if global.ty() == crate::types::PyType::Function {
+                        let info = global.get_function();
+                        (info.param_types.clone(), info.return_type.clone())
+                    } else {
+                        (vec![], crate::types::PyType::None)
+                    }
                 } else {
                     (vec![], crate::types::PyType::None)
-                }
-            } else {
-                (vec![], crate::types::PyType::None)
-            };
+                };
+
+            // If it's a generator, wrap the return type in Generator
+            if is_generator {
+                return_type = PyType::Generator(Box::new(return_type));
+            }
 
             return Ok(PyValue::function(crate::types::FunctionInfo {
                 mangled_name,
@@ -113,20 +133,6 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         elements: &[Expression],
     ) -> Result<PyValue<'ctx>, String> {
-        // Create a new list with capacity for all elements
-        let capacity = self
-            .cg
-            .ctx
-            .i64_type()
-            .const_int(elements.len() as u64, false);
-        let list_new_fn = self.get_or_declare_c_builtin("list_with_capacity");
-        let call_site = self
-            .cg
-            .builder
-            .build_call(list_new_fn, &[capacity.into()], "list_new")
-            .unwrap();
-        let list_ptr = self.extract_ptr_call_result(call_site).value();
-
         // Infer element type from first element (or default to Int for empty list)
         let elem_type = if elements.is_empty() {
             PyType::Int
@@ -135,18 +141,71 @@ impl<'ctx> CodeGen<'ctx> {
             first.ty().clone()
         };
 
+        // Create a new list with capacity for all elements
+        // Use type-specific list creation based on element type
+        let capacity = self
+            .cg
+            .ctx
+            .i64_type()
+            .const_int(elements.len() as u64, false);
+
+        let (list_new_fn_name, list_append_fn_name) = match &elem_type {
+            PyType::Str => ("str_list_with_capacity", "str_list_append"),
+            PyType::Float => ("float_list_with_capacity", "float_list_append"),
+            PyType::Bool => ("bool_list_with_capacity", "bool_list_append"),
+            _ => ("list_with_capacity", "list_append"),
+        };
+
+        let list_new_fn = self.get_or_declare_c_builtin(list_new_fn_name);
+        let call_site = self
+            .cg
+            .builder
+            .build_call(list_new_fn, &[capacity.into()], "list_new")
+            .unwrap();
+        let list_ptr = self.extract_ptr_call_result(call_site).value();
+
         // Append each element (list_append mutates in place, returns void)
-        let list_append_fn = self.get_or_declare_c_builtin("list_append");
+        let list_append_fn = self.get_or_declare_c_builtin(list_append_fn_name);
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
             // TODO: Type check that elem_val.ty() matches elem_type
+
+            // Convert the element value to the appropriate storage type
+            let arg_val = match &elem_type {
+                PyType::Bool => {
+                    // For bools, extend i1 to i8 for C ABI compatibility
+                    self.cg
+                        .builder
+                        .build_int_z_extend(
+                            elem_val.value().into_int_value(),
+                            self.cg.ctx.i8_type(),
+                            "bool_to_i8",
+                        )
+                        .unwrap()
+                        .into()
+                }
+                PyType::Tuple(_)
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
+                | PyType::Bytes => {
+                    // Pointer types need to be converted to i64 for storage
+                    self.cg
+                        .builder
+                        .build_ptr_to_int(
+                            elem_val.value().into_pointer_value(),
+                            self.cg.ctx.i64_type(),
+                            "ptr_to_i64",
+                        )
+                        .unwrap()
+                        .into()
+                }
+                _ => elem_val.value().into(),
+            };
+
             self.cg
                 .builder
-                .build_call(
-                    list_append_fn,
-                    &[list_ptr.into(), elem_val.value().into()],
-                    "list_append",
-                )
+                .build_call(list_append_fn, &[list_ptr.into(), arg_val], "list_append")
                 .unwrap();
         }
 
@@ -198,15 +257,56 @@ impl<'ctx> CodeGen<'ctx> {
             let key_val = self.evaluate_expression(key_expr)?;
             let val_val = self.evaluate_expression(val_expr)?;
             // TODO: Type check that key/val types match
+
+            // Convert value to i64 for storage (dict stores all values as i64)
+            let val_as_i64: inkwell::values::BasicValueEnum = match val_val.ty() {
+                PyType::Float => {
+                    // Bitcast f64 to i64 (preserves bit pattern)
+                    self.cg
+                        .builder
+                        .build_bit_cast(
+                            val_val.value().into_float_value(),
+                            self.cg.ctx.i64_type(),
+                            "val_to_i64",
+                        )
+                        .unwrap()
+                }
+                PyType::Bool => {
+                    // Zero-extend i1 to i64
+                    self.cg
+                        .builder
+                        .build_int_z_extend(
+                            val_val.value().into_int_value(),
+                            self.cg.ctx.i64_type(),
+                            "val_to_i64",
+                        )
+                        .unwrap()
+                        .into()
+                }
+                PyType::Str
+                | PyType::Bytes
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_) => {
+                    // Cast pointer to i64
+                    self.cg
+                        .builder
+                        .build_ptr_to_int(
+                            val_val.value().into_pointer_value(),
+                            self.cg.ctx.i64_type(),
+                            "val_to_i64",
+                        )
+                        .unwrap()
+                        .into()
+                }
+                _ => val_val.value(), // Int and other types stay as-is
+            };
+
             self.cg
                 .builder
                 .build_call(
                     dict_setitem_fn,
-                    &[
-                        dict_ptr.into(),
-                        key_val.value().into(),
-                        val_val.value().into(),
-                    ],
+                    &[dict_ptr.into(), key_val.value().into(), val_as_i64.into()],
                     "dict_setitem",
                 )
                 .unwrap();
@@ -224,15 +324,6 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         elements: &[Expression],
     ) -> Result<PyValue<'ctx>, String> {
-        // Create a new empty set
-        let set_new_fn = self.get_or_declare_c_builtin("set_new");
-        let call_site = self
-            .cg
-            .builder
-            .build_call(set_new_fn, &[], "set_new")
-            .unwrap();
-        let set_ptr = self.extract_ptr_call_result(call_site).value();
-
         // Infer element type from first element (or default to Int for empty set)
         let elem_type = if elements.is_empty() {
             PyType::Int
@@ -241,18 +332,46 @@ impl<'ctx> CodeGen<'ctx> {
             first.ty().clone()
         };
 
+        // Use type-specific set functions
+        let (set_new_fn_name, set_add_fn_name) = match &elem_type {
+            PyType::Str => ("str_set_new", "str_set_add"),
+            PyType::Float => ("float_set_new", "float_set_add"),
+            PyType::Bool => ("bool_set_new", "bool_set_add"),
+            _ => ("set_new", "set_add"),
+        };
+
+        // Create a new empty set
+        let set_new_fn = self.get_or_declare_c_builtin(set_new_fn_name);
+        let call_site = self
+            .cg
+            .builder
+            .build_call(set_new_fn, &[], "set_new")
+            .unwrap();
+        let set_ptr = self.extract_ptr_call_result(call_site).value();
+
         // Add each element
-        let set_add_fn = self.get_or_declare_c_builtin("set_add");
+        let set_add_fn = self.get_or_declare_c_builtin(set_add_fn_name);
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
-            // TODO: Type check that elem_val.ty() matches elem_type
+
+            // For bools, extend i1 to i8 for C ABI compatibility
+            let arg_val = if matches!(elem_type, PyType::Bool) {
+                self.cg
+                    .builder
+                    .build_int_z_extend(
+                        elem_val.value().into_int_value(),
+                        self.cg.ctx.i8_type(),
+                        "bool_to_i8",
+                    )
+                    .unwrap()
+                    .into()
+            } else {
+                elem_val.value().into()
+            };
+
             self.cg
                 .builder
-                .build_call(
-                    set_add_fn,
-                    &[set_ptr.into(), elem_val.value().into()],
-                    "set_add",
-                )
+                .build_call(set_add_fn, &[set_ptr.into(), arg_val], "set_add")
                 .unwrap();
         }
 

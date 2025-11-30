@@ -776,27 +776,53 @@ sds bytes_swapcase(const char* s) {
     return result;
 }
 
-// Strip whitespace from both ends (returns new bytes)
-sds bytes_strip(const char* s) {
-    sds result = sdsnew(s);
-    if (result == NULL) return NULL;
-    sdstrim(result, " \t\n\r\f\v");
-    return result;
+// Helper: check if character is in chars string
+static int char_in_str(char c, const char* chars) {
+    while (*chars) {
+        if (*chars == c) return 1;
+        chars++;
+    }
+    return 0;
 }
 
-// Strip whitespace from left (returns new bytes)
-sds bytes_lstrip(const char* s) {
+// Strip characters from both ends (returns new bytes)
+// If chars is NULL or empty, strips whitespace
+sds bytes_strip(const char* s, const char* chars) {
+    if (chars == NULL || *chars == '\0') {
+        sds result = sdsnew(s);
+        if (result == NULL) return NULL;
+        sdstrim(result, " \t\n\r\f\v");
+        return result;
+    }
     size_t len = strlen(s);
     const char *start = s;
-    while (start < s + len && isspace(*start)) start++;
+    const char *end = s + len - 1;
+    while (start <= end && char_in_str(*start, chars)) start++;
+    while (end >= start && char_in_str(*end, chars)) end--;
+    return sdsnewlen(start, end - start + 1);
+}
+
+// Strip characters from left (returns new bytes)
+sds bytes_lstrip(const char* s, const char* chars) {
+    size_t len = strlen(s);
+    const char *start = s;
+    if (chars == NULL || *chars == '\0') {
+        while (start < s + len && isspace(*start)) start++;
+    } else {
+        while (start < s + len && char_in_str(*start, chars)) start++;
+    }
     return sdsnewlen(start, s + len - start);
 }
 
-// Strip whitespace from right (returns new bytes)
-sds bytes_rstrip(const char* s) {
+// Strip characters from right (returns new bytes)
+sds bytes_rstrip(const char* s, const char* chars) {
     size_t len = strlen(s);
     const char *end = s + len - 1;
-    while (end >= s && isspace(*end)) end--;
+    if (chars == NULL || *chars == '\0') {
+        while (end >= s && isspace(*end)) end--;
+    } else {
+        while (end >= s && char_in_str(*end, chars)) end--;
+    }
     return sdsnewlen(s, end - s + 1);
 }
 
@@ -960,11 +986,13 @@ sds bytes_reverse(const char* s) {
     return result;
 }
 
-// Center bytes in field of given width
-sds bytes_center(const char* s, int64_t width) {
+// Center bytes in field of given width with optional fill character
+// fillchar should be a single-byte string, uses first char or space if NULL/empty
+sds bytes_center(const char* s, int64_t width, const char* fillchar) {
     size_t len = strlen(s);
     if ((size_t)width <= len) return sdsnew(s);
 
+    char fill = (fillchar != NULL && *fillchar != '\0') ? fillchar[0] : ' ';
     size_t total_pad = width - len;
     size_t left_pad = total_pad / 2;
     size_t right_pad = total_pad - left_pad;
@@ -972,39 +1000,41 @@ sds bytes_center(const char* s, int64_t width) {
     sds result = sdsnewlen(NULL, width);
     if (result == NULL) return NULL;
 
-    memset(result, ' ', left_pad);
+    memset(result, fill, left_pad);
     memcpy(result + left_pad, s, len);
-    memset(result + left_pad + len, ' ', right_pad);
+    memset(result + left_pad + len, fill, right_pad);
     result[width] = '\0';
 
     return result;
 }
 
-// Left-justify bytes in field of given width
-sds bytes_ljust(const char* s, int64_t width) {
+// Left-justify bytes in field of given width with optional fill character
+sds bytes_ljust(const char* s, int64_t width, const char* fillchar) {
     size_t len = strlen(s);
     if ((size_t)width <= len) return sdsnew(s);
 
+    char fill = (fillchar != NULL && *fillchar != '\0') ? fillchar[0] : ' ';
     sds result = sdsnewlen(NULL, width);
     if (result == NULL) return NULL;
 
     memcpy(result, s, len);
-    memset(result + len, ' ', width - len);
+    memset(result + len, fill, width - len);
     result[width] = '\0';
 
     return result;
 }
 
-// Right-justify bytes in field of given width
-sds bytes_rjust(const char* s, int64_t width) {
+// Right-justify bytes in field of given width with optional fill character
+sds bytes_rjust(const char* s, int64_t width, const char* fillchar) {
     size_t len = strlen(s);
     if ((size_t)width <= len) return sdsnew(s);
 
+    char fill = (fillchar != NULL && *fillchar != '\0') ? fillchar[0] : ' ';
     sds result = sdsnewlen(NULL, width);
     if (result == NULL) return NULL;
 
     size_t pad = width - len;
-    memset(result, ' ', pad);
+    memset(result, fill, pad);
     memcpy(result + pad, s, len);
     result[width] = '\0';
 
@@ -1177,4 +1207,42 @@ int64_t bytes_contains_byte(const char* s, int64_t byte_value) {
         if ((unsigned char)s[i] == target) return 1;
     }
     return 0;
+}
+
+// ============================================================================
+// any() and all() builtins for bytes
+// ============================================================================
+
+// any(bytes) - returns true if any byte is non-zero
+int64_t bytes_any(const char* s) {
+    if (s == NULL) return 0;
+    size_t len = strlen(s);
+    if (len == 0) return 0;
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)s[i] != 0) return 1;
+    }
+    return 0;
+}
+
+// all(bytes) - returns true if all bytes are non-zero
+// Empty bytes returns True for all()
+int64_t bytes_all(const char* s) {
+    if (s == NULL) return 1;
+    size_t len = strlen(s);
+    if (len == 0) return 1;
+    for (size_t i = 0; i < len; i++) {
+        if ((unsigned char)s[i] == 0) return 0;
+    }
+    return 1;
+}
+
+// repr(bytes) - returns string like "b'hello'"
+char* repr_bytes(const char* s) {
+    if (s == NULL) return strdup("b''");
+    size_t len = strlen(s);
+    size_t result_len = len + 4; // b'' + null
+    char* result = (char*)malloc(result_len);
+    if (result == NULL) return NULL;
+    snprintf(result, result_len, "b'%s'", s);
+    return result;
 }

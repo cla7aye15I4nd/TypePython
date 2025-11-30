@@ -9,6 +9,21 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <ctype.h>
+
+// Create a single-character string using malloc
+// Returns heap-allocated null-terminated string
+static char* local_str_char_at(const char* s, int64_t index) {
+    if (s == NULL) return NULL;
+    size_t len = strlen(s);
+    if (index < 0) index = len + index;
+    if (index < 0 || (size_t)index >= len) return NULL;
+    char* result = (char*)malloc(2);  // 1 char + null terminator
+    if (result == NULL) return NULL;
+    result[0] = s[index];
+    result[1] = '\0';
+    return result;
+}
 
 // ============================================================================
 // List Data Structure
@@ -681,56 +696,6 @@ PyList* list_reversed(PyList* list) {
 }
 
 // ============================================================================
-// divmod - returns a PyTuple with (quotient, remainder)
-// ============================================================================
-
-// Forward declaration of PyTuple (defined in tuple.c)
-typedef struct {
-    int64_t len;
-    int64_t* data;
-} PyTuple;
-
-// Forward declaration of tuple_new (defined in tuple.c)
-extern PyTuple* tuple_new(int64_t len);
-
-PyTuple* divmod_int(int64_t a, int64_t b) {
-    PyTuple* result = tuple_new(2);
-    if (result == NULL) return NULL;
-
-    // Python-style floor division and modulo
-    int64_t q = a / b;
-    int64_t r = a % b;
-
-    // Adjust for Python semantics (floor division)
-    if ((r != 0) && ((a < 0) != (b < 0))) {
-        q -= 1;
-        r += b;
-    }
-
-    result->data[0] = q;
-    result->data[1] = r;
-
-    return result;
-}
-
-// divmod for floats - returns a PyTuple with (quotient, remainder) stored as doubles
-PyTuple* divmod_float(double a, double b) {
-    PyTuple* result = tuple_new(2);
-    if (result == NULL) return NULL;
-
-    // Python-style floor division and modulo for floats
-    double q = floor(a / b);
-    double r = a - q * b;
-
-    // Store doubles in the int64_t array (type punning)
-    double* data = (double*)result->data;
-    data[0] = q;
-    data[1] = r;
-
-    return result;
-}
-
-// ============================================================================
 // List Construction from Iterables
 // ============================================================================
 
@@ -887,5 +852,872 @@ PyStrList* str_list_from_str_dict(PyStrDictFwd* dict) {
     }
     result->len = j;
 
+    return result;
+}
+
+// ============================================================================
+// Type-Specific List Operations
+// ============================================================================
+
+// --- String List Operations (PyStrList) ---
+
+// Grow the string list's data array
+static void str_list_grow(PyStrList* list, int64_t min_capacity) {
+    int64_t new_capacity = list->capacity * 2;
+    if (new_capacity < min_capacity) {
+        new_capacity = min_capacity;
+    }
+    char** new_data = (char**)realloc(list->data, new_capacity * sizeof(char*));
+    if (new_data == NULL) return;
+    list->data = new_data;
+    list->capacity = new_capacity;
+}
+
+// Create string list with capacity
+PyStrList* str_list_with_capacity(int64_t capacity) {
+    return str_list_alloc(capacity);
+}
+
+// Append a string to a string list
+void str_list_append(PyStrList* list, const char* value) {
+    if (list == NULL) return;
+    if (list->len >= list->capacity) {
+        str_list_grow(list, list->len + 1);
+    }
+    // Store a copy of the string
+    list->data[list->len++] = value ? strdup(value) : NULL;
+}
+
+// Get string at index
+const char* str_list_getitem(PyStrList* list, int64_t index) {
+    if (list == NULL) return "";
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return "";
+    return list->data[index] ? list->data[index] : "";
+}
+
+// Set string at index
+void str_list_setitem(PyStrList* list, int64_t index, const char* value) {
+    if (list == NULL) return;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return;
+    // Free old string
+    if (list->data[index]) free(list->data[index]);
+    list->data[index] = value ? strdup(value) : NULL;
+}
+
+// --- Float List Operations ---
+// Note: Float lists reuse PyList but store doubles
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    double* data;
+} PyFloatList;
+
+static PyFloatList* float_list_alloc(int64_t capacity) {
+    if (capacity < INITIAL_CAPACITY) {
+        capacity = INITIAL_CAPACITY;
+    }
+    PyFloatList* list = (PyFloatList*)malloc(sizeof(PyFloatList));
+    if (list == NULL) return NULL;
+    list->data = (double*)malloc(capacity * sizeof(double));
+    if (list->data == NULL) {
+        free(list);
+        return NULL;
+    }
+    list->len = 0;
+    list->capacity = capacity;
+    return list;
+}
+
+// Create a new empty float list
+PyFloatList* float_list_new(void) {
+    return float_list_alloc(INITIAL_CAPACITY);
+}
+
+// Create a float list with pre-allocated capacity
+PyFloatList* float_list_with_capacity(int64_t capacity) {
+    return float_list_alloc(capacity);
+}
+
+// Get the length of the float list
+int64_t float_list_len(PyFloatList* list) {
+    if (list == NULL) return 0;
+    return list->len;
+}
+
+// Grow the float list's data array
+static void float_list_grow(PyFloatList* list, int64_t min_capacity) {
+    int64_t new_capacity = list->capacity * 2;
+    if (new_capacity < min_capacity) {
+        new_capacity = min_capacity;
+    }
+    double* new_data = (double*)realloc(list->data, new_capacity * sizeof(double));
+    if (new_data == NULL) return;
+    list->data = new_data;
+    list->capacity = new_capacity;
+}
+
+// Append a float to the list
+void float_list_append(PyFloatList* list, double value) {
+    if (list == NULL) return;
+    if (list->len >= list->capacity) {
+        float_list_grow(list, list->len + 1);
+    }
+    list->data[list->len++] = value;
+}
+
+// Get float at index
+double float_list_getitem(PyFloatList* list, int64_t index) {
+    if (list == NULL) return 0.0;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return 0.0;
+    return list->data[index];
+}
+
+// Set float at index
+void float_list_setitem(PyFloatList* list, int64_t index, double value) {
+    if (list == NULL) return;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return;
+    list->data[index] = value;
+}
+
+// --- Bool List Operations ---
+// Note: Bool lists reuse PyList but store int8_t (bool is i1 in LLVM)
+
+typedef struct {
+    int64_t len;
+    int64_t capacity;
+    int8_t* data;  // Using int8_t for boolean storage
+} PyBoolList;
+
+static PyBoolList* bool_list_alloc(int64_t capacity) {
+    if (capacity < INITIAL_CAPACITY) {
+        capacity = INITIAL_CAPACITY;
+    }
+    PyBoolList* list = (PyBoolList*)malloc(sizeof(PyBoolList));
+    if (list == NULL) return NULL;
+    list->data = (int8_t*)malloc(capacity * sizeof(int8_t));
+    if (list->data == NULL) {
+        free(list);
+        return NULL;
+    }
+    list->len = 0;
+    list->capacity = capacity;
+    return list;
+}
+
+// Create a new empty bool list
+PyBoolList* bool_list_new(void) {
+    return bool_list_alloc(INITIAL_CAPACITY);
+}
+
+// Create a bool list with pre-allocated capacity
+PyBoolList* bool_list_with_capacity(int64_t capacity) {
+    return bool_list_alloc(capacity);
+}
+
+// Get the length of the bool list
+int64_t bool_list_len(PyBoolList* list) {
+    if (list == NULL) return 0;
+    return list->len;
+}
+
+// Grow the bool list's data array
+static void bool_list_grow(PyBoolList* list, int64_t min_capacity) {
+    int64_t new_capacity = list->capacity * 2;
+    if (new_capacity < min_capacity) {
+        new_capacity = min_capacity;
+    }
+    int8_t* new_data = (int8_t*)realloc(list->data, new_capacity * sizeof(int8_t));
+    if (new_data == NULL) return;
+    list->data = new_data;
+    list->capacity = new_capacity;
+}
+
+// Append a bool to the list
+void bool_list_append(PyBoolList* list, int8_t value) {
+    if (list == NULL) return;
+    if (list->len >= list->capacity) {
+        bool_list_grow(list, list->len + 1);
+    }
+    list->data[list->len++] = value ? 1 : 0;
+}
+
+// Get bool at index
+int8_t bool_list_getitem(PyBoolList* list, int64_t index) {
+    if (list == NULL) return 0;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return 0;
+    return list->data[index];
+}
+
+// Set bool at index
+void bool_list_setitem(PyBoolList* list, int64_t index, int8_t value) {
+    if (list == NULL) return;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return;
+    list->data[index] = value ? 1 : 0;
+}
+
+// Print bool list
+void print_bool_list(PyBoolList* list) {
+    printf("[");
+    if (list != NULL) {
+        for (int64_t i = 0; i < list->len; i++) {
+            if (i > 0) printf(", ");
+            printf("%s", list->data[i] ? "True" : "False");
+        }
+    }
+    printf("]");
+}
+
+// ============================================================================
+// Type-Specific List Methods: pop, clear, copy
+// ============================================================================
+
+// --- String List pop, clear, copy ---
+
+// Pop string at index (default -1 for last element)
+const char* str_list_pop(PyStrList* list, int64_t index) {
+    if (list == NULL || list->len == 0) return "";
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return "";
+
+    const char* result = list->data[index] ? list->data[index] : "";
+    // Don't free - return the pointer, caller owns it now
+    // Shift elements after index
+    for (int64_t i = index; i < list->len - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->len--;
+    return result;
+}
+
+// Clear string list
+void str_list_clear(PyStrList* list) {
+    if (list == NULL) return;
+    // Free all strings
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i]) free(list->data[i]);
+    }
+    list->len = 0;
+}
+
+// Copy string list
+PyStrList* str_list_copy(PyStrList* list) {
+    if (list == NULL) return str_list_new();
+    PyStrList* copy = str_list_alloc(list->capacity);
+    if (copy == NULL) return NULL;
+    for (int64_t i = 0; i < list->len; i++) {
+        copy->data[i] = list->data[i] ? strdup(list->data[i]) : NULL;
+    }
+    copy->len = list->len;
+    return copy;
+}
+
+// --- Float List pop, clear, copy ---
+
+// Pop float at index (default -1 for last element)
+double float_list_pop(PyFloatList* list, int64_t index) {
+    if (list == NULL || list->len == 0) return 0.0;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return 0.0;
+
+    double result = list->data[index];
+    // Shift elements after index
+    for (int64_t i = index; i < list->len - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->len--;
+    return result;
+}
+
+// Clear float list
+void float_list_clear(PyFloatList* list) {
+    if (list == NULL) return;
+    list->len = 0;
+}
+
+// Copy float list
+PyFloatList* float_list_copy(PyFloatList* list) {
+    if (list == NULL) return float_list_new();
+    PyFloatList* copy = float_list_alloc(list->capacity);
+    if (copy == NULL) return NULL;
+    memcpy(copy->data, list->data, list->len * sizeof(double));
+    copy->len = list->len;
+    return copy;
+}
+
+// --- Bool List pop, clear, copy ---
+
+// Pop bool at index (default -1 for last element)
+int8_t bool_list_pop(PyBoolList* list, int64_t index) {
+    if (list == NULL || list->len == 0) return 0;
+    if (index < 0) index = list->len + index;
+    if (index < 0 || index >= list->len) return 0;
+
+    int8_t result = list->data[index];
+    // Shift elements after index
+    for (int64_t i = index; i < list->len - 1; i++) {
+        list->data[i] = list->data[i + 1];
+    }
+    list->len--;
+    return result;
+}
+
+// Clear bool list
+void bool_list_clear(PyBoolList* list) {
+    if (list == NULL) return;
+    list->len = 0;
+}
+
+// Copy bool list
+PyBoolList* bool_list_copy(PyBoolList* list) {
+    if (list == NULL) return bool_list_new();
+    PyBoolList* copy = bool_list_alloc(list->capacity);
+    if (copy == NULL) return NULL;
+    memcpy(copy->data, list->data, list->len * sizeof(int8_t));
+    copy->len = list->len;
+    return copy;
+}
+
+// ============================================================================
+// any() and all() builtins for lists
+// ============================================================================
+
+// any(list[int]) - returns true if any element is non-zero
+int64_t list_any(PyList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] != 0) return 1;
+    }
+    return 0;
+}
+
+// all(list[int]) - returns true if all elements are non-zero
+int64_t list_all(PyList* list) {
+    if (list == NULL) return 1;  // Empty list returns True for all()
+    if (list->len == 0) return 1;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] == 0) return 0;
+    }
+    return 1;
+}
+
+// any(list[float]) - returns true if any element is non-zero
+int64_t float_list_any(PyFloatList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] != 0.0) return 1;
+    }
+    return 0;
+}
+
+// all(list[float]) - returns true if all elements are non-zero
+int64_t float_list_all(PyFloatList* list) {
+    if (list == NULL) return 1;
+    if (list->len == 0) return 1;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] == 0.0) return 0;
+    }
+    return 1;
+}
+
+// any(list[bool]) - returns true if any element is True
+int64_t bool_list_any(PyBoolList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i]) return 1;
+    }
+    return 0;
+}
+
+// all(list[bool]) - returns true if all elements are True
+int64_t bool_list_all(PyBoolList* list) {
+    if (list == NULL) return 1;
+    if (list->len == 0) return 1;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (!list->data[i]) return 0;
+    }
+    return 1;
+}
+
+// any(list[str]) - returns true if any string is non-empty
+int64_t str_list_any(PyStrList* list) {
+    if (list == NULL || list->len == 0) return 0;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] != NULL && list->data[i][0] != '\0') return 1;
+    }
+    return 0;
+}
+
+// all(list[str]) - returns true if all strings are non-empty
+int64_t str_list_all(PyStrList* list) {
+    if (list == NULL) return 1;
+    if (list->len == 0) return 1;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i] == NULL || list->data[i][0] == '\0') return 0;
+    }
+    return 1;
+}
+
+// ============================================================================
+// enumerate(), zip(), filter(), iter() builtins
+// These return placeholder iterator objects for now
+// ============================================================================
+
+// Enumerate iterator structure
+typedef struct {
+    void* source;   // Pointer to source iterable
+    int64_t index;  // Current index to return (may start at non-zero)
+    int64_t pos;    // Current position in the iterable (always starts at 0)
+} EnumerateIter;
+
+// Create enumerate iterator from list with start index
+EnumerateIter* enumerate_list(PyList* list, int64_t start) {
+    EnumerateIter* iter = (EnumerateIter*)malloc(sizeof(EnumerateIter));
+    if (iter == NULL) return NULL;
+    iter->source = list;
+    iter->index = start;  // Returned index starts at start
+    iter->pos = 0;        // Position in list starts at 0
+    return iter;
+}
+
+// Create enumerate iterator from string with start index
+EnumerateIter* enumerate_str(const char* s, int64_t start) {
+    EnumerateIter* iter = (EnumerateIter*)malloc(sizeof(EnumerateIter));
+    if (iter == NULL) return NULL;
+    iter->source = (void*)s;
+    iter->index = start;  // Returned index starts at start
+    iter->pos = 0;        // Position in string starts at 0
+    return iter;
+}
+
+// Create enumerate iterator from bytes with start index
+EnumerateIter* enumerate_bytes(const char* s, int64_t start) {
+    return enumerate_str(s, start);  // Same as string
+}
+
+// Get next (index, value) pair from enumerate iterator over list
+// Returns 1 if successful, 0 if exhausted
+// out_index receives the index, out_value receives the list element
+int64_t enumerate_list_next(EnumerateIter* iter, int64_t* out_index, int64_t* out_value) {
+    if (iter == NULL) return 0;
+
+    PyList* list = (PyList*)iter->source;
+    if (list == NULL || iter->pos >= list->len) return 0;
+
+    *out_index = iter->index;          // Return the counter (may be offset by start)
+    *out_value = list->data[iter->pos]; // Access data at actual position
+    iter->index++;
+    iter->pos++;
+    return 1;
+}
+
+// Get next (index, char) pair from enumerate iterator over string
+// Returns 1 if successful, 0 if exhausted
+// out_index receives the index, out_value receives single-char string (pointer)
+int64_t enumerate_str_next(EnumerateIter* iter, int64_t* out_index, int64_t* out_value) {
+    if (iter == NULL) return 0;
+
+    const char* s = (const char*)iter->source;
+    if (s == NULL || s[iter->pos] == '\0') return 0;
+
+    *out_index = iter->index;                       // Return the counter (may be offset by start)
+    *out_value = (int64_t)local_str_char_at(s, iter->pos);  // Access char at actual position
+    iter->index++;
+    iter->pos++;
+    return 1;
+}
+
+// Get next (index, byte) pair from enumerate iterator over bytes
+// Returns 1 if successful, 0 if exhausted
+// out_index receives the index, out_value receives byte value as int
+int64_t enumerate_bytes_next(EnumerateIter* iter, int64_t* out_index, int64_t* out_value) {
+    if (iter == NULL) return 0;
+
+    const char* s = (const char*)iter->source;
+    if (s == NULL || s[iter->pos] == '\0') return 0;
+
+    *out_index = iter->index;                         // Return the counter (may be offset by start)
+    *out_value = (int64_t)(unsigned char)s[iter->pos]; // Access byte at actual position
+    iter->index++;
+    iter->pos++;
+    return 1;
+}
+
+// Free enumerate iterator
+void enumerate_free(EnumerateIter* iter) {
+    if (iter) free(iter);
+}
+
+// Zip iterator structure
+typedef struct {
+    void* source1;
+    void* source2;
+    void* source3;  // For 3-way zip
+    int64_t index;
+} ZipIter;
+
+// Create zip iterator (single iterable - identity zip)
+ZipIter* zip_single(void* iterable) {
+    ZipIter* iter = (ZipIter*)malloc(sizeof(ZipIter));
+    if (iter == NULL) return NULL;
+    iter->source1 = iterable;
+    iter->source2 = NULL;
+    iter->source3 = NULL;
+    iter->index = 0;
+    return iter;
+}
+
+// Create zip iterator (two iterables)
+ZipIter* zip_two(void* iter1, void* iter2) {
+    ZipIter* iter = (ZipIter*)malloc(sizeof(ZipIter));
+    if (iter == NULL) return NULL;
+    iter->source1 = iter1;
+    iter->source2 = iter2;
+    iter->source3 = NULL;
+    iter->index = 0;
+    return iter;
+}
+
+// Create zip iterator (three iterables)
+ZipIter* zip_three(void* iter1, void* iter2, void* iter3) {
+    ZipIter* iter = (ZipIter*)malloc(sizeof(ZipIter));
+    if (iter == NULL) return NULL;
+    iter->source1 = iter1;
+    iter->source2 = iter2;
+    iter->source3 = iter3;
+    iter->index = 0;
+    return iter;
+}
+
+// Get next pair from zip iterator over two lists
+// Returns 1 if successful, 0 if either list is exhausted
+int64_t zip_two_list_next(ZipIter* iter, int64_t* out_val1, int64_t* out_val2) {
+    if (iter == NULL) return 0;
+
+    PyList* list1 = (PyList*)iter->source1;
+    PyList* list2 = (PyList*)iter->source2;
+
+    if (list1 == NULL || list2 == NULL) return 0;
+    if (iter->index >= list1->len || iter->index >= list2->len) return 0;
+
+    *out_val1 = list1->data[iter->index];
+    *out_val2 = list2->data[iter->index];
+    iter->index++;
+    return 1;
+}
+
+// Get next pair from zip iterator over two strings
+// Returns 1 if successful, 0 if either string is exhausted
+int64_t zip_two_str_next(ZipIter* iter, int64_t* out_val1, int64_t* out_val2) {
+    if (iter == NULL) return 0;
+
+    const char* str1 = (const char*)iter->source1;
+    const char* str2 = (const char*)iter->source2;
+
+    if (str1 == NULL || str2 == NULL) return 0;
+    if (str1[iter->index] == '\0' || str2[iter->index] == '\0') return 0;
+
+    // Return single-char strings
+    *out_val1 = (int64_t)local_str_char_at(str1, iter->index);
+    *out_val2 = (int64_t)local_str_char_at(str2, iter->index);
+    iter->index++;
+    return 1;
+}
+
+// Get next triple from zip iterator over three lists
+// Returns 1 if successful, 0 if any list is exhausted
+int64_t zip_three_list_next(ZipIter* iter, int64_t* out_val1, int64_t* out_val2, int64_t* out_val3) {
+    if (iter == NULL) return 0;
+
+    PyList* list1 = (PyList*)iter->source1;
+    PyList* list2 = (PyList*)iter->source2;
+    PyList* list3 = (PyList*)iter->source3;
+
+    if (list1 == NULL || list2 == NULL || list3 == NULL) return 0;
+    if (iter->index >= list1->len || iter->index >= list2->len || iter->index >= list3->len) return 0;
+
+    *out_val1 = list1->data[iter->index];
+    *out_val2 = list2->data[iter->index];
+    *out_val3 = list3->data[iter->index];
+    iter->index++;
+    return 1;
+}
+
+// Free zip iterator
+void zip_free(ZipIter* iter) {
+    if (iter) free(iter);
+}
+
+// Filter iterator structure
+typedef struct {
+    void* source;
+    void* func;  // NULL means filter by truthiness
+} FilterIter;
+
+// Create filter iterator with None (filter by truthiness)
+FilterIter* filter_none(void* iterable) {
+    FilterIter* iter = (FilterIter*)malloc(sizeof(FilterIter));
+    if (iter == NULL) return NULL;
+    iter->source = iterable;
+    iter->func = NULL;
+    return iter;
+}
+
+// Generic iterator structure
+typedef struct {
+    void* source;
+    int64_t index;
+} GenericIter;
+
+// Create generic iterator from list
+GenericIter* iter_list(PyList* list) {
+    GenericIter* iter = (GenericIter*)malloc(sizeof(GenericIter));
+    if (iter == NULL) return NULL;
+    iter->source = list;
+    iter->index = 0;
+    return iter;
+}
+
+// Create generic iterator from string
+GenericIter* iter_str(const char* s) {
+    GenericIter* iter = (GenericIter*)malloc(sizeof(GenericIter));
+    if (iter == NULL) return NULL;
+    iter->source = (void*)s;
+    iter->index = 0;
+    return iter;
+}
+
+// Create generic iterator from bytes
+GenericIter* iter_bytes(const char* s) {
+    return iter_str(s);
+}
+
+// ============================================================================
+// next() builtin - get next value from iterator
+// ============================================================================
+
+// Get next value from list iterator with default
+// If iterator is exhausted, returns default_value
+// Sets *exhausted to 1 if exhausted, 0 otherwise (pass NULL to ignore)
+int64_t iter_next_list(GenericIter* iter, int64_t default_value, int8_t* exhausted) {
+    if (exhausted) *exhausted = 0;
+    if (iter == NULL) {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    PyList* list = (PyList*)iter->source;
+    if (list == NULL || iter->index >= list->len) {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    return list->data[iter->index++];
+}
+
+// Get next character from string iterator (returns single-char string pointer)
+// Returns default_value cast to char* if exhausted (caller should check exhausted flag)
+char* iter_next_str(GenericIter* iter, char* default_value, int8_t* exhausted) {
+    if (exhausted) *exhausted = 0;
+    if (iter == NULL) {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    const char* s = (const char*)iter->source;
+    if (s == NULL || s[iter->index] == '\0') {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    // Create a single-character string and return it
+    char* result = local_str_char_at(s, iter->index++);
+    return result;
+}
+
+// Get next character from string iterator (returns ordinal value)
+int64_t iter_next_str_ord(GenericIter* iter, int64_t default_value, int8_t* exhausted) {
+    if (exhausted) *exhausted = 0;
+    if (iter == NULL) {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    const char* s = (const char*)iter->source;
+    if (s == NULL || s[iter->index] == '\0') {
+        if (exhausted) *exhausted = 1;
+        return default_value;
+    }
+
+    return (int64_t)(unsigned char)s[iter->index++];
+}
+
+// Get next byte from bytes iterator (returns ordinal value)
+int64_t iter_next_bytes(GenericIter* iter, int64_t default_value, int8_t* exhausted) {
+    return iter_next_str_ord(iter, default_value, exhausted);
+}
+
+// Check if iterator has more values (without consuming)
+int64_t iter_has_next_list(GenericIter* iter) {
+    if (iter == NULL) return 0;
+    PyList* list = (PyList*)iter->source;
+    if (list == NULL) return 0;
+    return iter->index < list->len ? 1 : 0;
+}
+
+int64_t iter_has_next_str(GenericIter* iter) {
+    if (iter == NULL) return 0;
+    const char* s = (const char*)iter->source;
+    if (s == NULL) return 0;
+    return s[iter->index] != '\0' ? 1 : 0;
+}
+
+// ============================================================================
+// id() builtin - returns the memory address of an object as an integer
+// ============================================================================
+
+int64_t id_ptr(void* ptr) {
+    return (int64_t)(uintptr_t)ptr;
+}
+
+int64_t id_int(int64_t value) {
+    // For immediate values, we return a hash-like value
+    // Python returns unique ids for small ints, but we can just use the value
+    return value;
+}
+
+int64_t id_float(double value) {
+    // Return a hash of the float bits
+    union { double d; int64_t i; } u;
+    u.d = value;
+    return u.i;
+}
+
+// ============================================================================
+// str.split() - returns list of strings split by separator
+// ============================================================================
+
+// Split string by separator, returns a new PyStrList
+PyStrList* str_split(const char* s, const char* sep) {
+    if (s == NULL) return str_list_new();
+
+    PyStrList* result = str_list_new();
+    if (result == NULL) return NULL;
+
+    size_t seplen = sep ? strlen(sep) : 0;
+
+    // If no separator or empty separator, split on whitespace
+    if (sep == NULL || seplen == 0) {
+        // Split on whitespace
+        const char* p = s;
+        while (*p) {
+            // Skip leading whitespace
+            while (*p && isspace((unsigned char)*p)) p++;
+            if (!*p) break;
+
+            // Find end of word
+            const char* start = p;
+            while (*p && !isspace((unsigned char)*p)) p++;
+
+            // Create substring
+            size_t len = p - start;
+            char* word = (char*)malloc(len + 1);
+            if (word) {
+                memcpy(word, start, len);
+                word[len] = '\0';
+                str_list_append(result, word);
+                free(word);
+            }
+        }
+        return result;
+    }
+
+    // Split on separator
+    const char* p = s;
+    while (*p) {
+        const char* found = strstr(p, sep);
+        if (found == NULL) {
+            // Append remaining string
+            str_list_append(result, p);
+            break;
+        }
+
+        // Append substring before separator
+        size_t len = found - p;
+        char* part = (char*)malloc(len + 1);
+        if (part) {
+            memcpy(part, p, len);
+            part[len] = '\0';
+            str_list_append(result, part);
+            free(part);
+        }
+
+        p = found + seplen;
+    }
+
+    return result;
+}
+
+// Join a string list with separator - "sep".join(list[str])
+char* str_list_join(const char* sep, PyStrList* list) {
+    if (list == NULL || list->len == 0) return strdup("");
+    if (list->len == 1) return strdup(list->data[0] ? list->data[0] : "");
+
+    size_t seplen = sep ? strlen(sep) : 0;
+
+    // Calculate total length
+    size_t total = 0;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (list->data[i]) total += strlen(list->data[i]);
+    }
+    total += seplen * (list->len - 1);
+
+    char* result = (char*)malloc(total + 1);
+    if (result == NULL) return NULL;
+
+    char* dst = result;
+    for (int64_t i = 0; i < list->len; i++) {
+        if (i > 0 && sep) {
+            memcpy(dst, sep, seplen);
+            dst += seplen;
+        }
+        if (list->data[i]) {
+            size_t partlen = strlen(list->data[i]);
+            memcpy(dst, list->data[i], partlen);
+            dst += partlen;
+        }
+    }
+    *dst = '\0';
+
+    return result;
+}
+
+// ============================================================================
+// repr() for containers - returns simplified string representations
+// ============================================================================
+
+// repr(list) - returns string like "[1, 2, 3]"
+char* repr_list(PyList* list) {
+    if (list == NULL || list->len == 0) return strdup("[]");
+
+    // Estimate size: each element max 20 chars + ", " + brackets
+    size_t est_size = list->len * 22 + 3;
+    char* result = (char*)malloc(est_size);
+    if (result == NULL) return NULL;
+
+    strcpy(result, "[");
+    char buf[32];
+    for (int64_t i = 0; i < list->len; i++) {
+        if (i > 0) strcat(result, ", ");
+        snprintf(buf, sizeof(buf), "%lld", (long long)list->data[i]);
+        strcat(result, buf);
+    }
+    strcat(result, "]");
     return result;
 }

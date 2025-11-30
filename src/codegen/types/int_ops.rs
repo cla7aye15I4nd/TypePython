@@ -840,6 +840,50 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val))
             }
+            PyType::Range => {
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "range_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "range_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "range_contains");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result,
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val))
+            }
+            PyType::Tuple(_) => {
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "tuple_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "tuple_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "tuple_contains");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::NE,
+                        result,
+                        cg.ctx.i64_type().const_zero(),
+                        "in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val))
+            }
             _ => Err(format!("Cannot use 'in' with Int and {:?}", rhs.ty())),
         },
 
@@ -921,6 +965,50 @@ pub fn binary_op<'ctx>(
                     )
                     .unwrap();
                 let result = extract_int_result(call_site, "bytes_contains_byte");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result,
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val))
+            }
+            PyType::Range => {
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "range_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "range_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "range_contains");
+                let bool_val = cg
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        result,
+                        cg.ctx.i64_type().const_zero(),
+                        "not_in_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::bool(bool_val))
+            }
+            PyType::Tuple(_) => {
+                let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "tuple_contains");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        contains_fn,
+                        &[rhs.runtime_value().into(), lhs_int.into()],
+                        "tuple_contains",
+                    )
+                    .unwrap();
+                let result = extract_int_result(call_site, "tuple_contains");
                 let bool_val = cg
                     .builder
                     .build_int_compare(
