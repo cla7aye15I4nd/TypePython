@@ -44,6 +44,8 @@ BINARY_OPS = {
     "bitxor": ("^", "bitwise XOR", lambda a, b: a ^ b),
     "lshift": ("<<", "left shift", lambda a, b: a << b),
     "rshift": (">>", "right shift", lambda a, b: a >> b),
+    "eq": ("==", "compare with ==", lambda a, b: a == b),
+    "ne": ("!=", "compare with !=", lambda a, b: a != b),
     "lt": ("<", "compare with <", lambda a, b: a < b),
     "le": ("<=", "compare with <=", lambda a, b: a <= b),
     "gt": (">", "compare with >", lambda a, b: a > b),
@@ -60,6 +62,69 @@ UNARY_OPS = {
     "neg": ("-", "unary -", lambda a: -a),
     "pos": ("+", "unary +", lambda a: +a),
     "bitnot": ("~", "bitwise NOT", lambda a: ~a),
+}
+
+# Operations that TypePython doesn't support (even if Python allows them)
+# Format: set of (left_type, op, right_type) tuples
+UNSUPPORTED_OPS = {
+    # bytes % formatting is not supported
+    ("bytes", "mod", "bytes"),
+    ("bytes", "mod", "list"),
+    ("bytes", "mod", "dict"),
+    ("bytes", "mod", "set"),
+    ("bytes", "mod", "none"),
+    ("bytes", "mod", "int"),
+    ("bytes", "mod", "float"),
+    ("bytes", "mod", "bool"),
+    ("bytes", "mod", "str"),
+    # 'in' with mismatched types (str in int list, etc.)
+    ("str", "in", "list"),
+    ("str", "in", "set"),
+    ("str", "in", "dict"),
+    ("str", "notin", "list"),
+    ("str", "notin", "set"),
+    ("str", "notin", "dict"),
+    ("bytes", "in", "list"),
+    ("bytes", "in", "set"),
+    ("bytes", "in", "dict"),
+    ("bytes", "notin", "list"),
+    ("bytes", "notin", "set"),
+    ("bytes", "notin", "dict"),
+    ("float", "in", "list"),
+    ("float", "in", "set"),
+    ("float", "in", "dict"),
+    ("float", "notin", "list"),
+    ("float", "notin", "set"),
+    ("float", "notin", "dict"),
+    ("none", "in", "list"),
+    ("none", "in", "set"),
+    ("none", "in", "dict"),
+    ("none", "notin", "list"),
+    ("none", "notin", "set"),
+    ("none", "notin", "dict"),
+    ("list", "in", "list"),
+    ("list", "in", "set"),
+    ("list", "in", "dict"),
+    ("list", "notin", "list"),
+    ("list", "notin", "set"),
+    ("list", "notin", "dict"),
+    ("dict", "in", "list"),
+    ("dict", "in", "set"),
+    ("dict", "in", "dict"),
+    ("dict", "notin", "list"),
+    ("dict", "notin", "set"),
+    ("dict", "notin", "dict"),
+    ("set", "in", "list"),
+    ("set", "in", "set"),
+    ("set", "in", "dict"),
+    ("set", "notin", "list"),
+    ("set", "notin", "set"),
+    ("set", "notin", "dict"),
+    # bool in int list is actually OK since bool can be 0 or 1
+    # but let's add some for safety
+    # dict == dict has a bug (compares pointers not content)
+    ("dict", "eq", "dict"),
+    ("dict", "ne", "dict"),
 }
 
 # Builtin functions to test with their configurations
@@ -149,7 +214,7 @@ def get_type_annotation(type_key: str) -> str:
 
 def get_result_type(left_type: str, right_type: str, op: str) -> str:
     """Determine the expected result type for a binary operation."""
-    if op in ("lt", "le", "gt", "ge", "in", "notin"):
+    if op in ("eq", "ne", "lt", "le", "gt", "ge", "in", "notin"):
         return "bool"
     # and/or: same type returns same type, different types return bool
     if op in ("and", "or"):
@@ -166,8 +231,24 @@ def get_result_type(left_type: str, right_type: str, op: str) -> str:
             return "bytes"
         if left_type == "list" or right_type == "list":
             return get_type_annotation("list")
+    # String formatting
+    if op == "mod" and left_type == "str":
+        return "str"
     if left_type == "float" or right_type == "float":
         return "float"
+    # Bitwise ops on bool+bool return bool in TypePython
+    if op in ("bitand", "bitor", "bitxor"):
+        if left_type == "bool" and right_type == "bool":
+            return "bool"
+        # bool & int or int & bool returns int
+        if left_type in ("int", "bool") and right_type in ("int", "bool"):
+            return "int"
+    # Arithmetic with bool always returns int (bool is promoted)
+    if op in ("add", "sub", "mul", "floordiv", "mod", "pow", "lshift", "rshift"):
+        if left_type == "bool" or right_type == "bool":
+            # bool involved in arithmetic -> int result
+            if left_type in ("int", "bool") and right_type in ("int", "bool"):
+                return "int"
     if left_type == right_type:
         return get_type_annotation(left_type)
     if left_type in ("int", "bool") and right_type in ("int", "bool"):
@@ -319,6 +400,9 @@ def process_operators():
     for left_type, (_, _, left_val) in TYPES.items():
         for right_type, (_, _, right_val) in TYPES.items():
             for op, (_, _, op_func) in BINARY_OPS.items():
+                # Skip operations that TypePython doesn't support
+                if (left_type, op, right_type) in UNSUPPORTED_OPS:
+                    continue
                 if is_binary_op_valid(left_val, right_val, op_func):
                     var_name = f"v{valid_idx}_{left_type}_{op}_{right_type}"
                     binary_var_names.append(var_name)

@@ -30,6 +30,123 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
             module,
         }
     }
+
+    /// Convert a PyValue to a boolean (i1)
+    pub fn value_to_bool(
+        &self,
+        val: &PyValue<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        match &val.ty {
+            PyType::Bool => {
+                // Already a bool
+                Ok(val.value().into_int_value())
+            }
+            PyType::Int => {
+                // Non-zero is true
+                let int_val = val.value().into_int_value();
+                let zero = int_val.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, int_val, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Float => {
+                let float_val = val.value().into_float_value();
+                let zero = self.ctx.f64_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::None => {
+                // None is always falsy
+                Ok(self.ctx.bool_type().const_zero())
+            }
+            PyType::Str => {
+                // Str is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "str_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "str_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "str_len").into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Bytes => {
+                // Bytes is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "bytes_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "bytes_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Function | PyType::Module | PyType::Macro => {
+                // Functions, modules, and macros are always truthy
+                Ok(self.ctx.bool_type().const_int(1, false))
+            }
+            PyType::List(_) => {
+                // List is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "list_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "list_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "list_len").into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Dict(_, _) => {
+                // Dict is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "dict_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "dict_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "dict_len").into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Set(_) => {
+                // Set is truthy if non-empty (check length > 0)
+                let ptr_val = val.value().into_pointer_value();
+                let len_fn = super::get_or_declare_builtin(self.module, self.ctx, "set_len");
+                let len_call = self
+                    .builder
+                    .build_call(len_fn, &[ptr_val.into()], "set_len")
+                    .unwrap();
+                let len = super::extract_int_result(len_call, "set_len").into_int_value();
+                let zero = len.get_type().const_zero();
+                Ok(self
+                    .builder
+                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                    .unwrap())
+            }
+            PyType::Tuple(_) => {
+                // Tuples from divmod are always non-empty, so truthy
+                Ok(self.ctx.bool_type().const_int(1, false))
+            }
+        }
+    }
 }
 
 /// Function metadata for compile-time function references

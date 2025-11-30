@@ -90,6 +90,36 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot use 'not in' with None and {:?}", rhs.ty)),
         },
 
+        // Logical and/or - None is always falsy
+        BinaryOp::And => {
+            // None is always falsy, so "None and X" returns None (first falsy)
+            match &rhs.ty {
+                PyType::None => {
+                    // None and None -> None
+                    Ok(PyValue::none(lhs_int.into()))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    // None is falsy, so result is always False
+                    Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
+                }
+            }
+        }
+        BinaryOp::Or => {
+            // None is always falsy, so "None or X" returns X (first truthy or last)
+            match &rhs.ty {
+                PyType::None => {
+                    // None or None -> None (returns last)
+                    Ok(PyValue::none(rhs.runtime_value()))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    Ok(PyValue::bool(rhs_bool.into()))
+                }
+            }
+        }
+
         _ => Err(format!("Operator {:?} not supported on None", op)),
     }
 }

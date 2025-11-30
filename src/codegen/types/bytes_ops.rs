@@ -253,6 +253,72 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty)),
         },
 
+        // Logical and/or - same type returns same type, different types return bool
+        BinaryOp::And => {
+            // Get bytes length to determine truthiness
+            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
+                .unwrap();
+            let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::Bytes => {
+                    // Bytes and Bytes -> Bytes (Python semantics: return first falsy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, rhs_ptr, lhs_ptr, "and")
+                        .unwrap();
+                    Ok(PyValue::bytes(result))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
+        BinaryOp::Or => {
+            // Get bytes length to determine truthiness
+            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "bytes_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "bytes_len")
+                .unwrap();
+            let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::Bytes => {
+                    // Bytes or Bytes -> Bytes (Python semantics: return first truthy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, lhs_ptr, rhs_ptr, "or")
+                        .unwrap();
+                    Ok(PyValue::bytes(result))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
+
         _ => Err(format!("Operator {:?} not supported for bytes type", op)),
     }
 }

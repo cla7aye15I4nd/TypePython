@@ -37,6 +37,146 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot concatenate Str and {:?}", rhs.ty)),
         },
 
+        // String formatting (% operator)
+        BinaryOp::Mod => match &rhs.ty {
+            PyType::Int => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_int");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_int",
+                )))
+            }
+            PyType::Float => {
+                let format_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_float");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_float",
+                )))
+            }
+            PyType::Bool => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_bool");
+                // Bool is i1, need to convert to i64
+                let bool_val = rhs.runtime_value().into_int_value();
+                let int_val = cg
+                    .builder
+                    .build_int_z_extend(bool_val, cg.ctx.i64_type(), "bool_to_int")
+                    .unwrap();
+                let call_site = cg
+                    .builder
+                    .build_call(format_fn, &[lhs_ptr.into(), int_val.into()], "str_format")
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_bool",
+                )))
+            }
+            PyType::Str => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_str");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_str",
+                )))
+            }
+            PyType::Bytes => {
+                let format_fn =
+                    super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_bytes");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_bytes",
+                )))
+            }
+            PyType::None => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_none");
+                let call_site = cg
+                    .builder
+                    .build_call(format_fn, &[lhs_ptr.into()], "str_format")
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_none",
+                )))
+            }
+            PyType::List(_) => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_list");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_list",
+                )))
+            }
+            PyType::Dict(_, _) => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_dict");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_dict",
+                )))
+            }
+            PyType::Set(_) => {
+                let format_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_format_set");
+                let call_site = cg
+                    .builder
+                    .build_call(
+                        format_fn,
+                        &[lhs_ptr.into(), rhs.runtime_value().into()],
+                        "str_format",
+                    )
+                    .unwrap();
+                Ok(PyValue::new_str(super::extract_ptr_result(
+                    call_site,
+                    "str_format_set",
+                )))
+            }
+            _ => Err(format!("Cannot format Str with {:?}", rhs.ty)),
+        },
+
         // Repetition
         BinaryOp::Mul => match &rhs.ty {
             PyType::Int => {
@@ -250,6 +390,72 @@ pub fn binary_op<'a, 'ctx>(
             }
             _ => Err(format!("Cannot use 'not in' with Str and {:?}", rhs.ty)),
         },
+
+        // Logical and/or - same type returns same type, different types return bool
+        BinaryOp::And => {
+            // Get str length to determine truthiness
+            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "str_len")
+                .unwrap();
+            let len = super::extract_int_result(len_call, "str_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::Str => {
+                    // Str and Str -> Str (Python semantics: return first falsy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, rhs_ptr, lhs_ptr, "and")
+                        .unwrap();
+                    Ok(PyValue::new_str(result))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
+        BinaryOp::Or => {
+            // Get str length to determine truthiness
+            let len_fn = super::get_or_declare_builtin(cg.module, cg.ctx, "str_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "str_len")
+                .unwrap();
+            let len = super::extract_int_result(len_call, "str_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::Str => {
+                    // Str or Str -> Str (Python semantics: return first truthy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, lhs_ptr, rhs_ptr, "or")
+                        .unwrap();
+                    Ok(PyValue::new_str(result))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
 
         _ => Err(format!("Operator {:?} not supported for str type", op)),
     }

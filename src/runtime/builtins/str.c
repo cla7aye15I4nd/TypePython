@@ -1562,3 +1562,257 @@ sds str_dict_to_str(PyStrDictStr* dict) {
     free(entries);
     return result;
 }
+
+// ============================================================================
+// String Format Functions (% operator)
+// ============================================================================
+
+// Format string with integer argument: "value: %d" % 42 -> "value: 42"
+sds str_format_int(const char* fmt, int64_t arg) {
+    // Simple implementation: just replace the first % format specifier with the int
+    // This is a simplified version of Python's % formatting
+    size_t fmtlen = strlen(fmt);
+
+    // Find the first % that's not %%
+    const char* p = fmt;
+    const char* spec_start = NULL;
+    while (*p) {
+        if (*p == '%') {
+            if (p[1] == '%') {
+                p += 2;  // Skip %%
+            } else {
+                spec_start = p;
+                break;
+            }
+        } else {
+            p++;
+        }
+    }
+
+    if (spec_start == NULL) {
+        // No format specifier found, just return the format string
+        return sdsnew(fmt);
+    }
+
+    // Find the end of the format specifier (d, i, x, X, o, b, s, etc.)
+    p = spec_start + 1;
+    while (*p && (isdigit(*p) || *p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '.')) {
+        p++;
+    }
+    char spec_char = *p ? *p : 'd';  // Default to 'd'
+    p++;  // Move past the specifier char
+
+    // Build result
+    size_t prefix_len = spec_start - fmt;
+    size_t suffix_len = fmtlen - (p - fmt);
+
+    char buf[64];
+    switch (spec_char) {
+        case 'd': case 'i':
+            snprintf(buf, sizeof(buf), "%lld", (long long)arg);
+            break;
+        case 'x':
+            snprintf(buf, sizeof(buf), "%llx", (unsigned long long)arg);
+            break;
+        case 'X':
+            snprintf(buf, sizeof(buf), "%llX", (unsigned long long)arg);
+            break;
+        case 'o':
+            snprintf(buf, sizeof(buf), "%llo", (unsigned long long)arg);
+            break;
+        case 'b':
+            // Binary - not supported by printf, do it manually
+            {
+                char *bp = buf + sizeof(buf) - 1;
+                *bp = '\0';
+                uint64_t val = arg < 0 ? (uint64_t)(-arg) : (uint64_t)arg;
+                if (val == 0) {
+                    *--bp = '0';
+                } else {
+                    while (val > 0) {
+                        *--bp = '0' + (val & 1);
+                        val >>= 1;
+                    }
+                }
+                if (arg < 0) *--bp = '-';
+                memmove(buf, bp, strlen(bp) + 1);
+            }
+            break;
+        case 's':
+            // Convert int to string
+            snprintf(buf, sizeof(buf), "%lld", (long long)arg);
+            break;
+        default:
+            snprintf(buf, sizeof(buf), "%lld", (long long)arg);
+            break;
+    }
+
+    size_t buflen = strlen(buf);
+    sds result = sdsnewlen(NULL, prefix_len + buflen + suffix_len);
+    if (result == NULL) return NULL;
+
+    memcpy(result, fmt, prefix_len);
+    memcpy(result + prefix_len, buf, buflen);
+    memcpy(result + prefix_len + buflen, p, suffix_len);
+    result[prefix_len + buflen + suffix_len] = '\0';
+
+    return result;
+}
+
+// Format string with float argument
+sds str_format_float(const char* fmt, double arg) {
+    size_t fmtlen = strlen(fmt);
+
+    const char* p = fmt;
+    const char* spec_start = NULL;
+    while (*p) {
+        if (*p == '%') {
+            if (p[1] == '%') {
+                p += 2;
+            } else {
+                spec_start = p;
+                break;
+            }
+        } else {
+            p++;
+        }
+    }
+
+    if (spec_start == NULL) {
+        return sdsnew(fmt);
+    }
+
+    p = spec_start + 1;
+    while (*p && (isdigit(*p) || *p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '.')) {
+        p++;
+    }
+    char spec_char = *p ? *p : 'g';
+    p++;
+
+    size_t prefix_len = spec_start - fmt;
+    size_t suffix_len = fmtlen - (p - fmt);
+
+    char buf[64];
+    switch (spec_char) {
+        case 'f': case 'F':
+            snprintf(buf, sizeof(buf), "%f", arg);
+            break;
+        case 'e':
+            snprintf(buf, sizeof(buf), "%e", arg);
+            break;
+        case 'E':
+            snprintf(buf, sizeof(buf), "%E", arg);
+            break;
+        case 'g':
+            snprintf(buf, sizeof(buf), "%g", arg);
+            break;
+        case 'G':
+            snprintf(buf, sizeof(buf), "%G", arg);
+            break;
+        case 's':
+            snprintf(buf, sizeof(buf), "%g", arg);
+            break;
+        default:
+            snprintf(buf, sizeof(buf), "%g", arg);
+            break;
+    }
+
+    size_t buflen = strlen(buf);
+    sds result = sdsnewlen(NULL, prefix_len + buflen + suffix_len);
+    if (result == NULL) return NULL;
+
+    memcpy(result, fmt, prefix_len);
+    memcpy(result + prefix_len, buf, buflen);
+    memcpy(result + prefix_len + buflen, p, suffix_len);
+    result[prefix_len + buflen + suffix_len] = '\0';
+
+    return result;
+}
+
+// Format string with string argument
+sds str_format_str(const char* fmt, const char* arg) {
+    size_t fmtlen = strlen(fmt);
+
+    const char* p = fmt;
+    const char* spec_start = NULL;
+    while (*p) {
+        if (*p == '%') {
+            if (p[1] == '%') {
+                p += 2;
+            } else {
+                spec_start = p;
+                break;
+            }
+        } else {
+            p++;
+        }
+    }
+
+    if (spec_start == NULL) {
+        return sdsnew(fmt);
+    }
+
+    p = spec_start + 1;
+    while (*p && (isdigit(*p) || *p == '-' || *p == '+' || *p == ' ' || *p == '#' || *p == '0' || *p == '.')) {
+        p++;
+    }
+    p++;  // Skip specifier char
+
+    size_t prefix_len = spec_start - fmt;
+    size_t suffix_len = fmtlen - (p - fmt);
+    size_t arglen = strlen(arg);
+
+    sds result = sdsnewlen(NULL, prefix_len + arglen + suffix_len);
+    if (result == NULL) return NULL;
+
+    memcpy(result, fmt, prefix_len);
+    memcpy(result + prefix_len, arg, arglen);
+    memcpy(result + prefix_len + arglen, p, suffix_len);
+    result[prefix_len + arglen + suffix_len] = '\0';
+
+    return result;
+}
+
+// Format string with bool argument (True/False)
+sds str_format_bool(const char* fmt, int64_t arg) {
+    const char* val = arg ? "True" : "False";
+    return str_format_str(fmt, val);
+}
+
+// Format string with bytes argument (b'...')
+sds str_format_bytes(const char* fmt, const char* arg) {
+    // Format bytes as b'...'
+    sds bytes_repr = bytes_to_str(arg);
+    sds result = str_format_str(fmt, bytes_repr);
+    sdsfree(bytes_repr);
+    return result;
+}
+
+// Format string with None argument
+sds str_format_none(const char* fmt) {
+    return str_format_str(fmt, "None");
+}
+
+// Format string with list argument
+sds str_format_list(const char* fmt, PyListStr* list) {
+    sds list_repr = list_to_str(list);
+    sds result = str_format_str(fmt, list_repr);
+    sdsfree(list_repr);
+    return result;
+}
+
+// Format string with dict argument
+sds str_format_dict(const char* fmt, PyDictStr* dict) {
+    sds dict_repr = dict_to_str(dict);
+    sds result = str_format_str(fmt, dict_repr);
+    sdsfree(dict_repr);
+    return result;
+}
+
+// Format string with set argument
+sds str_format_set(const char* fmt, PySetStr* set) {
+    sds set_repr = set_to_str(set);
+    sds result = str_format_str(fmt, set_repr);
+    sdsfree(set_repr);
+    return result;
+}

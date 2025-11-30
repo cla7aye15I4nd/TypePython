@@ -4,7 +4,7 @@
 
 use crate::ast::{BinaryOp, UnaryOp};
 use inkwell::values::BasicValueEnum;
-use inkwell::{FloatPredicate, IntPredicate};
+use inkwell::IntPredicate;
 
 use super::value::{CgCtx, PyType, PyValue};
 use super::{extract_int_result, get_or_declare_builtin};
@@ -484,7 +484,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            // Different incompatible types are never equal (Python semantics)
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
         BinaryOp::Ne => match &rhs.ty {
             PyType::Int => Ok(PyValue::bool(
@@ -521,7 +522,8 @@ pub fn binary_op<'a, 'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            // Different incompatible types are always not equal (Python semantics)
+            _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         BinaryOp::Lt => match &rhs.ty {
             PyType::Int => Ok(PyValue::bool(
@@ -717,25 +719,16 @@ pub fn binary_op<'a, 'ctx>(
                         .unwrap();
                     Ok(PyValue::int(result))
                 }
-                PyType::Bool | PyType::Float => {
-                    // Different types -> convert to bool
+                _ => {
+                    // Different types -> convert both to bool and return bool
                     let lhs_bool = cg
                         .builder
                         .build_int_compare(IntPredicate::NE, lhs_int, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = if matches!(&rhs.ty, PyType::Bool) {
-                        rhs.runtime_value().into_int_value()
-                    } else {
-                        let rhs_float = rhs.runtime_value().into_float_value();
-                        let zero_f = cg.ctx.f64_type().const_zero();
-                        cg.builder
-                            .build_float_compare(FloatPredicate::ONE, rhs_float, zero_f, "to_bool")
-                            .unwrap()
-                    };
+                    let rhs_bool = cg.value_to_bool(rhs)?;
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
-                _ => Err(format!("Cannot use 'and' between Int and {:?}", rhs.ty)),
             }
         }
         BinaryOp::Or => {
@@ -754,25 +747,16 @@ pub fn binary_op<'a, 'ctx>(
                         .unwrap();
                     Ok(PyValue::int(result))
                 }
-                PyType::Bool | PyType::Float => {
-                    // Different types -> convert to bool
+                _ => {
+                    // Different types -> convert both to bool and return bool
                     let lhs_bool = cg
                         .builder
                         .build_int_compare(IntPredicate::NE, lhs_int, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = if matches!(&rhs.ty, PyType::Bool) {
-                        rhs.runtime_value().into_int_value()
-                    } else {
-                        let rhs_float = rhs.runtime_value().into_float_value();
-                        let zero_f = cg.ctx.f64_type().const_zero();
-                        cg.builder
-                            .build_float_compare(FloatPredicate::ONE, rhs_float, zero_f, "to_bool")
-                            .unwrap()
-                    };
+                    let rhs_bool = cg.value_to_bool(rhs)?;
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
-                _ => Err(format!("Cannot use 'or' between Int and {:?}", rhs.ty)),
             }
         }
 

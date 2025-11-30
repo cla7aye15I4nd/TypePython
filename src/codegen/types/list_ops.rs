@@ -255,6 +255,72 @@ pub fn binary_op<'a, 'ctx>(
             _ => Err(format!("Cannot use 'not in' with list and {:?}", rhs.ty)),
         },
 
+        // Logical and/or - same type returns same type, different types return bool
+        BinaryOp::And => {
+            // Get list length to determine truthiness
+            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "list_len")
+                .unwrap();
+            let len = extract_int_result(len_call, "list_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::List(elem_ty) => {
+                    // List and List -> List (Python semantics: return first falsy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, rhs_ptr, lhs_ptr, "and")
+                        .unwrap();
+                    Ok(PyValue::new(result, PyType::List(elem_ty.clone()), None))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
+        BinaryOp::Or => {
+            // Get list length to determine truthiness
+            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "list_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[lhs_ptr.into()], "list_len")
+                .unwrap();
+            let len = extract_int_result(len_call, "list_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            let lhs_bool = cg
+                .builder
+                .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
+                .unwrap();
+
+            match &rhs.ty {
+                PyType::List(elem_ty) => {
+                    // List or List -> List (Python semantics: return first truthy or last)
+                    let rhs_ptr = rhs.runtime_value().into_pointer_value();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_bool, lhs_ptr, rhs_ptr, "or")
+                        .unwrap();
+                    Ok(PyValue::new(result, PyType::List(elem_ty.clone()), None))
+                }
+                _ => {
+                    // Different types -> convert both to bool and return bool
+                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+            }
+        }
+
         _ => Err(format!("Operator {:?} not supported on list", op)),
     }
 }

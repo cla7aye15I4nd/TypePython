@@ -125,22 +125,28 @@ pub fn binary_op<'a, 'ctx>(
 
         // Comparison
         BinaryOp::Eq => {
-            let rhs_float = coerce_rhs(rhs)?;
-            Ok(PyValue::bool(
-                cg.builder
-                    .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "feq")
-                    .unwrap()
-                    .into(),
-            ))
+            // If types are incompatible, return False directly (Python semantics)
+            match coerce_rhs(rhs) {
+                Ok(rhs_float) => Ok(PyValue::bool(
+                    cg.builder
+                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "feq")
+                        .unwrap()
+                        .into(),
+                )),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            }
         }
         BinaryOp::Ne => {
-            let rhs_float = coerce_rhs(rhs)?;
-            Ok(PyValue::bool(
-                cg.builder
-                    .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "fne")
-                    .unwrap()
-                    .into(),
-            ))
+            // If types are incompatible, return True directly (Python semantics)
+            match coerce_rhs(rhs) {
+                Ok(rhs_float) => Ok(PyValue::bool(
+                    cg.builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "fne")
+                        .unwrap()
+                        .into(),
+                )),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            }
         }
         BinaryOp::Lt => {
             let rhs_float = coerce_rhs(rhs)?;
@@ -214,30 +220,16 @@ pub fn binary_op<'a, 'ctx>(
                         .unwrap();
                     Ok(PyValue::float(result))
                 }
-                PyType::Int | PyType::Bool => {
-                    // Different types -> convert to bool
+                _ => {
+                    // Different types -> convert both to bool and return bool
                     let lhs_bool = cg
                         .builder
                         .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
-                        let rhs_int = rhs.runtime_value().into_int_value();
-                        let zero_int = cg.ctx.i64_type().const_zero();
-                        cg.builder
-                            .build_int_compare(
-                                inkwell::IntPredicate::NE,
-                                rhs_int,
-                                zero_int,
-                                "to_bool",
-                            )
-                            .unwrap()
-                    } else {
-                        rhs.runtime_value().into_int_value()
-                    };
+                    let rhs_bool = cg.value_to_bool(rhs)?;
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
-                _ => Err(format!("Cannot use 'and' between Float and {:?}", rhs.ty)),
             }
         }
         BinaryOp::Or => {
@@ -256,30 +248,16 @@ pub fn binary_op<'a, 'ctx>(
                         .unwrap();
                     Ok(PyValue::float(result))
                 }
-                PyType::Int | PyType::Bool => {
-                    // Different types -> convert to bool
+                _ => {
+                    // Different types -> convert both to bool and return bool
                     let lhs_bool = cg
                         .builder
                         .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
-                        let rhs_int = rhs.runtime_value().into_int_value();
-                        let zero_int = cg.ctx.i64_type().const_zero();
-                        cg.builder
-                            .build_int_compare(
-                                inkwell::IntPredicate::NE,
-                                rhs_int,
-                                zero_int,
-                                "to_bool",
-                            )
-                            .unwrap()
-                    } else {
-                        rhs.runtime_value().into_int_value()
-                    };
+                    let rhs_bool = cg.value_to_bool(rhs)?;
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
-                _ => Err(format!("Cannot use 'or' between Float and {:?}", rhs.ty)),
             }
         }
         BinaryOp::BitOr
