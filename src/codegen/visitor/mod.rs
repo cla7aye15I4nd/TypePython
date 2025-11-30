@@ -42,13 +42,9 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_var_decl_impl(name, var_type, value)
     }
 
-    fn visit_class(&mut self, _class: &Class) -> Result<(), Self::Error> {
-        todo!("Classes")
-    }
-
     fn visit_assignment(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         value: &Expression,
     ) -> Result<(), Self::Error> {
         self.visit_assignment_impl(target, value)
@@ -56,20 +52,11 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
 
     fn visit_aug_assignment(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         op: &AugAssignOp,
         value: &Expression,
     ) -> Result<(), Self::Error> {
         self.visit_aug_assignment_impl(target, op, value)
-    }
-
-    fn visit_for(
-        &mut self,
-        var: &str,
-        iterable: &Expression,
-        body: &[Statement],
-    ) -> Result<(), Self::Error> {
-        self.visit_for_impl(var, iterable, body)
     }
 
     fn visit_break(&mut self) -> Result<(), Self::Error> {
@@ -106,7 +93,7 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_pass_impl()
     }
 
-    fn visit_delete(&mut self, target: &AssignTarget) -> Result<(), Self::Error> {
+    fn visit_delete(&mut self, target: &Expression) -> Result<(), Self::Error> {
         self.visit_delete_impl(target)
     }
 

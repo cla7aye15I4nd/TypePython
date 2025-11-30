@@ -20,13 +20,11 @@ impl BuiltinFunction {
         context: &'ctx inkwell::context::Context,
     ) -> inkwell::types::BasicMetadataTypeEnum<'ctx> {
         match param_type {
-            BuiltinType::Void => panic!("Void is not a valid parameter type"),
             BuiltinType::I64 => context.i64_type().into(),
-            BuiltinType::I32 => context.i32_type().into(),
             BuiltinType::F64 => context.f64_type().into(),
-            BuiltinType::F32 => context.f32_type().into(),
             BuiltinType::Bool => context.bool_type().into(),
             BuiltinType::Ptr => context.ptr_type(inkwell::AddressSpace::default()).into(),
+            _ => panic!("Unsupported parameter type: {:?}", param_type),
         }
     }
 
@@ -44,13 +42,11 @@ impl BuiltinFunction {
         match self.return_type {
             BuiltinType::Void => context.void_type().fn_type(&param_types, false),
             BuiltinType::I64 => context.i64_type().fn_type(&param_types, false),
-            BuiltinType::I32 => context.i32_type().fn_type(&param_types, false),
             BuiltinType::F64 => context.f64_type().fn_type(&param_types, false),
-            BuiltinType::F32 => context.f32_type().fn_type(&param_types, false),
-            BuiltinType::Bool => context.bool_type().fn_type(&param_types, false),
             BuiltinType::Ptr => context
                 .ptr_type(inkwell::AddressSpace::default())
                 .fn_type(&param_types, false),
+            _ => panic!("Unsupported return type: {:?}", self.return_type),
         }
     }
 }

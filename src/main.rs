@@ -1,7 +1,6 @@
 use clap::Parser as ClapParser;
 use std::path::PathBuf;
-use std::process::Command;
-use tpy::pipeline::CompileOptions;
+use tpy::cli::{compile_and_run, RunResult};
 
 #[derive(ClapParser, Debug)]
 #[command(name = "tpy")]
@@ -9,22 +8,6 @@ use tpy::pipeline::CompileOptions;
 pub struct Args {
     /// Input source file (.py)
     pub input: PathBuf,
-
-    /// Dump the preprocessed source (with INDENT/DEDENT markers) to file
-    #[arg(long)]
-    pub dump_pp: bool,
-
-    /// Dump the PEST parse tree to file
-    #[arg(long)]
-    pub dump_pest: bool,
-
-    /// Dump the AST structure to file
-    #[arg(long)]
-    pub dump_ast: bool,
-
-    /// Dump LLVM IR output to file
-    #[arg(long)]
-    pub dump_ir: bool,
 
     /// Compile only, don't run the executable
     #[arg(short = 'c', long)]
@@ -38,37 +21,15 @@ pub struct Args {
 fn main() {
     let args = Args::parse();
 
-    // Verify input file has .py extension
-    if args.input.extension().and_then(|s| s.to_str()) != Some("py") {
-        eprintln!("Error: Input file must have .py extension");
-        std::process::exit(1);
-    }
-
-    // Set up compilation options
-    let options = CompileOptions {
-        dump_preprocessed: args.dump_pp,
-        dump_pest: args.dump_pest,
-        dump_ast: args.dump_ast,
-        dump_ir: args.dump_ir,
-    };
-
-    // Determine output executable name
-    let output_path = args.output.unwrap_or_else(|| args.input.with_extension(""));
-
-    // Compile using the module-aware pipeline
-
-    if let Err(e) = tpy::pipeline::compile(&args.input, &output_path, &options) {
-        eprintln!("Compilation error: {}", e);
-        std::process::exit(1);
-    }
-
-    // Run the executable (unless compile-only mode)
-    if !args.compile_only {
-        let run_status = Command::new(&output_path).status().unwrap_or_else(|e| {
-            eprintln!("Failed to run executable: {}", e);
+    match compile_and_run(&args.input, args.output.as_deref(), args.compile_only) {
+        RunResult::Completed(code) => std::process::exit(code),
+        RunResult::CompileError(e) => {
+            eprintln!("Compilation error: {}", e);
             std::process::exit(1);
-        });
-
-        std::process::exit(run_status.code().unwrap_or(1));
+        }
+        RunResult::ExecError(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
     }
 }

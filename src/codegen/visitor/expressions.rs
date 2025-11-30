@@ -71,7 +71,8 @@ impl<'ctx> CodeGen<'ctx> {
         if let Some(function) = self.module.get_function(&mangled_name) {
             // Get type info from global_variables if available (for correct return type)
             let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
-                if let Ok(info) = global.get_function() {
+                if global.ty == crate::types::PyType::Function {
+                    let info = global.get_function();
                     (info.param_types.clone(), info.return_type.clone())
                 } else {
                     (vec![], crate::types::PyType::None)

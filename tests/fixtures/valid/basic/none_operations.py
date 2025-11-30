@@ -26,3 +26,11 @@ if x:
     print(b"None is truthy")
 else:
     print(b"None is falsy")
+
+# None in collections (always False since collections contain int/str)
+print(b"None in list:", None in [1, 2, 3])
+print(b"None not in list:", None not in [1, 2, 3])
+print(b"None in dict:", None in {1: 10, 2: 20})
+print(b"None not in dict:", None not in {1: 10, 2: 20})
+print(b"None in set:", None in {1, 2, 3})
+print(b"None not in set:", None not in {1, 2, 3})

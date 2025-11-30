@@ -21,7 +21,6 @@ pub enum Type {
 pub struct Program {
     pub imports: Vec<Import>,
     pub functions: Vec<Function>,
-    pub classes: Vec<Class>,
     pub statements: Vec<Statement>,
 }
 
@@ -45,23 +44,6 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone)]
-pub struct Class {
-    pub name: String,
-    pub base_class: Option<String>,
-    pub members: Vec<ClassMember>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ClassMember {
-    Method(Function),
-    Field {
-        name: String,
-        field_type: Type,
-        value: Expression,
-    },
-}
-
-#[derive(Debug, Clone)]
 pub enum Statement {
     VarDecl {
         name: String,
@@ -69,11 +51,11 @@ pub enum Statement {
         value: Expression,
     },
     Assignment {
-        target: AssignTarget,
+        target: Expression,
         value: Expression,
     },
     AugAssignment {
-        target: AssignTarget,
+        target: Expression,
         op: AugAssignOp,
         value: Expression,
     },
@@ -87,30 +69,12 @@ pub enum Statement {
         condition: Expression,
         body: Vec<Statement>,
     },
-    For {
-        var: String,
-        iterable: Expression,
-        body: Vec<Statement>,
-    },
     Return(Option<Expression>),
     Break,
     Continue,
     Pass,
-    Delete(AssignTarget),
+    Delete(Expression),
     Expr(Expression),
-}
-
-#[derive(Debug, Clone)]
-pub enum AssignTarget {
-    Var(String),
-    Attribute {
-        object: Box<Expression>,
-        attr: String,
-    },
-    Subscript {
-        object: Box<Expression>,
-        index: Box<Expression>,
-    },
 }
 
 #[derive(Debug, Clone)]

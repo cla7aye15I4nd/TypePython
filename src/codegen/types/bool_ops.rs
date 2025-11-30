@@ -183,27 +183,75 @@ pub fn binary_op<'a, 'ctx>(
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
 
-        // Logical
-        BinaryOp::And => match &rhs.ty {
-            PyType::Bool => {
-                let result = cg
-                    .builder
-                    .build_and(lhs_bool, rhs.runtime_value().into_int_value(), "and")
-                    .unwrap();
-                Ok(PyValue::bool(result.into()))
+        // Logical and/or - same type returns same type, different types return bool
+        BinaryOp::And => {
+            match &rhs.ty {
+                PyType::Bool => {
+                    // Bool and Bool -> Bool (Python semantics)
+                    let rhs_bool = rhs.runtime_value().into_int_value();
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                PyType::Int | PyType::Float => {
+                    // Different types -> convert to bool
+                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
+                        let rhs_int = rhs.runtime_value().into_int_value();
+                        let zero = cg.ctx.i64_type().const_zero();
+                        cg.builder
+                            .build_int_compare(IntPredicate::NE, rhs_int, zero, "to_bool")
+                            .unwrap()
+                    } else {
+                        let rhs_float = rhs.runtime_value().into_float_value();
+                        let zero = cg.ctx.f64_type().const_zero();
+                        cg.builder
+                            .build_float_compare(
+                                inkwell::FloatPredicate::ONE,
+                                rhs_float,
+                                zero,
+                                "to_bool",
+                            )
+                            .unwrap()
+                    };
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                _ => Err(format!("Cannot use 'and' between Bool and {:?}", rhs.ty)),
             }
-            _ => Err(format!("Cannot logical AND Bool and {:?}", rhs.ty)),
-        },
-        BinaryOp::Or => match &rhs.ty {
-            PyType::Bool => {
-                let result = cg
-                    .builder
-                    .build_or(lhs_bool, rhs.runtime_value().into_int_value(), "or")
-                    .unwrap();
-                Ok(PyValue::bool(result.into()))
+        }
+        BinaryOp::Or => {
+            match &rhs.ty {
+                PyType::Bool => {
+                    // Bool or Bool -> Bool (Python semantics)
+                    let rhs_bool = rhs.runtime_value().into_int_value();
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                PyType::Int | PyType::Float => {
+                    // Different types -> convert to bool
+                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
+                        let rhs_int = rhs.runtime_value().into_int_value();
+                        let zero = cg.ctx.i64_type().const_zero();
+                        cg.builder
+                            .build_int_compare(IntPredicate::NE, rhs_int, zero, "to_bool")
+                            .unwrap()
+                    } else {
+                        let rhs_float = rhs.runtime_value().into_float_value();
+                        let zero = cg.ctx.f64_type().const_zero();
+                        cg.builder
+                            .build_float_compare(
+                                inkwell::FloatPredicate::ONE,
+                                rhs_float,
+                                zero,
+                                "to_bool",
+                            )
+                            .unwrap()
+                    };
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                _ => Err(format!("Cannot use 'or' between Bool and {:?}", rhs.ty)),
             }
-            _ => Err(format!("Cannot logical OR Bool and {:?}", rhs.ty)),
-        },
+        }
 
         BinaryOp::In | BinaryOp::NotIn => {
             // Coerce Bool to Int and delegate to int_ops

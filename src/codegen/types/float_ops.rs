@@ -197,9 +197,90 @@ pub fn binary_op<'a, 'ctx>(
             ))
         }
 
-        // Not supported on floats
-        BinaryOp::And | BinaryOp::Or => {
-            Err("Logical operators not supported on floats".to_string())
+        // Logical and/or - same type returns same type, different types return bool
+        BinaryOp::And => {
+            let zero = cg.ctx.f64_type().const_zero();
+            match &rhs.ty {
+                PyType::Float => {
+                    // Float and Float -> Float (Python semantics: return first falsy or last)
+                    let rhs_float = rhs.runtime_value().into_float_value();
+                    let lhs_is_zero = cg
+                        .builder
+                        .build_float_compare(FloatPredicate::OEQ, lhs_float, zero, "is_zero")
+                        .unwrap();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_is_zero, lhs_float, rhs_float, "and")
+                        .unwrap();
+                    Ok(PyValue::float(result))
+                }
+                PyType::Int | PyType::Bool => {
+                    // Different types -> convert to bool
+                    let lhs_bool = cg
+                        .builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
+                        .unwrap();
+                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
+                        let rhs_int = rhs.runtime_value().into_int_value();
+                        let zero_int = cg.ctx.i64_type().const_zero();
+                        cg.builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                rhs_int,
+                                zero_int,
+                                "to_bool",
+                            )
+                            .unwrap()
+                    } else {
+                        rhs.runtime_value().into_int_value()
+                    };
+                    let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                _ => Err(format!("Cannot use 'and' between Float and {:?}", rhs.ty)),
+            }
+        }
+        BinaryOp::Or => {
+            let zero = cg.ctx.f64_type().const_zero();
+            match &rhs.ty {
+                PyType::Float => {
+                    // Float or Float -> Float (Python semantics: return first truthy or last)
+                    let rhs_float = rhs.runtime_value().into_float_value();
+                    let lhs_is_nonzero = cg
+                        .builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "is_nonzero")
+                        .unwrap();
+                    let result = cg
+                        .builder
+                        .build_select(lhs_is_nonzero, lhs_float, rhs_float, "or")
+                        .unwrap();
+                    Ok(PyValue::float(result))
+                }
+                PyType::Int | PyType::Bool => {
+                    // Different types -> convert to bool
+                    let lhs_bool = cg
+                        .builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
+                        .unwrap();
+                    let rhs_bool = if matches!(&rhs.ty, PyType::Int) {
+                        let rhs_int = rhs.runtime_value().into_int_value();
+                        let zero_int = cg.ctx.i64_type().const_zero();
+                        cg.builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                rhs_int,
+                                zero_int,
+                                "to_bool",
+                            )
+                            .unwrap()
+                    } else {
+                        rhs.runtime_value().into_int_value()
+                    };
+                    let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
+                    Ok(PyValue::bool(result.into()))
+                }
+                _ => Err(format!("Cannot use 'or' between Float and {:?}", rhs.ty)),
+            }
         }
         BinaryOp::BitOr
         | BinaryOp::BitXor

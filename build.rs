@@ -146,6 +146,9 @@ fn main() {
         "cargo:rustc-env=TYPEPYTHON_BUILTIN_BUILD_DIR={}",
         build_dir.display()
     );
+
+    // Export LLVM prefix for runtime use
+    println!("cargo:rustc-env=TYPEPYTHON_LLVM_PREFIX={}", llvm_prefix);
 }
 
 fn is_stdlib_symbol(symbol: &str) -> bool {
@@ -574,7 +577,7 @@ fn generate_test_code(out_dir: &Path, manifest_dir: &Path) {
     writeln!(f, "use std::fs;").unwrap();
     writeln!(f, "use std::path::Path;").unwrap();
     writeln!(f, "use std::process::Command;").unwrap();
-    writeln!(f, "use tpy::pipeline::{{compile, CompileOptions}};").unwrap();
+    writeln!(f, "use tpy::pipeline::compile;").unwrap();
     writeln!(f).unwrap();
     writeln!(f, "fn test_invalid_program(test_path: &str) {{").unwrap();
     writeln!(f, "    let path = Path::new(test_path);").unwrap();
@@ -596,11 +599,7 @@ fn generate_test_code(out_dir: &Path, manifest_dir: &Path) {
     writeln!(f).unwrap();
     writeln!(f, "    // Try to compile - should fail").unwrap();
     writeln!(f, "    let _ = fs::remove_file(&exe_path);").unwrap();
-    writeln!(
-        f,
-        "    let result = compile(path, &exe_path, &CompileOptions::default());"
-    )
-    .unwrap();
+    writeln!(f, "    let result = compile(path, &exe_path);").unwrap();
     writeln!(f).unwrap();
     writeln!(f, "    if result.is_ok() {{").unwrap();
     writeln!(f, "        let _ = fs::remove_file(&exe_path);").unwrap();

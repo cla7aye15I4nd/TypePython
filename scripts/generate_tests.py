@@ -50,6 +50,9 @@ BINARY_OPS = {
     "ge": (">=", "compare with >=", lambda a, b: a >= b),
     "in": ("in", "use 'in' with", lambda a, b: a in b),
     "notin": ("not in", "use 'not in' with", lambda a, b: a not in b),
+    # Logical and/or - TypePython returns bool, wrap with bool() for Python compat
+    "and": ("and", "use 'and' with", lambda a, b: a and b),
+    "or": ("or", "use 'or' with", lambda a, b: a or b),
 }
 
 # Unary operators
@@ -78,10 +81,8 @@ BUILTIN_FUNCS = {
     "chr": (chr, 1, 1, "chr"),
     "ascii": (ascii, 1, 1, "ascii"),
     "sorted": (sorted, 1, 1, "sorted"),
-    "reversed": (reversed, 1, 1, "reversed"),
     "list": (list, 1, 1, "list conversion"),
-    "set": (set, 1, 1, "set conversion"),
-    # Unsupported: frozenset, tuple, iter, any, all, enumerate
+    # Unsupported: set, reversed, frozenset, tuple, iter, any, all, enumerate
     "sum": (sum, 1, 1, "sum"),
 
     # Two argument functions
@@ -149,6 +150,11 @@ def get_type_annotation(type_key: str) -> str:
 def get_result_type(left_type: str, right_type: str, op: str) -> str:
     """Determine the expected result type for a binary operation."""
     if op in ("lt", "le", "gt", "ge", "in", "notin"):
+        return "bool"
+    # and/or: same type returns same type, different types return bool
+    if op in ("and", "or"):
+        if left_type == right_type:
+            return get_type_annotation(left_type)
         return "bool"
     if op == "div":
         return "float"
@@ -254,6 +260,13 @@ def generate_valid_line(left_type: str, right_type: str, op: str, idx: int) -> s
         return f"{var_name}: bool = {left_example} in {right_example}"
     elif op == "notin":
         return f"{var_name}: bool = {left_example} not in {right_example}"
+    elif op in ("and", "or"):
+        # TypePython: same type returns same type, different types return bool
+        # Wrap with bool() only for different types (for Python compat)
+        if left_type != right_type:
+            return f"{var_name}: bool = bool({left_example} {op_symbol} {right_example})"
+        else:
+            return f"{var_name}: {result_type} = {left_example} {op_symbol} {right_example}"
     else:
         return f"{var_name}: {result_type} = {left_example} {op_symbol} {right_example}"
 

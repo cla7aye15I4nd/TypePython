@@ -6,17 +6,9 @@ use std::path::{Path, PathBuf};
 use crate::ast::Program;
 use crate::Parser;
 
-/// Get the clang executable path
+/// Get the clang executable path (hardcoded at compile time from build.rs)
 pub fn get_clang_path() -> String {
-    let llvm_prefix =
-        std::env::var("LLVM_SYS_211_PREFIX").unwrap_or_else(|_| "/usr/lib/llvm-21".to_string());
-    format!("{}/bin/clang", llvm_prefix)
-}
-
-/// Get the builtin library directory path (for user-provided Python builtins)
-/// Note: C builtin modules are now compiled at build time and linked selectively
-pub fn get_builtin_library_dir() -> Option<PathBuf> {
-    std::env::var("TYPEPYTHON_RUNTIME").map(PathBuf::from).ok()
+    format!("{}/bin/clang", env!("TYPEPYTHON_LLVM_PREFIX"))
 }
 
 /// Module registry manages all compiled modules
@@ -51,20 +43,8 @@ impl<'ctx> ModuleRegistry<'ctx> {
     /// Generate a module name from a file path
     /// For example:
     /// - /path/to/project/math/helpers.py -> "math.helpers"
-    /// - /usr/lib/typepython/builtins/list.py -> "<builtin>.builtins.list"
     fn generate_module_name(&self, path: &Path) -> Result<String, String> {
-        // Check if it's a builtin module (if TYPEPYTHON_RUNTIME is set)
-        if let Some(builtin_dir) = get_builtin_library_dir() {
-            if let Ok(rel_path) = path.strip_prefix(&builtin_dir) {
-                let module_path = rel_path
-                    .with_extension("")
-                    .to_string_lossy()
-                    .replace("/", ".");
-                return Ok(format!("<builtin>.{}", module_path));
-            }
-        }
-
-        // Otherwise, it's a user module relative to root
+        // User module relative to root
         let rel_path = path.strip_prefix(&self.root).map_err(|_| {
             format!(
                 "Path {} is not relative to root {}",
@@ -98,26 +78,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
         // Add entry module to queue
         queue.push_back(entry_path.to_path_buf());
 
-        // Optionally add Python builtin modules from TYPEPYTHON_RUNTIME if set
-        // Note: C builtin modules are now compiled at build time and linked selectively
-        if let Some(builtin_dir) = get_builtin_library_dir() {
-            if builtin_dir.exists() {
-                if let Ok(entries) = std::fs::read_dir(&builtin_dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.is_file() {
-                            // Only add .py files from builtin directory (not .c)
-                            if let Some(ext) = path.extension() {
-                                if ext == "py" {
-                                    queue.push_back(path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // BFS through all modules - first pass: collect all modules and their programs
         while let Some(current_path) = queue.pop_front() {
             // Skip if already visited
@@ -129,26 +89,6 @@ impl<'ctx> ModuleRegistry<'ctx> {
 
             // Generate module name for this module
             let module_name = self.generate_module_name(&current_path)?;
-
-            // Handle C files separately - they don't have imports but should be registered
-            if current_path.extension().and_then(|s| s.to_str()) == Some("c") {
-                // C files have no AST program or imports, but we still register them
-                let empty_program = Program {
-                    imports: vec![],
-                    classes: vec![],
-                    functions: vec![],
-                    statements: vec![],
-                };
-                self.programs.insert(module_name.clone(), empty_program);
-                self.modules.insert(
-                    module_name.clone(),
-                    PyValue::module(ModuleInfo {
-                        name: module_name,
-                        members: HashMap::new(),
-                    }),
-                );
-                continue;
-            }
 
             // Read source file
             let current_source = std::fs::read_to_string(&current_path)
@@ -253,29 +193,17 @@ impl<'ctx> ModuleRegistry<'ctx> {
         let extensions = ["py"];
         let module_base = module_path.join("/");
 
-        // Build search paths list dynamically
-        let mut search_paths: Vec<(&str, PathBuf, PathBuf)> = Vec::new();
+        // Search in current directory only
+        for ext in &extensions {
+            let candidate = current_path.join(format!("{}.{}", module_base, ext));
 
-        // Add builtin directory if TYPEPYTHON_RUNTIME is set
-        if let Some(builtin_dir) = get_builtin_library_dir() {
-            search_paths.push(("<builtin>", builtin_dir.clone(), builtin_dir));
-        }
-
-        // Add current directory
-        search_paths.push(("", current_path.to_path_buf(), self.root.clone()));
-
-        for (_, dir, _) in search_paths {
-            for ext in &extensions {
-                let candidate = dir.join(format!("{}.{}", module_base, ext));
-
-                if candidate.exists() {
-                    return Ok(candidate);
-                }
+            if candidate.exists() {
+                return Ok(candidate);
             }
         }
 
         Err(format!(
-            "Module '{}' not found in builtin or current directory",
+            "Module '{}' not found in current directory",
             module_path.join(".")
         ))
     }

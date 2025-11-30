@@ -39,3 +39,19 @@ print(b5)
 
 b6: bool = 10 not in a
 print(b6)
+
+# Ordering comparisons
+print([1, 2] < [1, 2, 3])
+print([1, 2, 3] < [1, 2])
+print([1, 2] <= [1, 2])
+print([1, 2] <= [1, 2, 3])
+print([1, 2, 3] > [1, 2])
+print([1, 2] > [1, 2, 3])
+print([1, 2] >= [1, 2])
+print([1, 2, 3] >= [1, 2])
+
+# Repetition with bool
+g: list[int] = [7] * True
+print(len(g))
+h: list[int] = [8] * False
+print(len(h))

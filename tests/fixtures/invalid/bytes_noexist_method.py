@@ -1,0 +1,1 @@
+print(b"123".noexist_method())

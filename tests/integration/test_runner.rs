@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use tpy::pipeline::{compile, CompileOptions};
+use tpy::pipeline::compile;
 
 /// Compile and run a test, comparing output with expected results
 pub fn compile_and_run_test(test_path: &str) -> Result<()> {
@@ -16,7 +16,7 @@ pub fn compile_and_run_test(test_path: &str) -> Result<()> {
     let _ = fs::remove_file(&exe_path);
 
     // Compile the program
-    compile(path, &exe_path, &CompileOptions::default())
+    compile(path, &exe_path)
         .map_err(|e| anyhow::anyhow!("Compilation failed for {}: {}", path.display(), e))?;
 
     // Run the compiled executable

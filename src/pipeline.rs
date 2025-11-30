@@ -7,15 +7,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// Options for the compilation pipeline
-#[derive(Debug, Default)]
-pub struct CompileOptions {
-    pub dump_preprocessed: bool,
-    pub dump_pest: bool,
-    pub dump_ast: bool,
-    pub dump_ir: bool,
-}
-
 /// Link multiple object files together into an executable using LTO
 pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result<(), String> {
     let clang = crate::module::get_clang_path();
@@ -58,11 +49,7 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 /// 2. Creates a function map and compiles each AST to corresponding .o file
 /// 3. Collects used builtin modules from all compiled code
 /// 4. Links all .o files (including only required builtin modules) into a single executable
-pub fn compile(
-    source_path: &Path,
-    output_path: &Path,
-    _options: &CompileOptions,
-) -> Result<(), String> {
+pub fn compile(source_path: &Path, output_path: &Path) -> Result<(), String> {
     let context = Context::create();
 
     // ============================================================================

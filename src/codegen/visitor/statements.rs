@@ -30,11 +30,11 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub(crate) fn visit_assignment_impl(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         value: &Expression,
     ) -> Result<(), String> {
         match target {
-            AssignTarget::Var(name) => {
+            Expression::Var(name) => {
                 // First evaluate the value to get its type
                 let val = self.evaluate_expression(value)?;
 
@@ -52,10 +52,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 Ok(())
             }
-            AssignTarget::Attribute { .. } => {
-                todo!("Attribute assignment")
-            }
-            AssignTarget::Subscript { object, index } => {
+            Expression::Subscript { object, index } => {
                 let obj = self.evaluate_expression(object)?;
                 let idx = self.evaluate_expression(index)?;
                 let val = self.evaluate_expression(value)?;
@@ -69,23 +66,21 @@ impl<'ctx> CodeGen<'ctx> {
                         self.dict_setitem(obj.value(), idx.value(), val.value())?;
                         Ok(())
                     }
-                    _ => Err(format!(
-                        "Subscript assignment not supported for type {:?}",
-                        obj.ty
-                    )),
+                    _ => panic!("Subscript assignment not supported for type {:?}", obj.ty),
                 }
             }
+            _ => panic!("Invalid assignment target: {:?}", target),
         }
     }
 
     pub(crate) fn visit_aug_assignment_impl(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         op: &AugAssignOp,
         value: &Expression,
     ) -> Result<(), String> {
         match target {
-            AssignTarget::Var(name) => {
+            Expression::Var(name) => {
                 let var = self
                     .variables
                     .get(name)
@@ -122,22 +117,8 @@ impl<'ctx> CodeGen<'ctx> {
                 var.store_value(&self.builder, &result)?;
                 Ok(())
             }
-            AssignTarget::Attribute { .. } => {
-                todo!("Augmented attribute assignment")
-            }
-            AssignTarget::Subscript { .. } => {
-                todo!("Augmented subscript assignment")
-            }
+            _ => panic!("Augmented assignment only supported for variables"),
         }
-    }
-
-    pub(crate) fn visit_for_impl(
-        &mut self,
-        _var: &str,
-        _iterable: &Expression,
-        _body: &[Statement],
-    ) -> Result<(), String> {
-        todo!("For loops")
     }
 
     pub(crate) fn visit_break_impl(&mut self) -> Result<(), String> {
@@ -199,18 +180,14 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    pub(crate) fn visit_delete_impl(&mut self, target: &AssignTarget) -> Result<(), String> {
+    pub(crate) fn visit_delete_impl(&mut self, target: &Expression) -> Result<(), String> {
         match target {
-            AssignTarget::Var(_name) => {
+            Expression::Var(_name) => {
                 // del variable - not commonly used, could unset the variable
                 // For now, we don't support deleting simple variables
                 Err("del on variables is not supported".to_string())
             }
-            AssignTarget::Attribute { .. } => {
-                // del obj.attr - attribute deletion
-                Err("del on attributes is not supported".to_string())
-            }
-            AssignTarget::Subscript { object, index } => {
+            Expression::Subscript { object, index } => {
                 let obj = self.evaluate_expression(object)?;
                 let idx = self.evaluate_expression(index)?;
 
@@ -223,9 +200,10 @@ impl<'ctx> CodeGen<'ctx> {
                         self.dict_delitem(obj.value(), idx.value())?;
                         Ok(())
                     }
-                    _ => Err(format!("del not supported for type {:?}", obj.ty)),
+                    _ => panic!("del not supported for type {:?}", obj.ty),
                 }
             }
+            _ => panic!("del not supported for target: {:?}", target),
         }
     }
 }

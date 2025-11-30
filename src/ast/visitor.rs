@@ -14,9 +14,6 @@ pub trait Visitor {
     /// Visit an import statement
     fn visit_import(&mut self, import: &Import) -> Result<(), Self::Error>;
 
-    /// Visit a class declaration
-    fn visit_class(&mut self, class: &Class) -> Result<(), Self::Error>;
-
     /// Visit a function declaration
     fn visit_function(&mut self, function: &Function) -> Result<(), Self::Error> {
         self.enter_function(function)?;
@@ -51,11 +48,6 @@ pub trait Visitor {
                 else_block,
             } => self.visit_if(condition, then_block, elif_clauses, else_block),
             Statement::While { condition, body } => self.visit_while(condition, body),
-            Statement::For {
-                var,
-                iterable,
-                body,
-            } => self.visit_for(var, iterable, body),
             Statement::Return(expr) => self.visit_return(expr.as_ref()),
             Statement::Break => self.visit_break(),
             Statement::Continue => self.visit_continue(),
@@ -76,14 +68,14 @@ pub trait Visitor {
     /// Visit assignment statement
     fn visit_assignment(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         value: &Expression,
     ) -> Result<(), Self::Error>;
 
     /// Visit augmented assignment statement
     fn visit_aug_assignment(
         &mut self,
-        target: &AssignTarget,
+        target: &Expression,
         op: &AugAssignOp,
         value: &Expression,
     ) -> Result<(), Self::Error>;
@@ -104,14 +96,6 @@ pub trait Visitor {
         body: &[Statement],
     ) -> Result<(), Self::Error>;
 
-    /// Visit for statement
-    fn visit_for(
-        &mut self,
-        var: &str,
-        iterable: &Expression,
-        body: &[Statement],
-    ) -> Result<(), Self::Error>;
-
     /// Visit return statement
     fn visit_return(&mut self, expr: Option<&Expression>) -> Result<(), Self::Error>;
 
@@ -125,7 +109,7 @@ pub trait Visitor {
     fn visit_pass(&mut self) -> Result<(), Self::Error>;
 
     /// Visit delete statement
-    fn visit_delete(&mut self, target: &AssignTarget) -> Result<(), Self::Error>;
+    fn visit_delete(&mut self, target: &Expression) -> Result<(), Self::Error>;
 
     /// Visit expression statement
     fn visit_expr_statement(&mut self, expr: &Expression) -> Result<(), Self::Error>;

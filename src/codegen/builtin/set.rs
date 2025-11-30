@@ -73,20 +73,6 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     // ========================================================================
-    // Helper operations
-    // ========================================================================
-
-    /// Get the length of a set
-    pub fn set_len(&mut self, set_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
-        let len_fn = self.get_or_declare_c_builtin("set_len");
-        let call = self
-            .builder
-            .build_call(len_fn, &[set_val.into()], "set_len")
-            .unwrap();
-        Ok(self.extract_int_call_result(call))
-    }
-
-    // ========================================================================
     // set() builtin function
     // ========================================================================
 

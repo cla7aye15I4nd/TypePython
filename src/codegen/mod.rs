@@ -149,7 +149,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 // Regular function call
-                let function_info = func_val.get_function()?;
+                let function_info = func_val.get_function();
                 let function = function_info.function;
                 let return_type = function_info.return_type;
 
@@ -190,9 +190,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             Expression::List(elements) => self.visit_list_lit_impl(elements),
-            Expression::Tuple(_) => {
-                todo!("Tuple literals")
-            }
+            Expression::Tuple(_) => Err("Tuple literals not yet implemented".to_string()),
             Expression::Dict(pairs) => self.visit_dict_lit_impl(pairs),
             Expression::Set(elements) => self.visit_set_lit_impl(elements),
             Expression::Attribute { object, attr } => {
@@ -204,7 +202,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                         // If it's a function, ensure it's declared in our module
                         if let PyType::Function = &member.ty {
-                            let func_info = member.get_function()?;
+                            let func_info = member.get_function();
                             // Declare the function in our module using PyType info
                             let function = func_info.declare_in_module(self.context, &self.module);
                             // Return a new FunctionInfo with the correct function reference
@@ -601,11 +599,6 @@ impl<'ctx> CodeGen<'ctx> {
         left: &Expression,
         right: &Expression,
     ) -> Result<PyValue<'ctx>, String> {
-        // Handle short-circuit evaluation for logical operators
-        if matches!(op, BinaryOp::And | BinaryOp::Or) {
-            return self.generate_short_circuit_op(op, left, right);
-        }
-
         let lhs = self.evaluate_expression(left)?;
         let rhs = self.evaluate_expression(right)?;
 
@@ -614,155 +607,6 @@ impl<'ctx> CodeGen<'ctx> {
         let cg = CgCtx::new(self.context, &self.builder, &self.module);
         lhs.binary_op(&cg, op, &rhs)
     }
-
-    /// Generate short-circuit evaluation for `and` and `or` operators
-    fn generate_short_circuit_op(
-        &mut self,
-        op: &BinaryOp,
-        left: &Expression,
-        right: &Expression,
-    ) -> Result<PyValue<'ctx>, String> {
-        let current_fn = self.current_function.ok_or("No current function")?;
-
-        // Evaluate left side
-        let lhs = self.evaluate_expression(left)?;
-
-        // Convert to boolean for the condition (i1 type)
-        let lhs_bool = self.value_to_bool(&lhs)?;
-
-        // Create basic blocks for short-circuit
-        let eval_rhs_bb = self.context.append_basic_block(current_fn, "eval_rhs");
-        let sc_lhs_bb = self.context.append_basic_block(current_fn, "sc_lhs");
-        let merge_bb = self.context.append_basic_block(current_fn, "sc_merge");
-
-        // For `and`: if left is false, short-circuit to sc_lhs (result is lhs)
-        // For `or`: if left is true, short-circuit to sc_lhs (result is lhs)
-        match op {
-            BinaryOp::And => {
-                // If lhs is false, skip rhs and return lhs
-                self.builder
-                    .build_conditional_branch(lhs_bool, eval_rhs_bb, sc_lhs_bb)
-                    .unwrap();
-            }
-            BinaryOp::Or => {
-                // If lhs is true, skip rhs and return lhs
-                self.builder
-                    .build_conditional_branch(lhs_bool, sc_lhs_bb, eval_rhs_bb)
-                    .unwrap();
-            }
-            _ => unreachable!(),
-        }
-
-        // Evaluate right side
-        self.builder.position_at_end(eval_rhs_bb);
-        let rhs = self.evaluate_expression(right)?;
-
-        // Determine result type and convert values as needed
-        // Type promotion: Bool -> Int -> Float
-        let result_type = self.get_promoted_type(&lhs.ty, &rhs.ty)?;
-
-        // Convert rhs to result type if needed (we're in eval_rhs_bb)
-        let rhs_converted = self.convert_to_type(&rhs, &result_type)?;
-        let rhs_bb = self.builder.get_insert_block().unwrap();
-        self.builder.build_unconditional_branch(merge_bb).unwrap();
-
-        // Short-circuit path: convert lhs to result type
-        self.builder.position_at_end(sc_lhs_bb);
-        let lhs_converted = self.convert_to_type(&lhs, &result_type)?;
-        let lhs_bb = self.builder.get_insert_block().unwrap();
-        self.builder.build_unconditional_branch(merge_bb).unwrap();
-
-        // Merge block - use PHI to select the result
-        // Python's and/or return the actual values, not booleans:
-        // - `and`: returns lhs if falsy, else rhs
-        // - `or`: returns lhs if truthy, else rhs
-        self.builder.position_at_end(merge_bb);
-
-        let phi = self
-            .builder
-            .build_phi(lhs_converted.get_type(), "sc_result")
-            .unwrap();
-
-        phi.add_incoming(&[(&lhs_converted, lhs_bb), (&rhs_converted, rhs_bb)]);
-
-        Ok(PyValue::new(phi.as_basic_value(), result_type, None))
-    }
-
-    /// Get the promoted type for two types (for and/or operations)
-    fn get_promoted_type(&self, lhs_ty: &PyType, rhs_ty: &PyType) -> Result<PyType, String> {
-        if lhs_ty == rhs_ty {
-            return Ok(lhs_ty.clone());
-        }
-
-        match (lhs_ty, rhs_ty) {
-            // Bool with Int -> Int
-            (PyType::Bool, PyType::Int) | (PyType::Int, PyType::Bool) => Ok(PyType::Int),
-            // Bool with Float -> Float
-            (PyType::Bool, PyType::Float) | (PyType::Float, PyType::Bool) => Ok(PyType::Float),
-            // Int with Float -> Float
-            (PyType::Int, PyType::Float) | (PyType::Float, PyType::Int) => Ok(PyType::Float),
-            _ => Err(format!(
-                "Cannot promote types {:?} and {:?}",
-                lhs_ty, rhs_ty
-            )),
-        }
-    }
-
-    /// Convert a value to the target type
-    fn convert_to_type(
-        &mut self,
-        val: &PyValue<'ctx>,
-        target_ty: &PyType,
-    ) -> Result<BasicValueEnum<'ctx>, String> {
-        if &val.ty == target_ty {
-            return Ok(val.runtime_value());
-        }
-
-        match (&val.ty, target_ty) {
-            // Bool to Int
-            (PyType::Bool, PyType::Int) => {
-                let int_val = self
-                    .builder
-                    .build_int_z_extend(
-                        val.runtime_value().into_int_value(),
-                        self.context.i64_type(),
-                        "btoi",
-                    )
-                    .unwrap();
-                Ok(int_val.into())
-            }
-            // Bool to Float
-            (PyType::Bool, PyType::Float) => {
-                let int_val = self
-                    .builder
-                    .build_int_z_extend(
-                        val.runtime_value().into_int_value(),
-                        self.context.i64_type(),
-                        "btoi",
-                    )
-                    .unwrap();
-                let float_val = self
-                    .builder
-                    .build_signed_int_to_float(int_val, self.context.f64_type(), "itof")
-                    .unwrap();
-                Ok(float_val.into())
-            }
-            // Int to Float
-            (PyType::Int, PyType::Float) => {
-                let float_val = self
-                    .builder
-                    .build_signed_int_to_float(
-                        val.runtime_value().into_int_value(),
-                        self.context.f64_type(),
-                        "itof",
-                    )
-                    .unwrap();
-                Ok(float_val.into())
-            }
-            _ => Err(format!("Cannot convert {:?} to {:?}", val.ty, target_ty)),
-        }
-    }
-
     /// Convert a PyValue to a boolean (i1)
     fn value_to_bool(
         &mut self,
@@ -1094,8 +938,8 @@ impl<'ctx> CodeGen<'ctx> {
                 .context
                 .ptr_type(inkwell::AddressSpace::default())
                 .into(),
-            Type::Tuple(_) => todo!("Tuple type"),
-            Type::Custom(_) => todo!("Custom type"),
+            Type::Tuple(_) => panic!("Tuple type not yet supported"),
+            Type::Custom(_) => panic!("Custom type not yet supported"),
         }
     }
 

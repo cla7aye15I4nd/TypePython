@@ -61,7 +61,7 @@ impl<'ctx> CodeGen<'ctx> {
         macro_val: &PyValue<'ctx>,
         args: &[Expression],
     ) -> Result<PyValue<'ctx>, String> {
-        let kind = macro_val.get_macro_kind()?;
+        let kind = macro_val.get_macro_kind();
         match kind {
             MacroKind::Print => self.generate_print_call(args),
             MacroKind::Abs => self.generate_abs_call(args),

@@ -1,16 +1,12 @@
-//! Str operations: method calls, slicing, and indexing
+//! Str operations: method calls
 //!
-//! This module provides all str-related operations:
-//! - Method lookup (upper, lower, ljust, etc.)
-//! - Subscript operations (str[i])
-//! - Slice operations (str[start:stop:step])
+//! This module provides str method lookup (upper, lower, ljust, etc.)
 //!
 //! All C runtime functions are in src/runtime/builtins/str.c
 //! and discovered automatically by build.rs.
 
 use crate::codegen::CodeGen;
 use crate::types::{FunctionInfo, PyType, PyValue};
-use inkwell::values::BasicValueEnum;
 
 /// Maps method name to (builtin_symbol, return_type)
 fn get_str_method_info(name: &str) -> Option<(&'static str, PyType)> {
@@ -55,10 +51,6 @@ fn get_str_method_info(name: &str) -> Option<(&'static str, PyType)> {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-    // ========================================================================
-    // Method calls (e.g., b"hello".upper())
-    // ========================================================================
-
     /// Get a str method as a function with the receiver pre-bound
     pub fn get_str_method(
         &mut self,
@@ -77,76 +69,5 @@ impl<'ctx> CodeGen<'ctx> {
             return_type,
             bound_args: vec![receiver.value()],
         }))
-    }
-
-    // ========================================================================
-    // Subscript operations (e.g., b"hello"[0])
-    // ========================================================================
-
-    /// Get a byte at index: str[i] -> int
-    pub fn str_getitem(
-        &mut self,
-        str_val: BasicValueEnum<'ctx>,
-        index: BasicValueEnum<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
-        let getitem_fn = self.get_or_declare_c_builtin("str_getitem");
-        let call = self
-            .builder
-            .build_call(getitem_fn, &[str_val.into(), index.into()], "str_getitem")
-            .unwrap();
-        Ok(self.extract_int_call_result(call))
-    }
-
-    // ========================================================================
-    // Slice operations (e.g., b"hello"[1:4], b"hello"[::2])
-    // ========================================================================
-
-    /// Get the length of str
-    pub fn str_len(&mut self, str_val: BasicValueEnum<'ctx>) -> Result<PyValue<'ctx>, String> {
-        let len_fn = self.get_or_declare_c_builtin("str_len");
-        let call = self
-            .builder
-            .build_call(len_fn, &[str_val.into()], "str_len")
-            .unwrap();
-        Ok(self.extract_int_call_result(call))
-    }
-
-    /// Slice str without step: str[start:stop] -> str
-    pub fn str_slice(
-        &mut self,
-        str_val: BasicValueEnum<'ctx>,
-        start: BasicValueEnum<'ctx>,
-        stop: BasicValueEnum<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
-        let slice_fn = self.get_or_declare_c_builtin("str_slice");
-        let call = self
-            .builder
-            .build_call(
-                slice_fn,
-                &[str_val.into(), start.into(), stop.into()],
-                "str_slice",
-            )
-            .unwrap();
-        Ok(self.extract_ptr_call_result(call))
-    }
-
-    /// Slice str with step: str[start:stop:step] -> str
-    pub fn str_slice_step(
-        &mut self,
-        str_val: BasicValueEnum<'ctx>,
-        start: BasicValueEnum<'ctx>,
-        stop: BasicValueEnum<'ctx>,
-        step: BasicValueEnum<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
-        let slice_fn = self.get_or_declare_c_builtin("str_slice_step");
-        let call = self
-            .builder
-            .build_call(
-                slice_fn,
-                &[str_val.into(), start.into(), stop.into(), step.into()],
-                "str_slice_step",
-            )
-            .unwrap();
-        Ok(self.extract_ptr_call_result(call))
     }
 }

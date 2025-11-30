@@ -28,16 +28,20 @@ print_status() {
     fi
 }
 
-# 1. Check for executable files
-echo -e "${YELLOW}[1/5]${NC} Checking for executable files..."
-exe_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(exe|dll|so|dylib|bin|out)$' || true)
-if [ -n "$exe_files" ]; then
-    echo -e "${RED}✗${NC} Executable files detected in staged changes:"
-    echo "$exe_files"
+# 1. Check for ELF files
+echo -e "${YELLOW}[1/5]${NC} Checking for ELF files..."
+elf_files=$(git diff --cached --name-only --diff-filter=ACM | while read -r file; do
+    if [ -f "$file" ] && file "$file" | grep -q "ELF"; then
+        echo "$file"
+    fi
+done)
+if [ -n "$elf_files" ]; then
+    echo -e "${RED}✗${NC} ELF files detected in staged changes:"
+    echo "$elf_files"
     echo "Please remove these files from the commit."
     exit 1
 fi
-print_status "No executable files"
+print_status "No ELF files"
 echo ""
 
 # 2. Check formatting
