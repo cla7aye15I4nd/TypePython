@@ -958,7 +958,15 @@ pub fn unary_op<'a, 'ctx>(
     match op {
         UnaryOp::Neg => Ok(cg.builder.build_int_neg(int_val, "neg").unwrap().into()),
         UnaryOp::Pos => Ok(val.runtime_value()),
-        UnaryOp::Not => Ok(cg.builder.build_not(int_val, "not").unwrap().into()),
+        UnaryOp::Not => {
+            // not int: true if int == 0, false otherwise (logical NOT)
+            let zero = cg.ctx.i64_type().const_zero();
+            Ok(cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::EQ, int_val, zero, "int_not")
+                .unwrap()
+                .into())
+        }
         UnaryOp::BitNot => Ok(cg.builder.build_not(int_val, "bitnot").unwrap().into()),
     }
 }

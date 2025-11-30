@@ -65,6 +65,7 @@ UNARY_OPS = {
     "neg": ("-", "unary -", lambda a: -a),
     "pos": ("+", "unary +", lambda a: +a),
     "bitnot": ("~", "bitwise NOT", lambda a: ~a),
+    "not": ("not ", "logical NOT", lambda a: not a),
 }
 
 # Operations that TypePython doesn't support (even if Python allows them)
@@ -101,18 +102,6 @@ UNSUPPORTED_OPS = {
     ("bytes", "notin", "list"),
     ("bytes", "notin", "set"),
     ("bytes", "notin", "dict"),
-    ("float", "in", "list"),
-    ("float", "in", "set"),
-    ("float", "in", "dict"),
-    ("float", "notin", "list"),
-    ("float", "notin", "set"),
-    ("float", "notin", "dict"),
-    ("none", "in", "list"),
-    ("none", "in", "set"),
-    ("none", "in", "dict"),
-    ("none", "notin", "list"),
-    ("none", "notin", "set"),
-    ("none", "notin", "dict"),
     ("list", "in", "list"),
     ("list", "in", "set"),
     ("list", "in", "dict"),
@@ -267,8 +256,12 @@ def get_result_type(left_type: str, right_type: str, op: str) -> str:
     return get_type_annotation(left_type)
 
 
-def get_unary_result_type(type_name: str) -> str:
+def get_unary_result_type(type_name: str, op: str) -> str:
     """Determine the expected result type for a unary operation."""
+    # not always returns bool
+    if op == "not":
+        return "bool"
+    # neg/pos on bool returns int
     if type_name == "bool":
         return "int"
     return get_type_annotation(type_name)
@@ -307,7 +300,7 @@ def generate_invalid_unary_file(type_name: str, op: str) -> tuple[str, str]:
     op_symbol, op_desc, _ = UNARY_OPS[op]
 
     filename = f"{type_name}_{op}.py"
-    result_type = get_unary_result_type(type_name)
+    result_type = get_unary_result_type(type_name, op)
     type_display = type_annot.capitalize()
 
     if op == "bitnot":
@@ -371,7 +364,7 @@ def generate_valid_unary_line(type_name: str, op: str, idx: int) -> list[str]:
     """Generate lines for valid unary operation."""
     type_annot, example, _ = TYPES[type_name]
     op_symbol, _, _ = UNARY_OPS[op]
-    result_type = get_unary_result_type(type_name)
+    result_type = get_unary_result_type(type_name, op)
 
     var_name = f"u{idx}_{type_name}_{op}"
 

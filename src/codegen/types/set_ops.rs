@@ -382,9 +382,28 @@ pub fn binary_op<'a, 'ctx>(
 
 /// Unary operations for set type
 pub fn unary_op<'a, 'ctx>(
-    _val: &PyValue<'ctx>,
-    _cg: &CgCtx<'a, 'ctx>,
+    val: &PyValue<'ctx>,
+    cg: &CgCtx<'a, 'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
-    Err(format!("Unary operator {:?} not supported on set", op))
+    match op {
+        UnaryOp::Not => {
+            // not set: true if set is empty, false otherwise
+            let ptr = val.runtime_value().into_pointer_value();
+            let len_fn = get_or_declare_builtin(cg.module, cg.ctx, "set_len");
+            let len_call = cg
+                .builder
+                .build_call(len_fn, &[ptr.into()], "set_len")
+                .unwrap();
+            let len = extract_int_result(len_call, "set_len").into_int_value();
+            let zero = cg.ctx.i64_type().const_zero();
+            // not set is true when len == 0
+            Ok(cg
+                .builder
+                .build_int_compare(IntPredicate::EQ, len, zero, "set_not")
+                .unwrap()
+                .into())
+        }
+        _ => Err(format!("Unary operator {:?} not supported on set", op)),
+    }
 }

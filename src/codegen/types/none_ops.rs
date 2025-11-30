@@ -129,8 +129,14 @@ pub fn binary_op<'a, 'ctx>(
 /// Unary operations for None type
 pub fn unary_op<'a, 'ctx>(
     _val: &PyValue<'ctx>,
-    _cg: &CgCtx<'a, 'ctx>,
+    cg: &CgCtx<'a, 'ctx>,
     op: &UnaryOp,
 ) -> Result<BasicValueEnum<'ctx>, String> {
-    Err(format!("Unary operator {:?} not supported on None", op))
+    match op {
+        UnaryOp::Not => {
+            // not None: always True (None is falsy)
+            Ok(cg.ctx.bool_type().const_int(1, false).into())
+        }
+        _ => Err(format!("Unary operator {:?} not supported on None", op)),
+    }
 }

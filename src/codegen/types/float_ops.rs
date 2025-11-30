@@ -336,6 +336,15 @@ pub fn unary_op<'a, 'ctx>(
             .unwrap()
             .into()),
         UnaryOp::Pos => Ok(val.runtime_value()),
-        UnaryOp::Not | UnaryOp::BitNot => Err(format!("Operator {:?} not supported on floats", op)),
+        UnaryOp::Not => {
+            // not float: true if float == 0.0, false otherwise
+            let zero = cg.ctx.f64_type().const_zero();
+            Ok(cg
+                .builder
+                .build_float_compare(FloatPredicate::OEQ, float_val, zero, "fnot")
+                .unwrap()
+                .into())
+        }
+        UnaryOp::BitNot => Err(format!("Operator {:?} not supported on floats", op)),
     }
 }
