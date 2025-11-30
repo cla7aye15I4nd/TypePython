@@ -1,73 +1,21 @@
-//! List operations: method calls, slicing, and indexing
+//! List operations: slicing, indexing, and list() builtin
 //!
-//! This module provides all list-related operations:
-//! - Method lookup (append, pop, insert, etc.)
+//! This module provides list-related operations:
 //! - Subscript operations (list[i])
 //! - Slice operations (list[start:stop:step])
+//! - list() builtin function
+//!
+//! Method lookup is handled by the unified method registry in types/methods.rs
 //!
 //! All C runtime functions are in src/runtime/builtins/list.c
 //! and discovered automatically by build.rs.
 
 use crate::ast::Expression;
 use crate::codegen::CodeGen;
-use crate::types::{FunctionInfo, PyType, PyValue};
+use crate::types::{PyType, PyValue};
 use inkwell::values::BasicValueEnum;
 
-/// Maps method name to (builtin_symbol, return_type, mutates_self)
-/// mutates_self indicates if the method returns the modified list pointer
-fn get_list_method_info(name: &str, elem_type: &PyType) -> Option<(&'static str, PyType, bool)> {
-    match name {
-        // Mutating methods that return None (like Python)
-        "append" => Some(("list_append", PyType::None, true)),
-        "insert" => Some(("list_insert", PyType::None, true)),
-        "extend" => Some(("list_extend", PyType::None, true)),
-        "remove" => Some(("list_remove", PyType::None, false)),
-        "clear" => Some(("list_clear", PyType::None, false)),
-        "reverse" => Some(("list_reverse", PyType::None, false)),
-        "sort" => Some(("list_sort", PyType::None, false)),
-
-        // Methods returning values
-        "pop" => Some(("list_pop", PyType::Int, false)),
-        "index" => Some(("list_index", PyType::Int, false)),
-        "count" => Some(("list_count", PyType::Int, false)),
-
-        // Methods returning new list
-        "copy" => Some((
-            "list_copy",
-            PyType::List(Box::new(elem_type.clone())),
-            false,
-        )),
-
-        _ => None,
-    }
-}
-
 impl<'ctx> CodeGen<'ctx> {
-    // ========================================================================
-    // Method calls (e.g., my_list.append(42))
-    // ========================================================================
-
-    /// Get a list method as a function with the receiver pre-bound
-    pub fn get_list_method(
-        &mut self,
-        receiver_value: BasicValueEnum<'ctx>,
-        method_name: &str,
-        elem_type: &PyType,
-    ) -> Result<PyValue<'ctx>, String> {
-        let (symbol, return_type, _mutates) = get_list_method_info(method_name, elem_type)
-            .ok_or_else(|| format!("list has no method '{}'", method_name))?;
-
-        let function = self.get_or_declare_c_builtin(symbol);
-
-        Ok(PyValue::function(FunctionInfo {
-            mangled_name: symbol.to_string(),
-            function,
-            param_types: vec![],
-            return_type,
-            bound_args: vec![receiver_value],
-        }))
-    }
-
     // ========================================================================
     // Subscript operations (e.g., my_list[0])
     // ========================================================================

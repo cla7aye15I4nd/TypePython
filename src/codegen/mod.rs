@@ -145,7 +145,8 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Regular function call
                 let function_info = func_val.get_function();
-                let function = function_info.function;
+                // Declare function in module if needed
+                let function = function_info.get_or_declare(self.cg.ctx, &self.cg.module);
                 let return_type = function_info.return_type;
 
                 // Prepend bound args (for method calls), then add explicit args
@@ -186,54 +187,8 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::Set(elements) => self.visit_set_lit_impl(elements),
             Expression::Attribute { object, attr } => {
                 let obj = self.evaluate_expression(object)?;
-                match &obj.ty() {
-                    PyType::Module => {
-                        // Get member from module
-                        let member = obj.get_member(attr)?;
-
-                        // If it's a function, ensure it's declared in our module
-                        if let PyType::Function = &member.ty() {
-                            let func_info = member.get_function();
-                            // Declare the function in our module using PyType info
-                            let function =
-                                func_info.declare_in_module(self.cg.ctx, &self.cg.module);
-                            // Return a new FunctionInfo with the correct function reference
-                            Ok(PyValue::function(types::FunctionInfo {
-                                mangled_name: func_info.mangled_name,
-                                function,
-                                param_types: func_info.param_types,
-                                return_type: func_info.return_type,
-                                bound_args: func_info.bound_args,
-                            }))
-                        } else {
-                            Ok(member)
-                        }
-                    }
-                    PyType::Bytes => {
-                        // Look up bytes method
-                        self.get_bytes_method(&obj, attr)
-                    }
-                    PyType::Str => {
-                        // Look up str method
-                        self.get_str_method(&obj, attr)
-                    }
-                    PyType::List(elem_type) => {
-                        // Look up list method
-                        self.get_list_method(obj.value(), attr, elem_type)
-                    }
-                    PyType::Dict(key_type, val_type) => {
-                        // Look up dict method
-                        self.get_dict_method(obj.value(), attr, key_type, val_type)
-                    }
-                    PyType::Set(elem_type) => {
-                        // Look up set method
-                        self.get_set_method(obj.value(), attr, elem_type)
-                    }
-                    _ => Err(format!(
-                        "Attribute access not supported for type {:?}",
-                        obj.ty()
-                    )),
-                }
+                // Use unified get_member for all types (modules, bytes, str, list, dict, set)
+                obj.get_member(attr)
             }
             Expression::Subscript { object, index } => {
                 let obj = self.evaluate_expression(object)?;

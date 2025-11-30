@@ -143,8 +143,7 @@ impl<'ctx> ModuleRegistry<'ctx> {
                     .iter()
                     .map(|func| {
                         let mangled_name = Self::mangle_function_name(module_name, &func.name);
-                        let func_info =
-                            crate::types::FunctionInfo::from_ast(self.context, &mangled_name, func);
+                        let func_info = crate::types::FunctionInfo::from_ast(&mangled_name, func);
                         (func.name.clone(), PyValue::function(func_info))
                     })
                     .collect();

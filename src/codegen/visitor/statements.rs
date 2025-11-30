@@ -45,11 +45,19 @@ impl<'ctx> CodeGen<'ctx> {
                     var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
-                    let llvm_type = val.ty().to_llvm(self.cg.ctx);
-                    let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
-                    self.cg.builder.build_store(alloca, val.value()).unwrap();
-                    let var = PyValue::new(val.value(), val.ty().clone(), Some(alloca));
-                    self.variables.insert(name.to_string(), var);
+                    // Functions/Modules/Macros are stored directly without alloca
+                    match val.ty() {
+                        PyType::Function | PyType::Module | PyType::Macro => {
+                            self.variables.insert(name.to_string(), val);
+                        }
+                        _ => {
+                            let llvm_type = val.ty().to_llvm(self.cg.ctx);
+                            let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
+                            self.cg.builder.build_store(alloca, val.value()).unwrap();
+                            let var = PyValue::new(val.value(), val.ty().clone(), Some(alloca));
+                            self.variables.insert(name.to_string(), var);
+                        }
+                    }
                 }
                 Ok(())
             }

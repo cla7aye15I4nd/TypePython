@@ -108,6 +108,137 @@ impl PyType {
             PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
         }
     }
+
+    /// Lookup a member (method) for this type - returns (symbol, return_type)
+    pub fn lookup_member(&self, name: &str) -> Option<(&'static str, PyType)> {
+        match self {
+            PyType::Bytes => match name {
+                // Case conversion - return bytes
+                "upper" => Some(("bytes_upper", PyType::Bytes)),
+                "lower" => Some(("bytes_lower", PyType::Bytes)),
+                "capitalize" => Some(("bytes_capitalize", PyType::Bytes)),
+                "title" => Some(("bytes_title", PyType::Bytes)),
+                "swapcase" => Some(("bytes_swapcase", PyType::Bytes)),
+                // Padding/alignment - return bytes
+                "ljust" => Some(("bytes_ljust", PyType::Bytes)),
+                "rjust" => Some(("bytes_rjust", PyType::Bytes)),
+                "center" => Some(("bytes_center", PyType::Bytes)),
+                "zfill" => Some(("bytes_zfill", PyType::Bytes)),
+                // Stripping - return bytes
+                "strip" => Some(("bytes_strip", PyType::Bytes)),
+                "lstrip" => Some(("bytes_lstrip", PyType::Bytes)),
+                "rstrip" => Some(("bytes_rstrip", PyType::Bytes)),
+                // Search - return int
+                "find" => Some(("bytes_find", PyType::Int)),
+                "count" => Some(("bytes_count", PyType::Int)),
+                // Predicates - return bool
+                "startswith" => Some(("bytes_startswith", PyType::Bool)),
+                "endswith" => Some(("bytes_endswith", PyType::Bool)),
+                "isalnum" => Some(("bytes_isalnum", PyType::Bool)),
+                "isalpha" => Some(("bytes_isalpha", PyType::Bool)),
+                "isdigit" => Some(("bytes_isdigit", PyType::Bool)),
+                "isspace" => Some(("bytes_isspace", PyType::Bool)),
+                "islower" => Some(("bytes_islower", PyType::Bool)),
+                "isupper" => Some(("bytes_isupper", PyType::Bool)),
+                // Transform - return bytes
+                "replace" => Some(("bytes_replace", PyType::Bytes)),
+                _ => None,
+            },
+            PyType::Str => match name {
+                // Case conversion - return str
+                "upper" => Some(("str_upper", PyType::Str)),
+                "lower" => Some(("str_lower", PyType::Str)),
+                "capitalize" => Some(("str_capitalize", PyType::Str)),
+                "title" => Some(("str_title", PyType::Str)),
+                "swapcase" => Some(("str_swapcase", PyType::Str)),
+                // Padding/alignment - return str
+                "ljust" => Some(("str_ljust", PyType::Str)),
+                "rjust" => Some(("str_rjust", PyType::Str)),
+                "center" => Some(("str_center", PyType::Str)),
+                "zfill" => Some(("str_zfill", PyType::Str)),
+                // Stripping - return str
+                "strip" => Some(("str_strip", PyType::Str)),
+                "lstrip" => Some(("str_lstrip", PyType::Str)),
+                "rstrip" => Some(("str_rstrip", PyType::Str)),
+                // Search - return int
+                "find" => Some(("str_find", PyType::Int)),
+                "count" => Some(("str_count", PyType::Int)),
+                // Predicates - return bool
+                "startswith" => Some(("str_startswith", PyType::Bool)),
+                "endswith" => Some(("str_endswith", PyType::Bool)),
+                "isalnum" => Some(("str_isalnum", PyType::Bool)),
+                "isalpha" => Some(("str_isalpha", PyType::Bool)),
+                "isdigit" => Some(("str_isdigit", PyType::Bool)),
+                "isspace" => Some(("str_isspace", PyType::Bool)),
+                "islower" => Some(("str_islower", PyType::Bool)),
+                "isupper" => Some(("str_isupper", PyType::Bool)),
+                // Transform - return str
+                "replace" => Some(("str_replace", PyType::Str)),
+                _ => None,
+            },
+            PyType::List(elem_type) => match name {
+                // Mutating methods that return None
+                "append" => Some(("list_append", PyType::None)),
+                "insert" => Some(("list_insert", PyType::None)),
+                "extend" => Some(("list_extend", PyType::None)),
+                "remove" => Some(("list_remove", PyType::None)),
+                "clear" => Some(("list_clear", PyType::None)),
+                "reverse" => Some(("list_reverse", PyType::None)),
+                "sort" => Some(("list_sort", PyType::None)),
+                // Methods returning values
+                "pop" => Some(("list_pop", elem_type.as_ref().clone())),
+                "index" => Some(("list_index", PyType::Int)),
+                "count" => Some(("list_count", PyType::Int)),
+                // Methods returning new list
+                "copy" => Some(("list_copy", PyType::List(elem_type.clone()))),
+                _ => None,
+            },
+            PyType::Set(elem_type) => match name {
+                // Void methods (mutating in-place)
+                "add" => Some(("set_add", PyType::None)),
+                "remove" => Some(("set_remove", PyType::None)),
+                "discard" => Some(("set_discard", PyType::None)),
+                "clear" => Some(("set_clear", PyType::None)),
+                "update" => Some(("set_update", PyType::None)),
+                "difference_update" => Some(("set_difference_update", PyType::None)),
+                "intersection_update" => Some(("set_intersection_update", PyType::None)),
+                "symmetric_difference_update" => {
+                    Some(("set_symmetric_difference_update", PyType::None))
+                }
+                // Methods returning an element
+                "pop" => Some(("set_pop", elem_type.as_ref().clone())),
+                // Methods returning new set
+                "copy" => Some(("set_copy", PyType::Set(elem_type.clone()))),
+                "union" => Some(("set_union", PyType::Set(elem_type.clone()))),
+                "intersection" => Some(("set_intersection", PyType::Set(elem_type.clone()))),
+                "difference" => Some(("set_difference", PyType::Set(elem_type.clone()))),
+                "symmetric_difference" => {
+                    Some(("set_symmetric_difference", PyType::Set(elem_type.clone())))
+                }
+                // Methods returning bool
+                "issubset" => Some(("set_issubset", PyType::Bool)),
+                "issuperset" => Some(("set_issuperset", PyType::Bool)),
+                "isdisjoint" => Some(("set_isdisjoint", PyType::Bool)),
+                _ => None,
+            },
+            PyType::Dict(key_type, val_type) => match name {
+                // Methods returning values
+                "get" => Some(("dict_get", val_type.as_ref().clone())),
+                "pop" => Some(("dict_pop", val_type.as_ref().clone())),
+                "setdefault" => Some(("dict_setdefault", val_type.as_ref().clone())),
+                // Void methods
+                "clear" => Some(("dict_clear", PyType::None)),
+                "update" => Some(("dict_update", PyType::None)),
+                // Methods returning new dict
+                "copy" => Some((
+                    "dict_copy",
+                    PyType::Dict(key_type.clone(), val_type.clone()),
+                )),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 // ============================================================================
@@ -115,25 +246,38 @@ impl PyType {
 // ============================================================================
 
 /// Function metadata for compile-time function references
+/// Functions are declared lazily via get_or_declare when needed
 #[derive(Clone, Debug)]
 pub struct FunctionInfo<'ctx> {
     pub mangled_name: String,
-    pub function: FunctionValue<'ctx>,
     pub param_types: Vec<PyType>,
     pub return_type: PyType,
     pub bound_args: Vec<BasicValueEnum<'ctx>>,
 }
 
 impl<'ctx> FunctionInfo<'ctx> {
-    pub fn from_ast(
-        context: &'ctx Context,
-        mangled_name: &str,
-        func: &crate::ast::Function,
-    ) -> Self {
-        use inkwell::types::{BasicMetadataTypeEnum, BasicType};
+    /// Create a FunctionInfo for a builtin or method
+    pub fn new(mangled_name: &str, return_type: PyType) -> Self {
+        FunctionInfo {
+            mangled_name: mangled_name.to_string(),
+            param_types: vec![],
+            return_type,
+            bound_args: vec![],
+        }
+    }
 
-        let placeholder_module = context.create_module("__placeholder__");
+    /// Create a FunctionInfo with a bound receiver (for method calls)
+    pub fn bound(mangled_name: &str, return_type: PyType, bound_arg: BasicValueEnum<'ctx>) -> Self {
+        FunctionInfo {
+            mangled_name: mangled_name.to_string(),
+            param_types: vec![],
+            return_type,
+            bound_args: vec![bound_arg],
+        }
+    }
 
+    /// Create a FunctionInfo from an AST function definition
+    pub fn from_ast(mangled_name: &str, func: &crate::ast::Function) -> Self {
         let param_types: Vec<PyType> = func
             .params
             .iter()
@@ -142,31 +286,43 @@ impl<'ctx> FunctionInfo<'ctx> {
 
         let return_type = PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
 
-        let llvm_param_types: Vec<BasicMetadataTypeEnum> = param_types
-            .iter()
-            .map(|p| p.to_llvm(context).into())
-            .collect();
-
-        let fn_type = match return_type {
-            PyType::None => context.void_type().fn_type(&llvm_param_types, false),
-            _ => {
-                let ret_type = return_type.to_llvm(context);
-                ret_type.fn_type(&llvm_param_types, false)
-            }
-        };
-
-        let function = placeholder_module.add_function(mangled_name, fn_type, None);
-
         FunctionInfo {
             mangled_name: mangled_name.to_string(),
-            function,
             param_types,
             return_type,
             bound_args: vec![],
         }
     }
 
-    pub fn declare_in_module(
+    /// Get the function, declaring it in the module if needed
+    pub fn get_or_declare(
+        &self,
+        context: &'ctx Context,
+        module: &Module<'ctx>,
+    ) -> FunctionValue<'ctx> {
+        // Check if it's a C builtin - use BUILTIN_TABLE for correct signature and symbol
+        if let Some(builtin) =
+            crate::codegen::builtins::BUILTIN_TABLE.get(self.mangled_name.as_str())
+        {
+            // Check if already declared with the actual symbol name
+            if let Some(f) = module.get_function(builtin.symbol) {
+                return f;
+            }
+            let fn_type = builtin.to_llvm_fn_type(context);
+            // Use the actual symbol name from the table (e.g., "__builtin_tpy_bytes_ljust")
+            return module.add_function(builtin.symbol, fn_type, None);
+        }
+
+        // For user-defined functions, check if already declared
+        if let Some(f) = module.get_function(&self.mangled_name) {
+            return f;
+        }
+
+        // Declare the function using stored param_types
+        self.declare_in_module(context, module)
+    }
+
+    fn declare_in_module(
         &self,
         context: &'ctx Context,
         module: &Module<'ctx>,
@@ -389,7 +545,10 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Tuple(PtrStorage::Direct(v), _) | PyValue::Tuple(PtrStorage::Alloca(v), _) => {
                 (*v).into()
             }
-            PyValue::Function(f) => f.function.as_global_value().as_pointer_value().into(),
+            PyValue::Function(_) => {
+                // Functions don't have a direct LLVM value - use get_or_declare to call them
+                panic!("Function has no direct LLVM value - use get_or_declare to call it")
+            }
             PyValue::Module(_) => panic!("Module has no LLVM value"),
             PyValue::Macro(_) => panic!("Macro has no LLVM value"),
         }
@@ -616,6 +775,8 @@ impl<'ctx> PyValue<'ctx> {
     // Module Operations
     // ========================================================================
 
+    /// Get a member (method or attribute) from this value
+    /// Works for modules (returns stored member) and types (returns bound method)
     pub fn get_member(&self, name: &str) -> Result<PyValue<'ctx>, String> {
         match self {
             PyValue::Module(info) => info
@@ -623,7 +784,19 @@ impl<'ctx> PyValue<'ctx> {
                 .get(name)
                 .cloned()
                 .ok_or_else(|| format!("Module '{}' has no member '{}'", info.name, name)),
-            _ => Err(format!("get_member called on non-module: {:?}", self.ty())),
+            _ => {
+                // For other types, look up the method
+                let ty = self.ty();
+                let (symbol, return_type) = ty
+                    .lookup_member(name)
+                    .ok_or_else(|| format!("{:?} has no member '{}'", ty, name))?;
+
+                Ok(PyValue::function(FunctionInfo::bound(
+                    symbol,
+                    return_type,
+                    self.value(),
+                )))
+            }
         }
     }
 

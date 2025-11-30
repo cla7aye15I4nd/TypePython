@@ -1,70 +1,20 @@
-//! Dict operations: method calls and subscript access
+//! Dict operations: subscript access and dict() builtin
 //!
-//! This module provides all dict-related operations:
-//! - Method lookup (get, keys, values, items, etc.)
+//! This module provides dict-related operations:
 //! - Subscript operations (dict[key])
+//! - dict() builtin function
+//!
+//! Method lookup is handled by the unified method registry in types/methods.rs
 //!
 //! All C runtime functions are in src/runtime/builtins/dict.c
 //! and discovered automatically by build.rs.
 
 use crate::ast::Expression;
 use crate::codegen::CodeGen;
-use crate::types::{FunctionInfo, PyType, PyValue};
+use crate::types::{PyType, PyValue};
 use inkwell::values::BasicValueEnum;
 
-/// Maps method name to (builtin_symbol, return_type)
-fn get_dict_method_info(
-    name: &str,
-    _key_type: &PyType,
-    val_type: &PyType,
-) -> Option<(&'static str, PyType)> {
-    match name {
-        // Methods returning values
-        "get" => Some(("dict_get", val_type.clone())),
-        "pop" => Some(("dict_pop", val_type.clone())),
-        "setdefault" => Some(("dict_setdefault", val_type.clone())),
-
-        // Void methods
-        "clear" => Some(("dict_clear", PyType::None)),
-        "update" => Some(("dict_update", PyType::None)),
-
-        // Methods returning new dict
-        "copy" => Some((
-            "dict_copy",
-            PyType::Dict(Box::new(PyType::Int), Box::new(val_type.clone())),
-        )),
-
-        _ => None,
-    }
-}
-
 impl<'ctx> CodeGen<'ctx> {
-    // ========================================================================
-    // Method calls (e.g., my_dict.get(key))
-    // ========================================================================
-
-    /// Get a dict method as a function with the receiver pre-bound
-    pub fn get_dict_method(
-        &mut self,
-        receiver_value: BasicValueEnum<'ctx>,
-        method_name: &str,
-        key_type: &PyType,
-        val_type: &PyType,
-    ) -> Result<PyValue<'ctx>, String> {
-        let (symbol, return_type) = get_dict_method_info(method_name, key_type, val_type)
-            .ok_or_else(|| format!("dict has no method '{}'", method_name))?;
-
-        let function = self.get_or_declare_c_builtin(symbol);
-
-        Ok(PyValue::function(FunctionInfo {
-            mangled_name: symbol.to_string(),
-            function,
-            param_types: vec![],
-            return_type,
-            bound_args: vec![receiver_value],
-        }))
-    }
-
     // ========================================================================
     // Subscript operations (e.g., my_dict[key])
     // ========================================================================

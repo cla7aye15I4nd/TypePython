@@ -1,84 +1,19 @@
-//! Bytes operations: method calls, slicing, and indexing
+//! Bytes operations: slicing and indexing
 //!
-//! This module provides all bytes-related operations:
-//! - Method lookup (upper, lower, ljust, etc.)
+//! This module provides bytes-related operations:
 //! - Subscript operations (bytes[i])
 //! - Slice operations (bytes[start:stop:step])
+//!
+//! Method lookup is handled by the unified method registry in types/methods.rs
 //!
 //! All C runtime functions are in src/runtime/builtins/bytes.c
 //! and discovered automatically by build.rs.
 
 use crate::codegen::CodeGen;
-use crate::types::{FunctionInfo, PyType, PyValue};
+use crate::types::PyValue;
 use inkwell::values::BasicValueEnum;
 
-/// Maps method name to (builtin_symbol, return_type)
-fn get_bytes_method_info(name: &str) -> Option<(&'static str, PyType)> {
-    match name {
-        // Case conversion - return bytes
-        "upper" => Some(("bytes_upper", PyType::Bytes)),
-        "lower" => Some(("bytes_lower", PyType::Bytes)),
-        "capitalize" => Some(("bytes_capitalize", PyType::Bytes)),
-        "title" => Some(("bytes_title", PyType::Bytes)),
-        "swapcase" => Some(("bytes_swapcase", PyType::Bytes)),
-
-        // Padding/alignment - return bytes
-        "ljust" => Some(("bytes_ljust", PyType::Bytes)),
-        "rjust" => Some(("bytes_rjust", PyType::Bytes)),
-        "center" => Some(("bytes_center", PyType::Bytes)),
-        "zfill" => Some(("bytes_zfill", PyType::Bytes)),
-
-        // Stripping - return bytes
-        "strip" => Some(("bytes_strip", PyType::Bytes)),
-        "lstrip" => Some(("bytes_lstrip", PyType::Bytes)),
-        "rstrip" => Some(("bytes_rstrip", PyType::Bytes)),
-
-        // Search - return int
-        "find" => Some(("bytes_find", PyType::Int)),
-        "count" => Some(("bytes_count", PyType::Int)),
-
-        // Predicates - return bool
-        "startswith" => Some(("bytes_startswith", PyType::Bool)),
-        "endswith" => Some(("bytes_endswith", PyType::Bool)),
-        "isalnum" => Some(("bytes_isalnum", PyType::Bool)),
-        "isalpha" => Some(("bytes_isalpha", PyType::Bool)),
-        "isdigit" => Some(("bytes_isdigit", PyType::Bool)),
-        "isspace" => Some(("bytes_isspace", PyType::Bool)),
-        "islower" => Some(("bytes_islower", PyType::Bool)),
-        "isupper" => Some(("bytes_isupper", PyType::Bool)),
-
-        // Transform - return bytes
-        "replace" => Some(("bytes_replace", PyType::Bytes)),
-
-        _ => None,
-    }
-}
-
 impl<'ctx> CodeGen<'ctx> {
-    // ========================================================================
-    // Method calls (e.g., b"hello".upper())
-    // ========================================================================
-
-    /// Get a bytes method as a function with the receiver pre-bound
-    pub fn get_bytes_method(
-        &mut self,
-        receiver: &PyValue<'ctx>,
-        method_name: &str,
-    ) -> Result<PyValue<'ctx>, String> {
-        let (symbol, return_type) = get_bytes_method_info(method_name)
-            .ok_or_else(|| format!("bytes has no method '{}'", method_name))?;
-
-        let function = self.get_or_declare_c_builtin(symbol);
-
-        Ok(PyValue::function(FunctionInfo {
-            mangled_name: symbol.to_string(),
-            function,
-            param_types: vec![], // Not needed for builtins
-            return_type,
-            bound_args: vec![receiver.value()],
-        }))
-    }
-
     // ========================================================================
     // Subscript operations (e.g., b"hello"[0])
     // ========================================================================

@@ -70,7 +70,7 @@ impl<'ctx> CodeGen<'ctx> {
         // This must come before global_variables because global_variables contains
         // placeholder functions from preprocessing
         let mangled_name = self.mangle_function_name(&self.module_name, name);
-        if let Some(function) = self.cg.module.get_function(&mangled_name) {
+        if self.cg.module.get_function(&mangled_name).is_some() {
             // Get type info from global_variables if available (for correct return type)
             let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
                 if global.ty() == crate::types::PyType::Function {
@@ -85,7 +85,6 @@ impl<'ctx> CodeGen<'ctx> {
 
             return Ok(PyValue::function(crate::types::FunctionInfo {
                 mangled_name,
-                function,
                 param_types,
                 return_type,
                 bound_args: vec![],
