@@ -19,7 +19,7 @@ pub fn binary_op<'ctx>(
 
     match op {
         // Dict equality: {1: 2} == {1: 2}
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_eq");
@@ -44,7 +44,7 @@ pub fn binary_op<'ctx>(
         },
 
         // Dict inequality: {1: 2} != {1: 3}
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "dict_eq");
@@ -69,11 +69,11 @@ pub fn binary_op<'ctx>(
         },
 
         // Dict merge with | operator (Python 3.9+): {1: 2} | {3: 4}
-        BinaryOp::BitOr => match &rhs.ty {
+        BinaryOp::BitOr => match &rhs.ty() {
             PyType::Dict(rhs_key_type, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 // Use str_dict_merge for string-keyed dicts
-                let merge_fn_name = match (&lhs.ty, rhs_key_type.as_ref()) {
+                let merge_fn_name = match (&lhs.ty(), rhs_key_type.as_ref()) {
                     (PyType::Dict(lhs_key_type, _), _)
                         if matches!(lhs_key_type.as_ref(), PyType::Str) =>
                     {
@@ -87,26 +87,26 @@ pub fn binary_op<'ctx>(
                     .build_call(merge_fn, &[lhs_ptr.into(), rhs_ptr.into()], "dict_merge")
                     .unwrap();
                 let result = super::extract_ptr_result(call_site, "dict_merge");
-                Ok(PyValue::new(result, lhs.ty.clone(), None))
+                Ok(PyValue::new(result, lhs.ty().clone(), None))
             }
-            _ => Err(format!("Cannot use | between dict and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use | between dict and {:?}", rhs.ty())),
         },
 
         // Membership: dict in list is checking if the dict is an element of the list
         // For lists of int, this is always False
-        BinaryOp::In => match &rhs.ty {
+        BinaryOp::In => match &rhs.ty() {
             PyType::List(_) => {
                 // dict in list - always False (can't have dicts in int lists)
                 Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
             }
-            _ => Err(format!("Cannot use 'in' with dict and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'in' with dict and {:?}", rhs.ty())),
         },
-        BinaryOp::NotIn => match &rhs.ty {
+        BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) => {
                 // dict not in list - always True (can't have dicts in int lists)
                 Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
             }
-            _ => Err(format!("Cannot use 'not in' with dict and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'not in' with dict and {:?}", rhs.ty())),
         },
 
         // Logical and/or - same type returns same type, different types return bool
@@ -124,7 +124,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Dict(key_ty, val_ty) => {
                     // Dict and Dict -> Dict (Python semantics: return first falsy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -160,7 +160,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Dict(key_ty, val_ty) => {
                     // Dict or Dict -> Dict (Python semantics: return first truthy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -184,7 +184,7 @@ pub fn binary_op<'ctx>(
         }
 
         // Identity operators - dict is dict compares pointer identity
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(
@@ -197,7 +197,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Dict(_, _) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(

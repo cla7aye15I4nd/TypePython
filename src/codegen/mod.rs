@@ -139,7 +139,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let func_val = self.evaluate_expression(func)?;
 
                 // Check if it's a macro (builtin with special expansion)
-                if func_val.ty == PyType::Macro {
+                if func_val.ty() == PyType::Macro {
                     return self.expand_macro(&func_val, args);
                 }
 
@@ -192,13 +192,13 @@ impl<'ctx> CodeGen<'ctx> {
             Expression::Set(elements) => self.visit_set_lit_impl(elements),
             Expression::Attribute { object, attr } => {
                 let obj = self.evaluate_expression(object)?;
-                match &obj.ty {
+                match &obj.ty() {
                     PyType::Module => {
                         // Get member from module
                         let member = obj.get_member(attr)?;
 
                         // If it's a function, ensure it's declared in our module
-                        if let PyType::Function = &member.ty {
+                        if let PyType::Function = &member.ty() {
                             let func_info = member.get_function();
                             // Declare the function in our module using PyType info
                             let function =
@@ -237,7 +237,7 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                     _ => Err(format!(
                         "Attribute access not supported for type {:?}",
-                        obj.ty
+                        obj.ty()
                     )),
                 }
             }
@@ -246,7 +246,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Check if index is a slice expression
                 if let Expression::Slice { start, stop, step } = index.as_ref() {
-                    match &obj.ty {
+                    match &obj.ty() {
                         PyType::Bytes => {
                             let obj_val = obj.value();
                             // bytes[start:stop:step] returns bytes
@@ -376,12 +376,12 @@ impl<'ctx> CodeGen<'ctx> {
                         }
                         _ => Err(format!(
                             "Slice operation not supported for type {:?}",
-                            obj.ty
+                            obj.ty()
                         )),
                     }
                 } else {
                     let idx = self.evaluate_expression(index)?;
-                    match &obj.ty {
+                    match &obj.ty() {
                         PyType::Bytes => {
                             // bytes[index] returns an int (the byte value at that index)
                             self.bytes_getitem(obj.value(), idx.value())
@@ -399,7 +399,7 @@ impl<'ctx> CodeGen<'ctx> {
                         }
                         _ => Err(format!(
                             "Subscript operation not supported for type {:?}",
-                            obj.ty
+                            obj.ty()
                         )),
                     }
                 }

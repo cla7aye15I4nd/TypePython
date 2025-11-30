@@ -73,7 +73,7 @@ impl<'ctx> CodeGen<'ctx> {
         if let Some(function) = self.cg.module.get_function(&mangled_name) {
             // Get type info from global_variables if available (for correct return type)
             let (param_types, return_type) = if let Some(global) = self.global_variables.get(name) {
-                if global.ty == crate::types::PyType::Function {
+                if global.ty() == crate::types::PyType::Function {
                     let info = global.get_function();
                     (info.param_types.clone(), info.return_type.clone())
                 } else {
@@ -133,14 +133,14 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Int
         } else {
             let first = self.evaluate_expression(&elements[0])?;
-            first.ty.clone()
+            first.ty().clone()
         };
 
         // Append each element (list_append mutates in place, returns void)
         let list_append_fn = self.get_or_declare_c_builtin("list_append");
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
-            // TODO: Type check that elem_val.ty matches elem_type
+            // TODO: Type check that elem_val.ty() matches elem_type
             self.cg
                 .builder
                 .build_call(
@@ -169,7 +169,7 @@ impl<'ctx> CodeGen<'ctx> {
         } else {
             let first_key = self.evaluate_expression(&pairs[0].0)?;
             let first_val = self.evaluate_expression(&pairs[0].1)?;
-            (first_key.ty.clone(), first_val.ty.clone())
+            (first_key.ty().clone(), first_val.ty().clone())
         };
 
         // Select the appropriate dict type based on key type
@@ -239,14 +239,14 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Int
         } else {
             let first = self.evaluate_expression(&elements[0])?;
-            first.ty.clone()
+            first.ty().clone()
         };
 
         // Add each element
         let set_add_fn = self.get_or_declare_c_builtin("set_add");
         for elem in elements {
             let elem_val = self.evaluate_expression(elem)?;
-            // TODO: Type check that elem_val.ty matches elem_type
+            // TODO: Type check that elem_val.ty() matches elem_type
             self.cg
                 .builder
                 .build_call(

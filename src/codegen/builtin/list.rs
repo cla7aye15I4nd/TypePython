@@ -228,7 +228,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Generate the argument value
         let arg_val = self.evaluate_expression(&args[0])?;
 
-        match &arg_val.ty {
+        match &arg_val.ty() {
             PyType::List(elem_type) => {
                 // Copy existing list
                 let list_from_list_fn = self.get_or_declare_c_builtin("list_from_list");
@@ -342,7 +342,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             _ => Err(format!(
                 "list() argument must be an iterable, got {:?}",
-                arg_val.ty
+                arg_val.ty()
             )),
         }
     }

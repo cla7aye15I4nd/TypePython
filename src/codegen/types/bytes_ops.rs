@@ -17,7 +17,7 @@ pub fn binary_op<'ctx>(
 
     match op {
         // Concatenation
-        BinaryOp::Add => match &rhs.ty {
+        BinaryOp::Add => match &rhs.ty() {
             PyType::Bytes => {
                 let strcat_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcat_bytes");
                 let call_site = cg
@@ -33,11 +33,11 @@ pub fn binary_op<'ctx>(
                     "strcat_bytes",
                 )))
             }
-            _ => Err(format!("Cannot concatenate Bytes and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot concatenate Bytes and {:?}", rhs.ty())),
         },
 
         // Repetition
-        BinaryOp::Mul => match &rhs.ty {
+        BinaryOp::Mul => match &rhs.ty() {
             PyType::Int => {
                 let repeat_fn =
                     super::get_or_declare_builtin(&cg.module, cg.ctx, "strrepeat_bytes");
@@ -79,11 +79,11 @@ pub fn binary_op<'ctx>(
                     "strrepeat_bytes",
                 )))
             }
-            _ => Err(format!("Cannot multiply Bytes by {:?}", rhs.ty)),
+            _ => Err(format!("Cannot multiply Bytes by {:?}", rhs.ty())),
         },
 
         // Comparison
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::Bytes => {
                 let strcmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcmp_bytes");
                 let call_site = cg
@@ -104,7 +104,7 @@ pub fn binary_op<'ctx>(
             // Different types are never equal
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::Bytes => {
                 let strcmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "strcmp_bytes");
                 let call_site = cg
@@ -126,7 +126,7 @@ pub fn binary_op<'ctx>(
             // Different types are never equal
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
-        BinaryOp::Lt => match &rhs.ty {
+        BinaryOp::Lt => match &rhs.ty() {
             PyType::Bytes => {
                 let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_lt");
                 let call_site = cg
@@ -144,9 +144,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
-        BinaryOp::Le => match &rhs.ty {
+        BinaryOp::Le => match &rhs.ty() {
             PyType::Bytes => {
                 let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_le");
                 let call_site = cg
@@ -164,9 +164,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
-        BinaryOp::Gt => match &rhs.ty {
+        BinaryOp::Gt => match &rhs.ty() {
             PyType::Bytes => {
                 let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_gt");
                 let call_site = cg
@@ -184,9 +184,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
-        BinaryOp::Ge => match &rhs.ty {
+        BinaryOp::Ge => match &rhs.ty() {
             PyType::Bytes => {
                 let cmp_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_ge");
                 let call_site = cg
@@ -204,11 +204,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Bytes with {:?}", rhs.ty())),
         },
 
         // Membership
-        BinaryOp::In => match &rhs.ty {
+        BinaryOp::In => match &rhs.ty() {
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let contains_fn =
@@ -228,9 +228,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot use 'in' with Bytes and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'in' with Bytes and {:?}", rhs.ty())),
         },
-        BinaryOp::NotIn => match &rhs.ty {
+        BinaryOp::NotIn => match &rhs.ty() {
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let contains_fn =
@@ -251,7 +251,7 @@ pub fn binary_op<'ctx>(
                 let negated = cg.builder.build_not(bool_val, "not_in").unwrap();
                 Ok(PyValue::bool(negated.into()))
             }
-            _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'not in' with Bytes and {:?}", rhs.ty())),
         },
 
         // Logical and/or - same type returns same type, different types return bool
@@ -269,7 +269,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Bytes => {
                     // Bytes and Bytes -> Bytes (Python semantics: return first falsy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -301,7 +301,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Bytes => {
                     // Bytes or Bytes -> Bytes (Python semantics: return first truthy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -321,7 +321,7 @@ pub fn binary_op<'ctx>(
         }
 
         // Identity operators - bytes is bytes compares pointer identity
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(
@@ -334,7 +334,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Bytes => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(

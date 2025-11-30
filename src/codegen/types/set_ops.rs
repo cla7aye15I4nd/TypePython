@@ -16,14 +16,14 @@ pub fn binary_op<'ctx>(
     rhs: &PyValue<'ctx>,
 ) -> Result<PyValue<'ctx>, String> {
     let lhs_ptr = lhs.runtime_value().into_pointer_value();
-    let lhs_elem_type = match &lhs.ty {
+    let lhs_elem_type = match &lhs.ty() {
         PyType::Set(elem) => elem.as_ref().clone(),
         _ => return Err("Expected set type".to_string()),
     };
 
     match op {
         // Set difference: {1, 2, 3} - {2} = {1, 3}
-        BinaryOp::Sub => match &rhs.ty {
+        BinaryOp::Sub => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let diff_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_difference");
@@ -38,11 +38,11 @@ pub fn binary_op<'ctx>(
                     None,
                 ))
             }
-            _ => Err(format!("Cannot subtract {:?} from set", rhs.ty)),
+            _ => Err(format!("Cannot subtract {:?} from set", rhs.ty())),
         },
 
         // Set union: {1, 2} | {2, 3} = {1, 2, 3}
-        BinaryOp::BitOr => match &rhs.ty {
+        BinaryOp::BitOr => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let union_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_union");
@@ -57,11 +57,11 @@ pub fn binary_op<'ctx>(
                     None,
                 ))
             }
-            _ => Err(format!("Cannot use | between set and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use | between set and {:?}", rhs.ty())),
         },
 
         // Set intersection: {1, 2, 3} & {2, 3, 4} = {2, 3}
-        BinaryOp::BitAnd => match &rhs.ty {
+        BinaryOp::BitAnd => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let intersect_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_intersection");
@@ -80,11 +80,11 @@ pub fn binary_op<'ctx>(
                     None,
                 ))
             }
-            _ => Err(format!("Cannot use & between set and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use & between set and {:?}", rhs.ty())),
         },
 
         // Set symmetric difference: {1, 2, 3} ^ {2, 3, 4} = {1, 4}
-        BinaryOp::BitXor => match &rhs.ty {
+        BinaryOp::BitXor => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let sym_diff_fn =
@@ -104,11 +104,11 @@ pub fn binary_op<'ctx>(
                     None,
                 ))
             }
-            _ => Err(format!("Cannot use ^ between set and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use ^ between set and {:?}", rhs.ty())),
         },
 
         // Set equality: {1, 2} == {1, 2}
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_eq");
@@ -132,7 +132,7 @@ pub fn binary_op<'ctx>(
         },
 
         // Set inequality
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let eq_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_eq");
@@ -156,7 +156,7 @@ pub fn binary_op<'ctx>(
         },
 
         // Proper subset: {1} < {1, 2}
-        BinaryOp::Lt => match &rhs.ty {
+        BinaryOp::Lt => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let subset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_is_proper_subset");
@@ -180,11 +180,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare set with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare set with {:?}", rhs.ty())),
         },
 
         // Subset: {1} <= {1, 2}
-        BinaryOp::Le => match &rhs.ty {
+        BinaryOp::Le => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let subset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_issubset");
@@ -204,11 +204,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare set with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare set with {:?}", rhs.ty())),
         },
 
         // Proper superset: {1, 2} > {1}
-        BinaryOp::Gt => match &rhs.ty {
+        BinaryOp::Gt => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let superset_fn =
@@ -233,11 +233,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare set with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare set with {:?}", rhs.ty())),
         },
 
         // Superset: {1, 2} >= {1}
-        BinaryOp::Ge => match &rhs.ty {
+        BinaryOp::Ge => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 let superset_fn = get_or_declare_builtin(&cg.module, cg.ctx, "set_issuperset");
@@ -261,24 +261,24 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot compare set with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare set with {:?}", rhs.ty())),
         },
 
         // Membership: set in list/set - checking if the set is an element
         // For int sets/lists, this is always False
-        BinaryOp::In => match &rhs.ty {
+        BinaryOp::In => match &rhs.ty() {
             PyType::List(_) | PyType::Set(_) => {
                 // set in list/set - always False (sets can't be elements of int collections)
                 Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
             }
-            _ => Err(format!("Cannot use 'in' with set and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'in' with set and {:?}", rhs.ty())),
         },
-        BinaryOp::NotIn => match &rhs.ty {
+        BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) | PyType::Set(_) => {
                 // set not in list/set - always True
                 Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
             }
-            _ => Err(format!("Cannot use 'not in' with set and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'not in' with set and {:?}", rhs.ty())),
         },
 
         // Logical and/or - same type returns same type, different types return bool
@@ -296,7 +296,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Set(elem_ty) => {
                     // Set and Set -> Set (Python semantics: return first falsy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -328,7 +328,7 @@ pub fn binary_op<'ctx>(
                 .build_int_compare(IntPredicate::NE, len, zero, "to_bool")
                 .unwrap();
 
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Set(elem_ty) => {
                     // Set or Set -> Set (Python semantics: return first truthy or last)
                     let rhs_ptr = rhs.runtime_value().into_pointer_value();
@@ -348,7 +348,7 @@ pub fn binary_op<'ctx>(
         }
 
         // Identity operators - set is set compares pointer identity
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(
@@ -361,7 +361,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Set(_) => {
                 let rhs_ptr = rhs.runtime_value().into_pointer_value();
                 Ok(PyValue::bool(

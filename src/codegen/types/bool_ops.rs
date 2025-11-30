@@ -33,7 +33,7 @@ pub fn binary_op<'ctx>(
                 .unwrap();
 
             // If rhs is Float, coerce to float
-            if let PyType::Float = &rhs.ty {
+            if let PyType::Float = &rhs.ty() {
                 let lhs_float = cg
                     .builder
                     .build_signed_int_to_float(lhs_int, cg.ctx.f64_type(), "itof")
@@ -45,7 +45,7 @@ pub fn binary_op<'ctx>(
         }
 
         // Bitwise - coerce to int when RHS is int
-        BinaryOp::BitAnd => match &rhs.ty {
+        BinaryOp::BitAnd => match &rhs.ty() {
             PyType::Bool => {
                 let result = cg
                     .builder
@@ -61,9 +61,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot bitwise AND Bool and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise AND Bool and {:?}", rhs.ty())),
         },
-        BinaryOp::BitOr => match &rhs.ty {
+        BinaryOp::BitOr => match &rhs.ty() {
             PyType::Bool => {
                 let result = cg
                     .builder
@@ -78,9 +78,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot bitwise OR Bool and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise OR Bool and {:?}", rhs.ty())),
         },
-        BinaryOp::BitXor => match &rhs.ty {
+        BinaryOp::BitXor => match &rhs.ty() {
             PyType::Bool => {
                 let result = cg
                     .builder
@@ -95,11 +95,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise XOR Bool and {:?}", rhs.ty())),
         },
 
         // Comparison - coerce to int when RHS is int, return false for other types
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -121,7 +121,7 @@ pub fn binary_op<'ctx>(
             // Different types are never equal
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -151,7 +151,7 @@ pub fn binary_op<'ctx>(
                 .unwrap();
             super::int_ops::binary_op(&PyValue::int(lhs_int.into()), cg, op, rhs)
         }
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -166,7 +166,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Bool => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -184,7 +184,7 @@ pub fn binary_op<'ctx>(
 
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Bool => {
                     // Bool and Bool -> Bool (Python semantics)
                     let rhs_bool = rhs.runtime_value().into_int_value();
@@ -200,7 +200,7 @@ pub fn binary_op<'ctx>(
             }
         }
         BinaryOp::Or => {
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Bool => {
                     // Bool or Bool -> Bool (Python semantics)
                     let rhs_bool = rhs.runtime_value().into_int_value();

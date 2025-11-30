@@ -18,7 +18,7 @@ pub fn binary_op<'ctx>(
 
     // Helper to coerce rhs to float
     let coerce_rhs = |rhs: &PyValue<'ctx>| -> Result<inkwell::values::FloatValue<'ctx>, String> {
-        match &rhs.ty {
+        match &rhs.ty() {
             PyType::Float => Ok(rhs.runtime_value().into_float_value()),
             PyType::Int => Ok(cg
                 .builder
@@ -43,7 +43,7 @@ pub fn binary_op<'ctx>(
                     .build_signed_int_to_float(int_val, cg.ctx.f64_type(), "btof")
                     .unwrap())
             }
-            _ => Err(format!("Cannot coerce {:?} to float", rhs.ty)),
+            _ => Err(format!("Cannot coerce {:?} to float", rhs.ty())),
         }
     };
 
@@ -183,7 +183,7 @@ pub fn binary_op<'ctx>(
                     .into(),
             ))
         }
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Float => Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(
@@ -198,7 +198,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Float => Ok(PyValue::bool(
                 cg.builder
                     .build_float_compare(
@@ -217,7 +217,7 @@ pub fn binary_op<'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             let zero = cg.ctx.f64_type().const_zero();
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Float => {
                     // Float and Float -> Float (Python semantics: return first falsy or last)
                     let rhs_float = rhs.runtime_value().into_float_value();
@@ -245,7 +245,7 @@ pub fn binary_op<'ctx>(
         }
         BinaryOp::Or => {
             let zero = cg.ctx.f64_type().const_zero();
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Float => {
                     // Float or Float -> Float (Python semantics: return first truthy or last)
                     let rhs_float = rhs.runtime_value().into_float_value();
@@ -278,14 +278,15 @@ pub fn binary_op<'ctx>(
         | BinaryOp::RShift => Err(format!("Bitwise operator {:?} not supported on floats", op)),
         BinaryOp::In | BinaryOp::NotIn => {
             // Float in list/dict/set
-            let (fn_name, label) = match &rhs.ty {
+            let (fn_name, label) = match &rhs.ty() {
                 PyType::List(_) => ("list_contains_float", "list_contains"),
                 PyType::Dict(_, _) => ("dict_contains_float", "dict_contains"),
                 PyType::Set(_) => ("set_contains_float", "set_contains"),
                 _ => {
                     return Err(format!(
                         "Membership operator {:?} not supported for float in {:?}",
-                        op, rhs.ty
+                        op,
+                        rhs.ty()
                     ))
                 }
             };

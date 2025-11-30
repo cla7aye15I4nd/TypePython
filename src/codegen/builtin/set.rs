@@ -108,7 +108,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Generate the argument value
         let arg_val = self.evaluate_expression(&args[0])?;
 
-        match &arg_val.ty {
+        match &arg_val.ty() {
             PyType::Set(elem_type) => {
                 // Copy existing set
                 let set_copy_fn = self.get_or_declare_c_builtin("set_copy");
@@ -194,7 +194,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             _ => Err(format!(
                 "set() argument must be an iterable, got {:?}",
-                arg_val.ty
+                arg_val.ty()
             )),
         }
     }

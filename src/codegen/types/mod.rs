@@ -14,7 +14,7 @@ mod set_ops;
 mod str_ops;
 mod value;
 
-pub use value::{CgCtx, FunctionInfo, MacroKind, ModuleInfo, PyType, PyValue, PyValueInner};
+pub use value::{CgCtx, FunctionInfo, LLVMValue, MacroKind, ModuleInfo, PyType, PyValue};
 
 // ============================================================================
 // Helper Functions (used by type operation modules)

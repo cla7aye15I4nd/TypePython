@@ -13,11 +13,11 @@ impl<'ctx> CodeGen<'ctx> {
 
         for (i, arg) in args.iter().enumerate() {
             let val = self.evaluate_expression(arg)?;
-            let print_fn_name = self.get_print_fn_for_type(&val.ty);
+            let print_fn_name = self.get_print_fn_for_type(&val.ty());
             let print_fn = self.get_or_declare_c_builtin(print_fn_name);
 
             // print_none takes no arguments, others take the value
-            if val.ty == PyType::None {
+            if val.ty() == PyType::None {
                 self.cg.builder.build_call(print_fn, &[], "print").unwrap();
             } else {
                 self.cg

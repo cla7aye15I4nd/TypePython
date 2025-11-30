@@ -17,7 +17,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match val.ty {
+        match val.ty() {
             PyType::Int => {
                 let abs_fn = self.get_or_declare_c_builtin("abs_int");
                 let call = self
@@ -49,7 +49,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("abs() not supported for type {:?}", val.ty)),
+            _ => Err(format!("abs() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -67,7 +67,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Check if ndigits is None or absent (treat as round to integer)
         let has_ndigits = if args.len() == 2 {
             let ndigits = self.evaluate_expression(&args[1])?;
-            if ndigits.ty == PyType::None {
+            if ndigits.ty() == PyType::None {
                 false // round(x, None) == round(x)
             } else {
                 true
@@ -78,7 +78,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         if !has_ndigits {
             // round(x) or round(x, None) - round to nearest integer
-            match val.ty {
+            match val.ty() {
                 PyType::Int => Ok(val), // int is already rounded
                 PyType::Bool => {
                     // Bool is already 0 or 1, just extend to i64
@@ -102,14 +102,14 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(self.extract_int_call_result(call))
                 }
-                _ => Err(format!("round() not supported for type {:?}", val.ty)),
+                _ => Err(format!("round() not supported for type {:?}", val.ty())),
             }
         } else {
             // round(x, ndigits)
             let ndigits = self.evaluate_expression(&args[1])?;
 
             // Convert ndigits to i64 if bool
-            let ndigits_val = match ndigits.ty {
+            let ndigits_val = match ndigits.ty() {
                 PyType::Int => ndigits.value(),
                 PyType::Bool => self
                     .cg
@@ -124,7 +124,7 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => return Err("round() ndigits must be an integer".to_string()),
             };
 
-            match val.ty {
+            match val.ty() {
                 PyType::Float => {
                     let round_fn = self.get_or_declare_c_builtin("round_float_ndigits");
                     let call = self
@@ -163,7 +163,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(self.extract_int_call_result(call))
                 }
-                _ => Err(format!("round() not supported for type {:?}", val.ty)),
+                _ => Err(format!("round() not supported for type {:?}", val.ty())),
             }
         }
     }
@@ -223,7 +223,7 @@ impl<'ctx> CodeGen<'ctx> {
         is_min: bool,
     ) -> Result<PyValue<'ctx>, String> {
         let func_name = if is_min { "min" } else { "max" };
-        match &val.ty {
+        match &val.ty() {
             PyType::Str => {
                 // min/max of a string returns the min/max character (as a string)
                 let builtin = if is_min { "str_min" } else { "str_max" };
@@ -330,7 +330,7 @@ impl<'ctx> CodeGen<'ctx> {
         let same_type = a.same_type(b);
 
         if same_type {
-            match a.ty {
+            match a.ty() {
                 PyType::Bool => {
                     // Compare bools as integers (0 or 1)
                     let a_val = a.value().into_int_value();
@@ -483,7 +483,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(PyValue::new(
                         result.into_pointer_value().into(),
-                        a.ty.clone(),
+                        a.ty().clone(),
                         None,
                     ))
                 }
@@ -521,11 +521,11 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                     Ok(PyValue::new(
                         result.into_pointer_value().into(),
-                        a.ty.clone(),
+                        a.ty().clone(),
                         None,
                     ))
                 }
-                _ => Err(format!("min/max not supported for type {:?}", a.ty)),
+                _ => Err(format!("min/max not supported for type {:?}", a.ty())),
             }
         } else {
             // Mixed types (int/bool/float combinations)
@@ -568,7 +568,7 @@ impl<'ctx> CodeGen<'ctx> {
 
             // For simplicity, use the first arg's type when it wins or equals,
             // and the second arg's type when second wins
-            match (&a.ty, &b.ty) {
+            match (&a.ty(), &b.ty()) {
                 (PyType::Int, PyType::Float) => {
                     // If returning a (int), print as int; if returning b (float), print as float
                     // Use phi node pattern with basic blocks
@@ -721,7 +721,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
 
                     // Return with first arg's type
-                    if matches!(a.ty, PyType::Bool) {
+                    if matches!(a.ty(), PyType::Bool) {
                         let bool_result = self
                             .cg
                             .builder
@@ -754,7 +754,7 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         val: &PyValue<'ctx>,
     ) -> Result<inkwell::values::FloatValue<'ctx>, String> {
-        match val.ty {
+        match val.ty() {
             PyType::Float => Ok(val.value().into_float_value()),
             PyType::Int => Ok(self
                 .cg
@@ -782,7 +782,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_signed_int_to_float(int_val, self.cg.ctx.f64_type(), "int_to_float")
                     .unwrap())
             }
-            _ => Err(format!("Cannot coerce {:?} to float", val.ty)),
+            _ => Err(format!("Cannot coerce {:?} to float", val.ty())),
         }
     }
 
@@ -801,7 +801,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Check if we have a modulo argument (3rd arg that isn't None)
         let has_modulo = if args.len() == 3 {
             let modulo = self.evaluate_expression(&args[2])?;
-            modulo.ty != PyType::None
+            modulo.ty() != PyType::None
         } else {
             false
         };
@@ -826,7 +826,7 @@ impl<'ctx> CodeGen<'ctx> {
                 )
                 .unwrap();
             Ok(self.extract_int_call_result(call))
-        } else if self.is_int_or_bool(&base.ty) && self.is_int_or_bool(&exp.ty) {
+        } else if self.is_int_or_bool(&base.ty()) && self.is_int_or_bool(&exp.ty()) {
             // pow(int/bool, int/bool) - use integer power, returns int
             let base_int = self.coerce_to_int(&base)?;
             let exp_int = self.coerce_to_int(&exp)?;
@@ -868,14 +868,14 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         val: &PyValue<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        match val.ty {
+        match val.ty() {
             PyType::Int => Ok(val.value().into_int_value()),
             PyType::Bool => Ok(self
                 .cg
                 .builder
                 .build_int_z_extend(val.value().into_int_value(), self.cg.ctx.i64_type(), "btoi")
                 .unwrap()),
-            _ => Err(format!("Cannot coerce {:?} to int", val.ty)),
+            _ => Err(format!("Cannot coerce {:?} to int", val.ty())),
         }
     }
 
@@ -889,7 +889,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::Bytes => {
                 let len_fn = self.get_or_declare_c_builtin("bytes_len");
                 let call = self
@@ -939,7 +939,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
-            _ => Err(format!("len() not supported for type {:?}", val.ty)),
+            _ => Err(format!("len() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -957,7 +957,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match val.ty {
+        match val.ty() {
             PyType::Int => Ok(val),
             PyType::Float => {
                 let result = self
@@ -983,7 +983,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("int() not supported for type {:?}", val.ty)),
+            _ => Err(format!("int() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -997,7 +997,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match val.ty {
+        match val.ty() {
             PyType::Float => Ok(val),
             PyType::Int => {
                 let result = self
@@ -1028,7 +1028,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(PyValue::float(result.into()))
             }
-            _ => Err(format!("float() not supported for type {:?}", val.ty)),
+            _ => Err(format!("float() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1042,7 +1042,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::Bool => Ok(val),
             PyType::Int => {
                 let zero = self.cg.ctx.i64_type().const_zero();
@@ -1152,7 +1152,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let result = self.cg.ctx.bool_type().const_zero();
                 Ok(PyValue::bool(result.into()))
             }
-            _ => Err(format!("bool() not supported for type {:?}", val.ty)),
+            _ => Err(format!("bool() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1166,7 +1166,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::Str => Ok(val),
             PyType::Int => {
                 let str_fn = self.get_or_declare_c_builtin("int_to_str");
@@ -1254,7 +1254,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_str_call_result(call))
             }
-            _ => Err(format!("str() not supported for type {:?}", val.ty)),
+            _ => Err(format!("str() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1272,14 +1272,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        let int_val = match val.ty {
+        let int_val = match val.ty() {
             PyType::Int => val.value().into_int_value(),
             PyType::Bool => self
                 .cg
                 .builder
                 .build_int_z_extend(val.value().into_int_value(), self.cg.ctx.i64_type(), "btoi")
                 .unwrap(),
-            _ => return Err(format!("bin() not supported for type {:?}", val.ty)),
+            _ => return Err(format!("bin() not supported for type {:?}", val.ty())),
         };
 
         let bin_fn = self.get_or_declare_c_builtin("int_to_bin");
@@ -1301,14 +1301,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        let int_val = match val.ty {
+        let int_val = match val.ty() {
             PyType::Int => val.value().into_int_value(),
             PyType::Bool => self
                 .cg
                 .builder
                 .build_int_z_extend(val.value().into_int_value(), self.cg.ctx.i64_type(), "btoi")
                 .unwrap(),
-            _ => return Err(format!("hex() not supported for type {:?}", val.ty)),
+            _ => return Err(format!("hex() not supported for type {:?}", val.ty())),
         };
 
         let hex_fn = self.get_or_declare_c_builtin("int_to_hex");
@@ -1330,14 +1330,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        let int_val = match val.ty {
+        let int_val = match val.ty() {
             PyType::Int => val.value().into_int_value(),
             PyType::Bool => self
                 .cg
                 .builder
                 .build_int_z_extend(val.value().into_int_value(), self.cg.ctx.i64_type(), "btoi")
                 .unwrap(),
-            _ => return Err(format!("oct() not supported for type {:?}", val.ty)),
+            _ => return Err(format!("oct() not supported for type {:?}", val.ty())),
         };
 
         let oct_fn = self.get_or_declare_c_builtin("int_to_oct");
@@ -1359,14 +1359,14 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        let int_val = match val.ty {
+        let int_val = match val.ty() {
             PyType::Int => val.value().into_int_value(),
             PyType::Bool => self
                 .cg
                 .builder
                 .build_int_z_extend(val.value().into_int_value(), self.cg.ctx.i64_type(), "btoi")
                 .unwrap(),
-            _ => return Err(format!("chr() not supported for type {:?}", val.ty)),
+            _ => return Err(format!("chr() not supported for type {:?}", val.ty())),
         };
 
         let chr_fn = self.get_or_declare_c_builtin("int_to_chr");
@@ -1398,7 +1398,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::Str => {
                 let ord_fn = self.get_or_declare_c_builtin("str_ord");
                 let call = self
@@ -1408,7 +1408,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
-            _ => Err(format!("ord() not supported for type {:?}", val.ty)),
+            _ => Err(format!("ord() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1422,7 +1422,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::Int => {
                 let ascii_fn = self.get_or_declare_c_builtin("int_to_ascii");
                 let call = self
@@ -1517,7 +1517,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_str_call_result(call))
             }
-            _ => Err(format!("ascii() not supported for type {:?}", val.ty)),
+            _ => Err(format!("ascii() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1539,7 +1539,7 @@ impl<'ctx> CodeGen<'ctx> {
         // Get start value (default 0)
         let start = if args.len() == 2 {
             let start_val = self.evaluate_expression(&args[1])?;
-            if start_val.ty != PyType::Int {
+            if start_val.ty() != PyType::Int {
                 return Err("sum() start must be an integer".to_string());
             }
             start_val.value().into_int_value()
@@ -1547,7 +1547,7 @@ impl<'ctx> CodeGen<'ctx> {
             self.cg.ctx.i64_type().const_zero()
         };
 
-        match &val.ty {
+        match &val.ty() {
             PyType::List(_) => {
                 let sum_fn = self.get_or_declare_c_builtin("list_sum");
                 let call = self
@@ -1575,7 +1575,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
-            _ => Err(format!("sum() not supported for type {:?}", val.ty)),
+            _ => Err(format!("sum() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1589,7 +1589,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::List(elem_ty) => {
                 let sorted_fn = self.get_or_declare_c_builtin("list_sorted");
                 let call = self
@@ -1670,7 +1670,7 @@ impl<'ctx> CodeGen<'ctx> {
                     None,
                 ))
             }
-            _ => Err(format!("sorted() not supported for type {:?}", val.ty)),
+            _ => Err(format!("sorted() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1684,7 +1684,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         let val = self.evaluate_expression(&args[0])?;
-        match &val.ty {
+        match &val.ty() {
             PyType::List(elem_ty) => {
                 let reversed_fn = self.get_or_declare_c_builtin("list_reversed");
                 let call = self
@@ -1732,7 +1732,7 @@ impl<'ctx> CodeGen<'ctx> {
                     None,
                 ))
             }
-            _ => Err(format!("reversed() not supported for type {:?}", val.ty)),
+            _ => Err(format!("reversed() not supported for type {:?}", val.ty())),
         }
     }
 
@@ -1753,7 +1753,7 @@ impl<'ctx> CodeGen<'ctx> {
         let b = self.evaluate_expression(&args[1])?;
 
         // Both must be numeric (int or float)
-        match (&a.ty, &b.ty) {
+        match (&a.ty(), &b.ty()) {
             (PyType::Int, PyType::Int) => {
                 let divmod_fn = self.get_or_declare_c_builtin("divmod_int");
                 let call = self
@@ -1773,7 +1773,7 @@ impl<'ctx> CodeGen<'ctx> {
             | (PyType::Bool, PyType::Int)
             | (PyType::Bool, PyType::Bool) => {
                 // Convert bools to ints
-                let a_int = match a.ty {
+                let a_int = match a.ty() {
                     PyType::Bool => self
                         .cg
                         .builder
@@ -1785,7 +1785,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap(),
                     _ => a.value().into_int_value(),
                 };
-                let b_int = match b.ty {
+                let b_int = match b.ty() {
                     PyType::Bool => self
                         .cg
                         .builder
@@ -1829,7 +1829,8 @@ impl<'ctx> CodeGen<'ctx> {
             }
             _ => Err(format!(
                 "divmod() not supported for types {:?} and {:?}",
-                a.ty, b.ty
+                a.ty(),
+                b.ty()
             )),
         }
     }

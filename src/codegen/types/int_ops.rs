@@ -19,7 +19,7 @@ pub fn binary_op<'ctx>(
 
     match op {
         // Arithmetic
-        BinaryOp::Add => match &rhs.ty {
+        BinaryOp::Add => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -46,9 +46,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot add Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot add Int and {:?}", rhs.ty())),
         },
-        BinaryOp::Sub => match &rhs.ty {
+        BinaryOp::Sub => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -75,9 +75,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot subtract {:?} from Int", rhs.ty)),
+            _ => Err(format!("Cannot subtract {:?} from Int", rhs.ty())),
         },
-        BinaryOp::Mul => match &rhs.ty {
+        BinaryOp::Mul => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -150,7 +150,7 @@ pub fn binary_op<'ctx>(
                 let result = super::extract_ptr_result(call, "list_repeat");
                 Ok(PyValue::new(result, PyType::List(elem_type.clone()), None))
             }
-            _ => Err(format!("Cannot multiply Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot multiply Int and {:?}", rhs.ty())),
         },
         BinaryOp::Div => {
             // Python 3 semantics: int / int -> float
@@ -158,7 +158,7 @@ pub fn binary_op<'ctx>(
                 .builder
                 .build_signed_int_to_float(lhs_int, cg.ctx.f64_type(), "lhs_itof")
                 .unwrap();
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Int => {
                     let rhs_float = cg
                         .builder
@@ -196,10 +196,10 @@ pub fn binary_op<'ctx>(
                 PyType::Float => {
                     super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
                 }
-                _ => Err(format!("Cannot divide Int by {:?}", rhs.ty)),
+                _ => Err(format!("Cannot divide Int by {:?}", rhs.ty())),
             }
         }
-        BinaryOp::FloorDiv => match &rhs.ty {
+        BinaryOp::FloorDiv => match &rhs.ty() {
             PyType::Int => {
                 let floordiv_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "floordiv_int");
                 let call_site = cg
@@ -241,9 +241,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot floor divide Int by {:?}", rhs.ty)),
+            _ => Err(format!("Cannot floor divide Int by {:?}", rhs.ty())),
         },
-        BinaryOp::Mod => match &rhs.ty {
+        BinaryOp::Mod => match &rhs.ty() {
             PyType::Int => {
                 let mod_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "mod_int");
                 let call_site = cg
@@ -279,9 +279,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compute Int modulo {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compute Int modulo {:?}", rhs.ty())),
         },
-        BinaryOp::Pow => match &rhs.ty {
+        BinaryOp::Pow => match &rhs.ty() {
             PyType::Int => {
                 let pow_fn = super::get_or_declare_builtin(&cg.module, cg.ctx, "pow_int");
                 let call_site = cg
@@ -321,11 +321,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot raise Int to power {:?}", rhs.ty)),
+            _ => Err(format!("Cannot raise Int to power {:?}", rhs.ty())),
         },
 
         // Bitwise
-        BinaryOp::BitAnd => match &rhs.ty {
+        BinaryOp::BitAnd => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -345,9 +345,9 @@ pub fn binary_op<'ctx>(
                 let result = cg.builder.build_and(lhs_int, rhs_int, "bitand").unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("Cannot bitwise AND Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise AND Int and {:?}", rhs.ty())),
         },
-        BinaryOp::BitOr => match &rhs.ty {
+        BinaryOp::BitOr => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -367,9 +367,9 @@ pub fn binary_op<'ctx>(
                 let result = cg.builder.build_or(lhs_int, rhs_int, "bitor").unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("Cannot bitwise OR Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise OR Int and {:?}", rhs.ty())),
         },
-        BinaryOp::BitXor => match &rhs.ty {
+        BinaryOp::BitXor => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -389,9 +389,9 @@ pub fn binary_op<'ctx>(
                 let result = cg.builder.build_xor(lhs_int, rhs_int, "bitxor").unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("Cannot bitwise XOR Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot bitwise XOR Int and {:?}", rhs.ty())),
         },
-        BinaryOp::LShift => match &rhs.ty {
+        BinaryOp::LShift => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -414,9 +414,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("Cannot left shift Int by {:?}", rhs.ty)),
+            _ => Err(format!("Cannot left shift Int by {:?}", rhs.ty())),
         },
-        BinaryOp::RShift => match &rhs.ty {
+        BinaryOp::RShift => match &rhs.ty() {
             PyType::Int => {
                 let result = cg
                     .builder
@@ -444,11 +444,11 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::int(result.into()))
             }
-            _ => Err(format!("Cannot right shift Int by {:?}", rhs.ty)),
+            _ => Err(format!("Cannot right shift Int by {:?}", rhs.ty())),
         },
 
         // Comparison
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -486,7 +486,7 @@ pub fn binary_op<'ctx>(
             // Different incompatible types are never equal (Python semantics)
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -524,7 +524,7 @@ pub fn binary_op<'ctx>(
             // Different incompatible types are always not equal (Python semantics)
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
-        BinaryOp::Lt => match &rhs.ty {
+        BinaryOp::Lt => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -559,9 +559,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty())),
         },
-        BinaryOp::Le => match &rhs.ty {
+        BinaryOp::Le => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -596,9 +596,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty())),
         },
-        BinaryOp::Gt => match &rhs.ty {
+        BinaryOp::Gt => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -633,9 +633,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty())),
         },
-        BinaryOp::Ge => match &rhs.ty {
+        BinaryOp::Ge => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -670,9 +670,9 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 super::float_ops::binary_op(&PyValue::float(lhs_float.into()), cg, op, rhs)
             }
-            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty)),
+            _ => Err(format!("Cannot compare Int with {:?}", rhs.ty())),
         },
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -687,7 +687,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::Int => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -706,7 +706,7 @@ pub fn binary_op<'ctx>(
         // Logical and/or - same type returns same type, different types return bool
         BinaryOp::And => {
             let zero = cg.ctx.i64_type().const_zero();
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Int => {
                     // Int and Int -> Int (Python semantics: return first falsy or last)
                     let rhs_int = rhs.runtime_value().into_int_value();
@@ -734,7 +734,7 @@ pub fn binary_op<'ctx>(
         }
         BinaryOp::Or => {
             let zero = cg.ctx.i64_type().const_zero();
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::Int => {
                     // Int or Int -> Int (Python semantics: return first truthy or last)
                     let rhs_int = rhs.runtime_value().into_int_value();
@@ -761,7 +761,7 @@ pub fn binary_op<'ctx>(
             }
         }
 
-        BinaryOp::In => match &rhs.ty {
+        BinaryOp::In => match &rhs.ty() {
             PyType::List(_) => {
                 let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_contains");
                 let call_site = cg
@@ -850,10 +850,10 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot use 'in' with Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'in' with Int and {:?}", rhs.ty())),
         },
 
-        BinaryOp::NotIn => match &rhs.ty {
+        BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) => {
                 let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "list_contains");
                 let call_site = cg
@@ -942,7 +942,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val.into()))
             }
-            _ => Err(format!("Cannot use 'not in' with Int and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'not in' with Int and {:?}", rhs.ty())),
         },
     }
 }

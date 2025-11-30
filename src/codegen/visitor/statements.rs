@@ -45,10 +45,10 @@ impl<'ctx> CodeGen<'ctx> {
                     var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
-                    let llvm_type = val.ty.to_llvm(self.cg.ctx);
+                    let llvm_type = val.ty().to_llvm(self.cg.ctx);
                     let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
                     self.cg.builder.build_store(alloca, val.value()).unwrap();
-                    let var = PyValue::new(val.value(), val.ty.clone(), Some(alloca));
+                    let var = PyValue::new(val.value(), val.ty().clone(), Some(alloca));
                     self.variables.insert(name.to_string(), var);
                 }
                 Ok(())
@@ -58,7 +58,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let idx = self.evaluate_expression(index)?;
                 let val = self.evaluate_expression(value)?;
 
-                match &obj.ty {
+                match &obj.ty() {
                     PyType::List(_) => {
                         self.list_setitem(obj.value(), idx.value(), val.value())?;
                         Ok(())
@@ -67,7 +67,7 @@ impl<'ctx> CodeGen<'ctx> {
                         self.dict_setitem(obj.value(), idx.value(), val.value())?;
                         Ok(())
                     }
-                    _ => panic!("Subscript assignment not supported for type {:?}", obj.ty),
+                    _ => panic!("Subscript assignment not supported for type {:?}", obj.ty()),
                 }
             }
             _ => panic!("Invalid assignment target: {:?}", target),
@@ -193,7 +193,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let obj = self.evaluate_expression(object)?;
                 let idx = self.evaluate_expression(index)?;
 
-                match &obj.ty {
+                match &obj.ty() {
                     PyType::List(_) => {
                         self.list_delitem(obj.value(), idx.value())?;
                         Ok(())
@@ -202,7 +202,7 @@ impl<'ctx> CodeGen<'ctx> {
                         self.dict_delitem(obj.value(), idx.value())?;
                         Ok(())
                     }
-                    _ => panic!("del not supported for type {:?}", obj.ty),
+                    _ => panic!("del not supported for type {:?}", obj.ty()),
                 }
             }
             _ => panic!("del not supported for target: {:?}", target),

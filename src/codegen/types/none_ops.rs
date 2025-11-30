@@ -17,7 +17,7 @@ pub fn binary_op<'ctx>(
     let lhs_int = lhs.runtime_value().into_int_value();
 
     match op {
-        BinaryOp::Eq => match &rhs.ty {
+        BinaryOp::Eq => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -32,7 +32,7 @@ pub fn binary_op<'ctx>(
             // None is never equal to other types
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::Ne => match &rhs.ty {
+        BinaryOp::Ne => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -47,7 +47,7 @@ pub fn binary_op<'ctx>(
             // None is always not equal to other types
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
-        BinaryOp::Is => match &rhs.ty {
+        BinaryOp::Is => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -62,7 +62,7 @@ pub fn binary_op<'ctx>(
             // Different types are never identical
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
         },
-        BinaryOp::IsNot => match &rhs.ty {
+        BinaryOp::IsNot => match &rhs.ty() {
             PyType::None => Ok(PyValue::bool(
                 cg.builder
                     .build_int_compare(
@@ -78,23 +78,23 @@ pub fn binary_op<'ctx>(
             _ => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
         },
         // Membership: None in list/dict/set - always False (can't have None in int collections)
-        BinaryOp::In => match &rhs.ty {
+        BinaryOp::In => match &rhs.ty() {
             PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
                 Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into()))
             }
-            _ => Err(format!("Cannot use 'in' with None and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'in' with None and {:?}", rhs.ty())),
         },
-        BinaryOp::NotIn => match &rhs.ty {
+        BinaryOp::NotIn => match &rhs.ty() {
             PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
                 Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into()))
             }
-            _ => Err(format!("Cannot use 'not in' with None and {:?}", rhs.ty)),
+            _ => Err(format!("Cannot use 'not in' with None and {:?}", rhs.ty())),
         },
 
         // Logical and/or - None is always falsy
         BinaryOp::And => {
             // None is always falsy, so "None and X" returns None (first falsy)
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::None => {
                     // None and None -> None
                     Ok(PyValue::none(lhs_int.into()))
@@ -108,7 +108,7 @@ pub fn binary_op<'ctx>(
         }
         BinaryOp::Or => {
             // None is always falsy, so "None or X" returns X (first truthy or last)
-            match &rhs.ty {
+            match &rhs.ty() {
                 PyType::None => {
                     // None or None -> None (returns last)
                     Ok(PyValue::none(rhs.runtime_value()))
