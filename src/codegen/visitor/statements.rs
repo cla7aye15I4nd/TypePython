@@ -44,7 +44,7 @@ impl<'ctx> CodeGen<'ctx> {
                     var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
-                    let llvm_type = self.pytype_to_llvm(&val.ty);
+                    let llvm_type = self.cg.pytype_to_llvm(&val.ty);
                     let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
                     self.cg.builder.build_store(alloca, val.value()).unwrap();
                     let var = PyValue::new(val.value(), val.ty.clone(), Some(alloca));

@@ -174,8 +174,8 @@ impl<'ctx> CodeGen<'ctx> {
                             .into(),
                     )),
                     PyType::Int => Ok(self.extract_int_call_result(call_site)),
-                    PyType::Float => self.extract_float_call_result(call_site),
-                    PyType::Bool => self.extract_bool_call_result(call_site),
+                    PyType::Float => Ok(self.extract_float_call_result(call_site)),
+                    PyType::Bool => Ok(self.extract_bool_call_result(call_site)),
                     PyType::Bytes => Ok(self.extract_bytes_call_result(call_site)),
                     PyType::Str => Ok(self.extract_str_call_result(call_site)),
                     PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
@@ -637,32 +637,8 @@ impl<'ctx> CodeGen<'ctx> {
         operand: &Expression,
     ) -> Result<PyValue<'ctx>, String> {
         let val = self.evaluate_expression(operand)?;
-
-        // Use the type from PyValue - no inference needed!
-        let result = val.unary_op(&self.cg, op)?;
-
-        // Determine result type (Not always returns Bool, others preserve type)
-        match op {
-            UnaryOp::Not => Ok(PyValue::bool(result)),
-            // For Neg, Pos, BitNot on Bool, result is Int (Python behavior)
-            UnaryOp::Neg | UnaryOp::Pos | UnaryOp::BitNot if matches!(val.ty, PyType::Bool) => {
-                Ok(PyValue::int(result))
-            }
-            _ => match &val.ty {
-                PyType::Int => Ok(PyValue::int(result)),
-                PyType::Float => Ok(PyValue::float(result)),
-                PyType::Bool => Ok(PyValue::bool(result)),
-                PyType::Str => Ok(PyValue::new_str(result)),
-                PyType::Bytes => Ok(PyValue::bytes(result)),
-                PyType::None => Ok(PyValue::none(result)),
-                PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) | PyType::Tuple(_) => {
-                    Err("Unary operations not supported on container types".to_string())
-                }
-                PyType::Function | PyType::Module | PyType::Macro => Err(
-                    "Unary operations not supported on functions, modules or macros".to_string(),
-                ),
-            },
-        }
+        // Unary ops now return PyValue with correct type
+        val.unary_op(&self.cg, op)
     }
 
     /// Helper to extract int result from a call site
@@ -677,40 +653,36 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Helper to extract float result from a call site
+    /// This function is infallible because the type system guarantees the call returns a float
     fn extract_float_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
+    ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
-        match call_site.as_any_value_enum() {
-            inkwell::values::AnyValueEnum::FloatValue(fv) => Ok(PyValue::float(fv.into())),
-            _ => Err("Expected float return value".to_string()),
-        }
+        let fv = call_site.as_any_value_enum().into_float_value();
+        PyValue::float(fv.into())
     }
 
     /// Helper to extract bool result from a call site
     /// Handles both i1 (native bool) and int64_t (C int) return types
+    /// This function is infallible because the type system guarantees the call returns a bool/int
     fn extract_bool_call_result(
         &self,
         call_site: inkwell::values::CallSiteValue<'ctx>,
-    ) -> Result<PyValue<'ctx>, String> {
+    ) -> PyValue<'ctx> {
         use inkwell::values::AnyValue;
-        match call_site.as_any_value_enum() {
-            inkwell::values::AnyValueEnum::IntValue(iv) => {
-                if iv.get_type().get_bit_width() == 1 {
-                    Ok(PyValue::bool(iv.into()))
-                } else {
-                    // Convert int64_t to bool by comparing with zero
-                    let zero = iv.get_type().const_zero();
-                    let bool_val = self
-                        .cg
-                        .builder
-                        .build_int_compare(inkwell::IntPredicate::NE, iv, zero, "to_bool")
-                        .unwrap();
-                    Ok(PyValue::bool(bool_val.into()))
-                }
-            }
-            _ => Err("Expected bool return value".to_string()),
+        let iv = call_site.as_any_value_enum().into_int_value();
+        if iv.get_type().get_bit_width() == 1 {
+            PyValue::bool(iv.into())
+        } else {
+            // Convert int64_t to bool by comparing with zero
+            let zero = iv.get_type().const_zero();
+            let bool_val = self
+                .cg
+                .builder
+                .build_int_compare(inkwell::IntPredicate::NE, iv, zero, "to_bool")
+                .unwrap();
+            PyValue::bool(bool_val.into())
         }
     }
 
@@ -782,46 +754,6 @@ impl<'ctx> CodeGen<'ctx> {
                 .into(),
             Type::Tuple(_) => panic!("Tuple type not yet supported"),
             Type::Custom(_) => panic!("Custom type not yet supported"),
-        }
-    }
-
-    pub(crate) fn pytype_to_llvm(&self, ty: &PyType) -> BasicTypeEnum<'ctx> {
-        match ty {
-            PyType::Int => self.cg.ctx.i64_type().into(),
-            PyType::Float => self.cg.ctx.f64_type().into(),
-            PyType::Bool => self.cg.ctx.bool_type().into(),
-            PyType::Str => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::Bytes => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::None => self.cg.ctx.i32_type().into(),
-            PyType::List(_) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::Dict(_, _) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::Set(_) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::Tuple(_) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            PyType::Function | PyType::Module | PyType::Macro => self.cg.ctx.i64_type().into(),
         }
     }
 

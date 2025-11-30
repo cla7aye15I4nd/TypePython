@@ -3,7 +3,6 @@
 //! Binary and unary operations for Python None type.
 
 use crate::ast::{BinaryOp, UnaryOp};
-use inkwell::values::BasicValueEnum;
 use inkwell::IntPredicate;
 
 use super::value::{CgCtx, PyType, PyValue};
@@ -131,11 +130,11 @@ pub fn unary_op<'ctx>(
     _val: &PyValue<'ctx>,
     cg: &CgCtx<'ctx>,
     op: &UnaryOp,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> Result<PyValue<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not None: always True (None is falsy)
-            Ok(cg.ctx.bool_type().const_int(1, false).into())
+            Ok(PyValue::bool(cg.ctx.bool_type().const_int(1, false).into()))
         }
         _ => Err(format!("Unary operator {:?} not supported on None", op)),
     }

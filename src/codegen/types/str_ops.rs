@@ -3,7 +3,6 @@
 //! Binary and unary operations for Python str type.
 
 use crate::ast::{BinaryOp, UnaryOp};
-use inkwell::values::BasicValueEnum;
 
 use super::value::{CgCtx, PyType, PyValue};
 
@@ -498,7 +497,7 @@ pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
     cg: &CgCtx<'ctx>,
     op: &UnaryOp,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> Result<PyValue<'ctx>, String> {
     match op {
         UnaryOp::Not => {
             // not str: true if str is empty, false otherwise
@@ -511,11 +510,12 @@ pub fn unary_op<'ctx>(
             let len = super::extract_int_result(len_call, "str_len").into_int_value();
             let zero = cg.ctx.i64_type().const_zero();
             // not str is true when len == 0
-            Ok(cg
-                .builder
-                .build_int_compare(inkwell::IntPredicate::EQ, len, zero, "str_not")
-                .unwrap()
-                .into())
+            Ok(PyValue::bool(
+                cg.builder
+                    .build_int_compare(inkwell::IntPredicate::EQ, len, zero, "str_not")
+                    .unwrap()
+                    .into(),
+            ))
         }
         _ => Err(format!("Unary operator {:?} not supported on str", op)),
     }

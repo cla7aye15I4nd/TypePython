@@ -34,7 +34,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .builder
                     .build_call(abs_fn, &[val.value().into()], "abs")
                     .unwrap();
-                Ok(self.extract_float_call_result(call)?)
+                Ok(self.extract_float_call_result(call))
             }
             PyType::Bool => {
                 // abs(True) = 1, abs(False) = 0, just convert to int
@@ -132,7 +132,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .builder
                         .build_call(round_fn, &[val.value().into(), ndigits_val.into()], "round")
                         .unwrap();
-                    Ok(self.extract_float_call_result(call)?)
+                    Ok(self.extract_float_call_result(call))
                 }
                 PyType::Int => {
                     // For integers with ndigits, use round_int_ndigits which returns int
@@ -854,7 +854,7 @@ impl<'ctx> CodeGen<'ctx> {
                 .builder
                 .build_call(pow_fn, &[base_float.into(), exp_float.into()], "pow")
                 .unwrap();
-            Ok(self.extract_float_call_result(call)?)
+            Ok(self.extract_float_call_result(call))
         }
     }
 

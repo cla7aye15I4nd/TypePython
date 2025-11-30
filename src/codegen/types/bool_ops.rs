@@ -3,7 +3,6 @@
 //! Binary and unary operations for Python bool type.
 
 use crate::ast::{BinaryOp, UnaryOp};
-use inkwell::values::BasicValueEnum;
 use inkwell::IntPredicate;
 
 use super::value::{CgCtx, PyType, PyValue};
@@ -233,10 +232,12 @@ pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
     cg: &CgCtx<'ctx>,
     op: &UnaryOp,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> Result<PyValue<'ctx>, String> {
     let bool_val = val.runtime_value().into_int_value();
     match op {
-        UnaryOp::Not => Ok(cg.builder.build_not(bool_val, "not").unwrap().into()),
+        UnaryOp::Not => Ok(PyValue::bool(
+            cg.builder.build_not(bool_val, "not").unwrap().into(),
+        )),
         // For bitwise NOT, unary minus, and unary plus, coerce to int first
         UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Pos => {
             let int_val = cg

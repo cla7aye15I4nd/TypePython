@@ -3,7 +3,6 @@
 //! Binary and unary operations for Python float type.
 
 use crate::ast::{BinaryOp, UnaryOp};
-use inkwell::values::BasicValueEnum;
 use inkwell::FloatPredicate;
 
 use super::value::{CgCtx, PyType, PyValue};
@@ -327,23 +326,25 @@ pub fn unary_op<'ctx>(
     val: &PyValue<'ctx>,
     cg: &CgCtx<'ctx>,
     op: &UnaryOp,
-) -> Result<BasicValueEnum<'ctx>, String> {
+) -> Result<PyValue<'ctx>, String> {
     let float_val = val.runtime_value().into_float_value();
     match op {
-        UnaryOp::Neg => Ok(cg
-            .builder
-            .build_float_neg(float_val, "fneg")
-            .unwrap()
-            .into()),
-        UnaryOp::Pos => Ok(val.runtime_value()),
+        UnaryOp::Neg => Ok(PyValue::float(
+            cg.builder
+                .build_float_neg(float_val, "fneg")
+                .unwrap()
+                .into(),
+        )),
+        UnaryOp::Pos => Ok(PyValue::float(val.runtime_value())),
         UnaryOp::Not => {
             // not float: true if float == 0.0, false otherwise
             let zero = cg.ctx.f64_type().const_zero();
-            Ok(cg
-                .builder
-                .build_float_compare(FloatPredicate::OEQ, float_val, zero, "fnot")
-                .unwrap()
-                .into())
+            Ok(PyValue::bool(
+                cg.builder
+                    .build_float_compare(FloatPredicate::OEQ, float_val, zero, "fnot")
+                    .unwrap()
+                    .into(),
+            ))
         }
         UnaryOp::BitNot => Err(format!("Operator {:?} not supported on floats", op)),
     }
