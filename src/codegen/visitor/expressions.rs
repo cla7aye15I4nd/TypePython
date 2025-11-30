@@ -63,7 +63,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub(crate) fn visit_var_impl(&mut self, name: &str) -> Result<PyValue<'ctx>, String> {
         // First check local variables (stack allocations)
         if let Some(var) = self.variables.get(name) {
-            return Ok(var.load(&self.cg.builder, name));
+            return Ok(var.load(&self.cg.builder, self.cg.ctx, name));
         }
 
         // Check if it's a function in the current LLVM module (local functions)

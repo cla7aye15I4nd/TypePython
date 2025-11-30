@@ -89,7 +89,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .clone();
 
                 // Load current value from the addressable PyValue
-                let current = var.load(&self.cg.builder, name);
+                let current = var.load(&self.cg.builder, self.cg.ctx, name);
 
                 // Evaluate RHS
                 let rhs = self.evaluate_expression(value)?;

@@ -11,6 +11,47 @@ use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue, Point
 use std::collections::HashMap;
 
 // ============================================================================
+// Storage types - Union types for values (Immediate | Pointer)
+// ============================================================================
+
+/// Storage for integer values - either an immediate value or a pointer to one
+#[derive(Clone, Copy)]
+pub enum IntStorage<'ctx> {
+    Immediate(IntValue<'ctx>),
+    Pointer(PointerValue<'ctx>),
+}
+
+/// Storage for float values - either an immediate value or a pointer to one
+#[derive(Clone, Copy)]
+pub enum FloatStorage<'ctx> {
+    Immediate(FloatValue<'ctx>),
+    Pointer(PointerValue<'ctx>),
+}
+
+/// Storage for bool values - either an immediate value or a pointer to one
+#[derive(Clone, Copy)]
+pub enum BoolStorage<'ctx> {
+    Immediate(IntValue<'ctx>), // i1
+    Pointer(PointerValue<'ctx>),
+}
+
+/// Storage for None values - either an immediate value or a pointer to one
+#[derive(Clone, Copy)]
+pub enum NoneStorage<'ctx> {
+    Immediate(IntValue<'ctx>), // i32
+    Pointer(PointerValue<'ctx>),
+}
+
+/// Storage for pointer-based types (Str, Bytes) - either direct or via alloca
+#[derive(Clone, Copy)]
+pub enum PtrStorage<'ctx> {
+    /// Direct pointer to the value
+    Direct(PointerValue<'ctx>),
+    /// Pointer to alloca containing the pointer to the value
+    Alloca(PointerValue<'ctx>),
+}
+
+// ============================================================================
 // PyType - Simple type tag
 // ============================================================================
 
@@ -197,23 +238,19 @@ pub enum MacroKind {
 /// Python value - type is encoded in the variant, LLVM type is specific
 #[derive(Clone)]
 pub enum PyValue<'ctx> {
-    // Scalar types with specific LLVM types
-    Int(IntValue<'ctx>, Option<PointerValue<'ctx>>),
-    Float(FloatValue<'ctx>, Option<PointerValue<'ctx>>),
-    Bool(IntValue<'ctx>, Option<PointerValue<'ctx>>), // i1
-    Str(PointerValue<'ctx>, Option<PointerValue<'ctx>>),
-    Bytes(PointerValue<'ctx>, Option<PointerValue<'ctx>>),
-    None(IntValue<'ctx>, Option<PointerValue<'ctx>>), // i32
+    // Scalar types with storage unions (Immediate | Pointer)
+    Int(IntStorage<'ctx>),
+    Float(FloatStorage<'ctx>),
+    Bool(BoolStorage<'ctx>),
+    None(NoneStorage<'ctx>),
+    // Pointer types with storage unions (Direct | Alloca)
+    Str(PtrStorage<'ctx>),
+    Bytes(PtrStorage<'ctx>),
     // Container types with element type info
-    List(PointerValue<'ctx>, Option<PointerValue<'ctx>>, Box<PyType>),
-    Dict(
-        PointerValue<'ctx>,
-        Option<PointerValue<'ctx>>,
-        Box<PyType>,
-        Box<PyType>,
-    ),
-    Set(PointerValue<'ctx>, Option<PointerValue<'ctx>>, Box<PyType>),
-    Tuple(PointerValue<'ctx>, Option<PointerValue<'ctx>>, Box<PyType>),
+    List(PtrStorage<'ctx>, Box<PyType>),
+    Dict(PtrStorage<'ctx>, Box<PyType>, Box<PyType>),
+    Set(PtrStorage<'ctx>, Box<PyType>),
+    Tuple(PtrStorage<'ctx>, Box<PyType>),
     // Compile-time types
     Function(FunctionInfo<'ctx>),
     Module(ModuleInfo<'ctx>),
@@ -226,43 +263,27 @@ impl<'ctx> PyValue<'ctx> {
     // ========================================================================
 
     pub fn int(value: IntValue<'ctx>) -> Self {
-        PyValue::Int(value, None)
+        PyValue::Int(IntStorage::Immediate(value))
     }
 
     pub fn float(value: FloatValue<'ctx>) -> Self {
-        PyValue::Float(value, None)
+        PyValue::Float(FloatStorage::Immediate(value))
     }
 
     pub fn bool(value: IntValue<'ctx>) -> Self {
-        PyValue::Bool(value, None)
+        PyValue::Bool(BoolStorage::Immediate(value))
     }
 
     pub fn new_str(value: PointerValue<'ctx>) -> Self {
-        PyValue::Str(value, None)
+        PyValue::Str(PtrStorage::Direct(value))
     }
 
     pub fn bytes(value: PointerValue<'ctx>) -> Self {
-        PyValue::Bytes(value, None)
+        PyValue::Bytes(PtrStorage::Direct(value))
     }
 
     pub fn none(value: IntValue<'ctx>) -> Self {
-        PyValue::None(value, None)
-    }
-
-    pub fn list(value: PointerValue<'ctx>, elem_type: PyType) -> Self {
-        PyValue::List(value, None, Box::new(elem_type))
-    }
-
-    pub fn dict(value: PointerValue<'ctx>, key_type: PyType, val_type: PyType) -> Self {
-        PyValue::Dict(value, None, Box::new(key_type), Box::new(val_type))
-    }
-
-    pub fn set(value: PointerValue<'ctx>, elem_type: PyType) -> Self {
-        PyValue::Set(value, None, Box::new(elem_type))
-    }
-
-    pub fn tuple(value: PointerValue<'ctx>, elem_type: PyType) -> Self {
-        PyValue::Tuple(value, None, Box::new(elem_type))
+        PyValue::None(NoneStorage::Immediate(value))
     }
 
     pub fn function(info: FunctionInfo<'ctx>) -> Self {
@@ -279,31 +300,41 @@ impl<'ctx> PyValue<'ctx> {
 
     /// Create with pointer (for variables) - converts from BasicValueEnum
     pub fn new(value: BasicValueEnum<'ctx>, ty: PyType, ptr: Option<PointerValue<'ctx>>) -> Self {
-        match ty {
-            PyType::Int => PyValue::Int(value.into_int_value(), ptr),
-            PyType::Float => PyValue::Float(value.into_float_value(), ptr),
-            PyType::Bool => PyValue::Bool(value.into_int_value(), ptr),
-            PyType::Str => PyValue::Str(value.into_pointer_value(), ptr),
-            PyType::Bytes => PyValue::Bytes(value.into_pointer_value(), ptr),
-            PyType::None => PyValue::None(value.into_int_value(), ptr),
-            PyType::List(elem) => PyValue::List(value.into_pointer_value(), ptr, elem),
-            PyType::Dict(k, v) => PyValue::Dict(value.into_pointer_value(), ptr, k, v),
-            PyType::Set(elem) => PyValue::Set(value.into_pointer_value(), ptr, elem),
-            PyType::Tuple(elem) => PyValue::Tuple(value.into_pointer_value(), ptr, elem),
-            PyType::Function | PyType::Module | PyType::Macro => {
+        match (ty, ptr) {
+            (PyType::Int, Some(p)) => PyValue::Int(IntStorage::Pointer(p)),
+            (PyType::Int, None) => PyValue::Int(IntStorage::Immediate(value.into_int_value())),
+            (PyType::Float, Some(p)) => PyValue::Float(FloatStorage::Pointer(p)),
+            (PyType::Float, None) => {
+                PyValue::Float(FloatStorage::Immediate(value.into_float_value()))
+            }
+            (PyType::Bool, Some(p)) => PyValue::Bool(BoolStorage::Pointer(p)),
+            (PyType::Bool, None) => PyValue::Bool(BoolStorage::Immediate(value.into_int_value())),
+            (PyType::Str, Some(p)) => PyValue::Str(PtrStorage::Alloca(p)),
+            (PyType::Str, None) => PyValue::Str(PtrStorage::Direct(value.into_pointer_value())),
+            (PyType::Bytes, Some(p)) => PyValue::Bytes(PtrStorage::Alloca(p)),
+            (PyType::Bytes, None) => PyValue::Bytes(PtrStorage::Direct(value.into_pointer_value())),
+            (PyType::None, Some(p)) => PyValue::None(NoneStorage::Pointer(p)),
+            (PyType::None, None) => PyValue::None(NoneStorage::Immediate(value.into_int_value())),
+            (PyType::List(elem), Some(p)) => PyValue::List(PtrStorage::Alloca(p), elem),
+            (PyType::List(elem), None) => {
+                PyValue::List(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::Dict(k, v), Some(p)) => PyValue::Dict(PtrStorage::Alloca(p), k, v),
+            (PyType::Dict(k, v), None) => {
+                PyValue::Dict(PtrStorage::Direct(value.into_pointer_value()), k, v)
+            }
+            (PyType::Set(elem), Some(p)) => PyValue::Set(PtrStorage::Alloca(p), elem),
+            (PyType::Set(elem), None) => {
+                PyValue::Set(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::Tuple(elem), Some(p)) => PyValue::Tuple(PtrStorage::Alloca(p), elem),
+            (PyType::Tuple(elem), None) => {
+                PyValue::Tuple(PtrStorage::Direct(value.into_pointer_value()), elem)
+            }
+            (PyType::Function, _) | (PyType::Module, _) | (PyType::Macro, _) => {
                 panic!("Use specific constructors for Function/Module/Macro")
             }
         }
-    }
-
-    /// Create from AST Type
-    pub fn from_ast_type(
-        ty: &Type,
-        value: BasicValueEnum<'ctx>,
-        ptr: Option<PointerValue<'ctx>>,
-    ) -> Result<Self, String> {
-        let pytype = PyType::from_ast_type(ty)?;
-        Ok(Self::new(value, pytype, ptr))
     }
 
     // ========================================================================
@@ -313,16 +344,16 @@ impl<'ctx> PyValue<'ctx> {
     /// Get the type tag
     pub fn ty(&self) -> PyType {
         match self {
-            PyValue::Int(_, _) => PyType::Int,
-            PyValue::Float(_, _) => PyType::Float,
-            PyValue::Bool(_, _) => PyType::Bool,
-            PyValue::Str(_, _) => PyType::Str,
-            PyValue::Bytes(_, _) => PyType::Bytes,
-            PyValue::None(_, _) => PyType::None,
-            PyValue::List(_, _, elem) => PyType::List(elem.clone()),
-            PyValue::Dict(_, _, k, v) => PyType::Dict(k.clone(), v.clone()),
-            PyValue::Set(_, _, elem) => PyType::Set(elem.clone()),
-            PyValue::Tuple(_, _, elem) => PyType::Tuple(elem.clone()),
+            PyValue::Int(_) => PyType::Int,
+            PyValue::Float(_) => PyType::Float,
+            PyValue::Bool(_) => PyType::Bool,
+            PyValue::Str(_) => PyType::Str,
+            PyValue::Bytes(_) => PyType::Bytes,
+            PyValue::None(_) => PyType::None,
+            PyValue::List(_, elem) => PyType::List(elem.clone()),
+            PyValue::Dict(_, k, v) => PyType::Dict(k.clone(), v.clone()),
+            PyValue::Set(_, elem) => PyType::Set(elem.clone()),
+            PyValue::Tuple(_, elem) => PyType::Tuple(elem.clone()),
             PyValue::Function(_) => PyType::Function,
             PyValue::Module(_) => PyType::Module,
             PyValue::Macro(_) => PyType::Macro,
@@ -330,90 +361,71 @@ impl<'ctx> PyValue<'ctx> {
     }
 
     /// Get the LLVM value as BasicValueEnum (for compatibility)
+    /// For storage types with Pointer variant, this returns the pointer, not loaded value
     pub fn value(&self) -> BasicValueEnum<'ctx> {
         match self {
-            PyValue::Int(v, _) => (*v).into(),
-            PyValue::Float(v, _) => (*v).into(),
-            PyValue::Bool(v, _) => (*v).into(),
-            PyValue::Str(v, _) => (*v).into(),
-            PyValue::Bytes(v, _) => (*v).into(),
-            PyValue::None(v, _) => (*v).into(),
-            PyValue::List(v, _, _) => (*v).into(),
-            PyValue::Dict(v, _, _, _) => (*v).into(),
-            PyValue::Set(v, _, _) => (*v).into(),
-            PyValue::Tuple(v, _, _) => (*v).into(),
+            PyValue::Int(IntStorage::Immediate(v)) => (*v).into(),
+            PyValue::Int(IntStorage::Pointer(p)) => (*p).into(),
+            PyValue::Float(FloatStorage::Immediate(v)) => (*v).into(),
+            PyValue::Float(FloatStorage::Pointer(p)) => (*p).into(),
+            PyValue::Bool(BoolStorage::Immediate(v)) => (*v).into(),
+            PyValue::Bool(BoolStorage::Pointer(p)) => (*p).into(),
+            PyValue::None(NoneStorage::Immediate(v)) => (*v).into(),
+            PyValue::None(NoneStorage::Pointer(p)) => (*p).into(),
+            PyValue::Str(PtrStorage::Direct(v)) | PyValue::Str(PtrStorage::Alloca(v)) => {
+                (*v).into()
+            }
+            PyValue::Bytes(PtrStorage::Direct(v)) | PyValue::Bytes(PtrStorage::Alloca(v)) => {
+                (*v).into()
+            }
+            PyValue::List(PtrStorage::Direct(v), _) | PyValue::List(PtrStorage::Alloca(v), _) => {
+                (*v).into()
+            }
+            PyValue::Dict(PtrStorage::Direct(v), _, _)
+            | PyValue::Dict(PtrStorage::Alloca(v), _, _) => (*v).into(),
+            PyValue::Set(PtrStorage::Direct(v), _) | PyValue::Set(PtrStorage::Alloca(v), _) => {
+                (*v).into()
+            }
+            PyValue::Tuple(PtrStorage::Direct(v), _) | PyValue::Tuple(PtrStorage::Alloca(v), _) => {
+                (*v).into()
+            }
             PyValue::Function(f) => f.function.as_global_value().as_pointer_value().into(),
             PyValue::Module(_) => panic!("Module has no LLVM value"),
             PyValue::Macro(_) => panic!("Macro has no LLVM value"),
         }
     }
 
-    /// Get the pointer (for addressable values)
+    /// Get the pointer (for addressable values - variables that can be reassigned)
     pub fn ptr(&self) -> Option<PointerValue<'ctx>> {
         match self {
-            PyValue::Int(_, p) | PyValue::Float(_, p) | PyValue::Bool(_, p) => *p,
-            PyValue::Str(_, p) | PyValue::Bytes(_, p) | PyValue::None(_, p) => *p,
-            PyValue::List(_, p, _) | PyValue::Set(_, p, _) | PyValue::Tuple(_, p, _) => *p,
-            PyValue::Dict(_, p, _, _) => *p,
+            PyValue::Int(IntStorage::Pointer(p)) => Some(*p),
+            PyValue::Float(FloatStorage::Pointer(p)) => Some(*p),
+            PyValue::Bool(BoolStorage::Pointer(p)) => Some(*p),
+            PyValue::None(NoneStorage::Pointer(p)) => Some(*p),
+            PyValue::Str(PtrStorage::Alloca(p)) => Some(*p),
+            PyValue::Bytes(PtrStorage::Alloca(p)) => Some(*p),
+            PyValue::List(PtrStorage::Alloca(p), _) => Some(*p),
+            PyValue::Dict(PtrStorage::Alloca(p), _, _) => Some(*p),
+            PyValue::Set(PtrStorage::Alloca(p), _) => Some(*p),
+            PyValue::Tuple(PtrStorage::Alloca(p), _) => Some(*p),
             _ => None,
         }
     }
 
-    /// Get IntValue (for Int, Bool, None)
-    pub fn int_value(&self) -> IntValue<'ctx> {
-        match self {
-            PyValue::Int(v, _) | PyValue::Bool(v, _) | PyValue::None(v, _) => *v,
-            _ => panic!("int_value called on non-int type: {:?}", self.ty()),
-        }
-    }
-
-    /// Get FloatValue (for Float)
+    /// Get FloatValue (for Float) - panics if Pointer variant
     pub fn float_value(&self) -> FloatValue<'ctx> {
         match self {
-            PyValue::Float(v, _) => *v,
+            PyValue::Float(FloatStorage::Immediate(v)) => *v,
+            PyValue::Float(FloatStorage::Pointer(_)) => {
+                panic!("float_value called on pointer storage")
+            }
             _ => panic!("float_value called on non-float type"),
-        }
-    }
-
-    /// Get PointerValue (for Str, Bytes, containers)
-    pub fn ptr_value(&self) -> PointerValue<'ctx> {
-        match self {
-            PyValue::Str(v, _) | PyValue::Bytes(v, _) => *v,
-            PyValue::List(v, _, _) | PyValue::Set(v, _, _) | PyValue::Tuple(v, _, _) => *v,
-            PyValue::Dict(v, _, _, _) => *v,
-            _ => panic!("ptr_value called on non-pointer type: {:?}", self.ty()),
         }
     }
 
     // For backwards compatibility
     pub fn runtime_value(&self) -> BasicValueEnum<'ctx> {
         self.value()
-    }
-
-    /// Get element type for containers
-    pub fn elem_type(&self) -> &PyType {
-        match self {
-            PyValue::List(_, _, elem) | PyValue::Set(_, _, elem) | PyValue::Tuple(_, _, elem) => {
-                elem
-            }
-            _ => panic!("elem_type called on non-container"),
-        }
-    }
-
-    /// Get key type for Dict
-    pub fn key_type(&self) -> &PyType {
-        match self {
-            PyValue::Dict(_, _, k, _) => k,
-            _ => panic!("key_type called on non-dict"),
-        }
-    }
-
-    /// Get value type for Dict
-    pub fn val_type(&self) -> &PyType {
-        match self {
-            PyValue::Dict(_, _, _, v) => v,
-            _ => panic!("val_type called on non-dict"),
-        }
     }
 
     pub fn module_info(&self) -> &ModuleInfo<'ctx> {
@@ -441,41 +453,88 @@ impl<'ctx> PyValue<'ctx> {
     // Load/Store Operations
     // ========================================================================
 
-    /// Load the current value from memory
-    pub fn load(&self, builder: &Builder<'ctx>, name: &str) -> PyValue<'ctx> {
-        let ptr = match self.ptr() {
-            Some(p) => p,
-            None => return self.clone(),
-        };
-
-        let loaded = builder
-            .build_load(self.value().get_type(), ptr, name)
-            .unwrap();
-
+    /// Load the current value from memory (for pointer storage types and container allocas)
+    /// Returns an Immediate variant with the loaded value
+    pub fn load(&self, builder: &Builder<'ctx>, ctx: &'ctx Context, name: &str) -> PyValue<'ctx> {
+        let ptr_type = ctx.ptr_type(inkwell::AddressSpace::default());
         match self {
-            PyValue::Int(_, _) => PyValue::Int(loaded.into_int_value(), Some(ptr)),
-            PyValue::Float(_, _) => PyValue::Float(loaded.into_float_value(), Some(ptr)),
-            PyValue::Bool(_, _) => PyValue::Bool(loaded.into_int_value(), Some(ptr)),
-            PyValue::Str(_, _) => PyValue::Str(loaded.into_pointer_value(), Some(ptr)),
-            PyValue::Bytes(_, _) => PyValue::Bytes(loaded.into_pointer_value(), Some(ptr)),
-            PyValue::None(_, _) => PyValue::None(loaded.into_int_value(), Some(ptr)),
-            PyValue::List(_, _, elem) => {
-                PyValue::List(loaded.into_pointer_value(), Some(ptr), elem.clone())
+            PyValue::Int(IntStorage::Pointer(p)) => {
+                let loaded = builder
+                    .build_load(ctx.i64_type(), *p, name)
+                    .unwrap()
+                    .into_int_value();
+                PyValue::Int(IntStorage::Immediate(loaded))
             }
-            PyValue::Dict(_, _, k, v) => {
-                PyValue::Dict(loaded.into_pointer_value(), Some(ptr), k.clone(), v.clone())
+            PyValue::Float(FloatStorage::Pointer(p)) => {
+                let loaded = builder
+                    .build_load(ctx.f64_type(), *p, name)
+                    .unwrap()
+                    .into_float_value();
+                PyValue::Float(FloatStorage::Immediate(loaded))
             }
-            PyValue::Set(_, _, elem) => {
-                PyValue::Set(loaded.into_pointer_value(), Some(ptr), elem.clone())
+            PyValue::Bool(BoolStorage::Pointer(p)) => {
+                let loaded = builder
+                    .build_load(ctx.bool_type(), *p, name)
+                    .unwrap()
+                    .into_int_value();
+                PyValue::Bool(BoolStorage::Immediate(loaded))
             }
-            PyValue::Tuple(_, _, elem) => {
-                PyValue::Tuple(loaded.into_pointer_value(), Some(ptr), elem.clone())
+            PyValue::None(NoneStorage::Pointer(p)) => {
+                let loaded = builder
+                    .build_load(ctx.i32_type(), *p, name)
+                    .unwrap()
+                    .into_int_value();
+                PyValue::None(NoneStorage::Immediate(loaded))
             }
+            // Container types with allocas - load the pointer from alloca
+            PyValue::Str(PtrStorage::Alloca(alloca)) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Str(PtrStorage::Direct(loaded))
+            }
+            PyValue::Bytes(PtrStorage::Alloca(alloca)) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Bytes(PtrStorage::Direct(loaded))
+            }
+            PyValue::List(PtrStorage::Alloca(alloca), elem) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::List(PtrStorage::Direct(loaded), elem.clone())
+            }
+            PyValue::Dict(PtrStorage::Alloca(alloca), k, v) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Dict(PtrStorage::Direct(loaded), k.clone(), v.clone())
+            }
+            PyValue::Set(PtrStorage::Alloca(alloca), elem) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Set(PtrStorage::Direct(loaded), elem.clone())
+            }
+            PyValue::Tuple(PtrStorage::Alloca(alloca), elem) => {
+                let loaded = builder
+                    .build_load(ptr_type, *alloca, name)
+                    .unwrap()
+                    .into_pointer_value();
+                PyValue::Tuple(PtrStorage::Direct(loaded), elem.clone())
+            }
+            // Non-pointer types just return a clone
             _ => self.clone(),
         }
     }
 
-    /// Store a value to this variable
+    /// Store a value to this variable (must be a pointer storage type)
     pub fn store(
         &self,
         builder: &Builder<'ctx>,
@@ -515,16 +574,16 @@ impl<'ctx> PyValue<'ctx> {
         rhs: &PyValue<'ctx>,
     ) -> Result<PyValue<'ctx>, String> {
         match self {
-            PyValue::Int(_, _) => super::int_ops::binary_op(self, cg, op, rhs),
-            PyValue::Float(_, _) => super::float_ops::binary_op(self, cg, op, rhs),
-            PyValue::Bool(_, _) => super::bool_ops::binary_op(self, cg, op, rhs),
-            PyValue::Str(_, _) => super::str_ops::binary_op(self, cg, op, rhs),
-            PyValue::Bytes(_, _) => super::bytes_ops::binary_op(self, cg, op, rhs),
-            PyValue::None(_, _) => super::none_ops::binary_op(self, cg, op, rhs),
-            PyValue::List(_, _, _) => super::list_ops::binary_op(self, cg, op, rhs),
-            PyValue::Dict(_, _, _, _) => super::dict_ops::binary_op(self, cg, op, rhs),
-            PyValue::Set(_, _, _) => super::set_ops::binary_op(self, cg, op, rhs),
-            PyValue::Tuple(_, _, _) => Err("Binary operations not supported on tuples".to_string()),
+            PyValue::Int(_) => super::int_ops::binary_op(self, cg, op, rhs),
+            PyValue::Float(_) => super::float_ops::binary_op(self, cg, op, rhs),
+            PyValue::Bool(_) => super::bool_ops::binary_op(self, cg, op, rhs),
+            PyValue::Str(_) => super::str_ops::binary_op(self, cg, op, rhs),
+            PyValue::Bytes(_) => super::bytes_ops::binary_op(self, cg, op, rhs),
+            PyValue::None(_) => super::none_ops::binary_op(self, cg, op, rhs),
+            PyValue::List(_, _) => super::list_ops::binary_op(self, cg, op, rhs),
+            PyValue::Dict(_, _, _) => super::dict_ops::binary_op(self, cg, op, rhs),
+            PyValue::Set(_, _) => super::set_ops::binary_op(self, cg, op, rhs),
+            PyValue::Tuple(_, _) => Err("Binary operations not supported on tuples".to_string()),
             PyValue::Function(_) => Err("Binary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Binary operations not supported on modules".to_string()),
             PyValue::Macro(_) => Err("Binary operations not supported on macros".to_string()),
@@ -537,18 +596,16 @@ impl<'ctx> PyValue<'ctx> {
 
     pub fn unary_op(&self, cg: &CgCtx<'ctx>, op: &UnaryOp) -> Result<PyValue<'ctx>, String> {
         match self {
-            PyValue::Int(_, _) => super::int_ops::unary_op(self, cg, op),
-            PyValue::Float(_, _) => super::float_ops::unary_op(self, cg, op),
-            PyValue::Bool(_, _) => super::bool_ops::unary_op(self, cg, op),
-            PyValue::Str(_, _) => super::str_ops::unary_op(self, cg, op),
-            PyValue::Bytes(_, _) => super::bytes_ops::unary_op(self, cg, op),
-            PyValue::None(_, _) => super::none_ops::unary_op(self, cg, op),
-            PyValue::List(_, _, _) => super::list_ops::unary_op(self, cg, op),
-            PyValue::Dict(_, _, _, _) => super::dict_ops::unary_op(self, cg, op),
-            PyValue::Set(_, _, _) => super::set_ops::unary_op(self, cg, op),
-            PyValue::Tuple(_, _, _) => {
-                Err(format!("Unary operator {:?} not supported on tuple", op))
-            }
+            PyValue::Int(_) => super::int_ops::unary_op(self, cg, op),
+            PyValue::Float(_) => super::float_ops::unary_op(self, cg, op),
+            PyValue::Bool(_) => super::bool_ops::unary_op(self, cg, op),
+            PyValue::Str(_) => super::str_ops::unary_op(self, cg, op),
+            PyValue::Bytes(_) => super::bytes_ops::unary_op(self, cg, op),
+            PyValue::None(_) => super::none_ops::unary_op(self, cg, op),
+            PyValue::List(_, _) => super::list_ops::unary_op(self, cg, op),
+            PyValue::Dict(_, _, _) => super::dict_ops::unary_op(self, cg, op),
+            PyValue::Set(_, _) => super::set_ops::unary_op(self, cg, op),
+            PyValue::Tuple(_, _) => Err(format!("Unary operator {:?} not supported on tuple", op)),
             PyValue::Function(_) => Err("Unary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Unary operations not supported on modules".to_string()),
             PyValue::Macro(_) => Err("Unary operations not supported on macros".to_string()),
@@ -603,23 +660,54 @@ impl<'ctx> CgCtx<'ctx> {
     }
 
     /// Convert a PyValue to a boolean (i1)
+    /// Note: Values should be loaded before calling this (use .load() first for Alloca variants)
     pub fn value_to_bool(&self, val: &PyValue<'ctx>) -> IntValue<'ctx> {
         match val {
-            PyValue::Bool(v, _) => *v,
-            PyValue::Int(v, _) => {
+            PyValue::Bool(BoolStorage::Immediate(v)) => *v,
+            PyValue::Bool(BoolStorage::Pointer(p)) => {
+                let loaded = self
+                    .builder
+                    .build_load(self.ctx.bool_type(), *p, "load_bool")
+                    .unwrap()
+                    .into_int_value();
+                loaded
+            }
+            PyValue::Int(IntStorage::Immediate(v)) => {
                 let zero = v.get_type().const_zero();
                 self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, *v, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::Float(v, _) => {
+            PyValue::Int(IntStorage::Pointer(p)) => {
+                let loaded = self
+                    .builder
+                    .build_load(self.ctx.i64_type(), *p, "load_int")
+                    .unwrap()
+                    .into_int_value();
+                let zero = loaded.get_type().const_zero();
+                self.builder
+                    .build_int_compare(inkwell::IntPredicate::NE, loaded, zero, "to_bool")
+                    .unwrap()
+            }
+            PyValue::Float(FloatStorage::Immediate(v)) => {
                 let zero = self.ctx.f64_type().const_zero();
                 self.builder
                     .build_float_compare(inkwell::FloatPredicate::ONE, *v, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::None(_, _) => self.ctx.bool_type().const_zero(),
-            PyValue::Str(v, _) => {
+            PyValue::Float(FloatStorage::Pointer(p)) => {
+                let loaded = self
+                    .builder
+                    .build_load(self.ctx.f64_type(), *p, "load_float")
+                    .unwrap()
+                    .into_float_value();
+                let zero = self.ctx.f64_type().const_zero();
+                self.builder
+                    .build_float_compare(inkwell::FloatPredicate::ONE, loaded, zero, "to_bool")
+                    .unwrap()
+            }
+            PyValue::None(_) => self.ctx.bool_type().const_zero(),
+            PyValue::Str(PtrStorage::Direct(v)) | PyValue::Str(PtrStorage::Alloca(v)) => {
                 let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "str_len");
                 let len_call = self
                     .builder
@@ -631,7 +719,7 @@ impl<'ctx> CgCtx<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::Bytes(v, _) => {
+            PyValue::Bytes(PtrStorage::Direct(v)) | PyValue::Bytes(PtrStorage::Alloca(v)) => {
                 let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "bytes_len");
                 let len_call = self
                     .builder
@@ -643,7 +731,7 @@ impl<'ctx> CgCtx<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::List(v, _, _) => {
+            PyValue::List(PtrStorage::Direct(v), _) | PyValue::List(PtrStorage::Alloca(v), _) => {
                 let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "list_len");
                 let len_call = self
                     .builder
@@ -655,7 +743,8 @@ impl<'ctx> CgCtx<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::Dict(v, _, _, _) => {
+            PyValue::Dict(PtrStorage::Direct(v), _, _)
+            | PyValue::Dict(PtrStorage::Alloca(v), _, _) => {
                 let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "dict_len");
                 let len_call = self
                     .builder
@@ -667,7 +756,7 @@ impl<'ctx> CgCtx<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::Set(v, _, _) => {
+            PyValue::Set(PtrStorage::Direct(v), _) | PyValue::Set(PtrStorage::Alloca(v), _) => {
                 let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "set_len");
                 let len_call = self
                     .builder
@@ -679,7 +768,7 @@ impl<'ctx> CgCtx<'ctx> {
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
                     .unwrap()
             }
-            PyValue::Tuple(_, _, _) => self.ctx.bool_type().const_int(1, false),
+            PyValue::Tuple(_, _) => self.ctx.bool_type().const_int(1, false),
             PyValue::Function(_) | PyValue::Module(_) | PyValue::Macro(_) => {
                 self.ctx.bool_type().const_int(1, false)
             }
