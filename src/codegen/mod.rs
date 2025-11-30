@@ -13,7 +13,7 @@ use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValue, BasicValueEnum, FunctionValue, PointerValue};
 use std::collections::{HashMap, HashSet};
-use types::{CgCtx, EnumerateSource, PyType, PyValue};
+use types::{get_field_type, iter_names, CgCtx, PyType, PyValue};
 
 /// Context for tracking loop control flow (break/continue)
 pub(crate) struct LoopContext<'ctx> {
@@ -302,11 +302,8 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::List(_)
                     | PyType::Dict(_, _)
                     | PyType::Set(_)
-                    | PyType::Generator(_)
-                    | PyType::DictKeysIter(_)
-                    | PyType::DictValuesIter(_)
-                    | PyType::DictItemsIter(_, _) => {
-                        // Container types, generators, and iterators return pointers
+                    | PyType::Instance(_, _) => {
+                        // Container types, instances (including iterators and generators) return pointers
                         let ptr_val = self.extract_ptr_call_result(call_site);
                         Ok(PyValue::new(ptr_val.value(), return_type.clone(), None))
                     }
@@ -762,10 +759,6 @@ impl<'ctx> CodeGen<'ctx> {
                 let elem_type = elem_types.first().cloned().unwrap_or(PyType::Int);
                 self.generate_tuple_for_loop(target, iter_val, &elem_type, body, else_block)
             }
-            PyType::Generator(elem_type) => {
-                // For generator iteration, use generator_next
-                self.generate_generator_for_loop(target, iter_val, &elem_type, body, else_block)
-            }
             PyType::Str => {
                 // For string iteration, iterate over characters
                 self.generate_str_for_loop(target, iter_val, body, else_block)
@@ -782,15 +775,42 @@ impl<'ctx> CodeGen<'ctx> {
                 // For dict iteration, iterate over keys
                 self.generate_dict_for_loop(target, iter_val, &key_type, body, else_block)
             }
-            PyType::DictKeysIter(key_type) => {
-                // For dict.keys() iteration
-                self.generate_dict_keys_iter_for_loop(target, iter_val, &key_type, body, else_block)
-            }
-            PyType::DictValuesIter(val_type) => {
-                // For dict.values() iteration
-                self.generate_dict_values_iter_for_loop(
-                    target, iter_val, &val_type, body, else_block,
-                )
+            PyType::Instance(class_name, fields) => {
+                // Handle builtin iterator instances (dict views and generators are iterable)
+                match class_name.as_str() {
+                    iter_names::DICT_KEYS => {
+                        let key_type = get_field_type(&fields, "element_type")
+                            .cloned()
+                            .unwrap_or(PyType::Int);
+                        self.generate_dict_keys_iter_for_loop(
+                            target, iter_val, &key_type, body, else_block,
+                        )
+                    }
+                    iter_names::DICT_VALUES => {
+                        let val_type = get_field_type(&fields, "element_type")
+                            .cloned()
+                            .unwrap_or(PyType::Int);
+                        self.generate_dict_values_iter_for_loop(
+                            target, iter_val, &val_type, body, else_block,
+                        )
+                    }
+                    iter_names::GENERATOR => {
+                        // For generator iteration, use generator_next
+                        let elem_type = get_field_type(&fields, "yield_type")
+                            .cloned()
+                            .unwrap_or(PyType::Int);
+                        self.generate_generator_for_loop(
+                            target, iter_val, &elem_type, body, else_block,
+                        )
+                    }
+                    // Note: RANGE_ITERATOR, LIST_ITERATOR, STR_ITERATOR are iterator objects
+                    // that are typically consumed via next(), not directly in for-loops.
+                    // For direct for-loop usage, iterate over the source (Range, List, Str) instead.
+                    _ => Err(format!(
+                        "for loop iteration not supported for instance type: {}",
+                        class_name
+                    )),
+                }
             }
             _ => Err(format!(
                 "for loop iteration not supported for type {:?}",
@@ -2328,28 +2348,46 @@ impl<'ctx> CodeGen<'ctx> {
         _else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         // Handle different iterable types that yield tuples
-        match iter_val.ty() {
-            PyType::EnumerateIter(_src, elem_type) => {
-                // enumerate yields (int, T) tuples
-                let elem_types = vec![PyType::Int, elem_type.as_ref().clone()];
-                return self.generate_enumerate_for_loop_unpacking(
-                    targets,
-                    iter_val,
-                    &elem_types,
-                    body,
-                );
+        if let PyType::Instance(class_name, fields) = iter_val.ty() {
+            match class_name.as_str() {
+                iter_names::ENUMERATE => {
+                    // enumerate yields (int, T) tuples
+                    let elem_type = get_field_type(&fields, "element_type")
+                        .cloned()
+                        .unwrap_or(PyType::Int);
+                    let elem_types = vec![PyType::Int, elem_type];
+                    return self.generate_enumerate_for_loop_unpacking(
+                        targets,
+                        iter_val,
+                        &elem_types,
+                        body,
+                    );
+                }
+                iter_names::ZIP => {
+                    // zip yields tuples of the zipped elements
+                    let types = if let Some(PyType::Tuple(types)) =
+                        get_field_type(&fields, "element_types")
+                    {
+                        types.clone()
+                    } else {
+                        vec![]
+                    };
+                    return self.generate_zip_for_loop_unpacking(targets, iter_val, &types, body);
+                }
+                iter_names::DICT_ITEMS => {
+                    // dict.items() yields (key, value) tuples
+                    let key_type = get_field_type(&fields, "key_type")
+                        .cloned()
+                        .unwrap_or(PyType::Int);
+                    let val_type = get_field_type(&fields, "value_type")
+                        .cloned()
+                        .unwrap_or(PyType::Int);
+                    return self.generate_dict_items_for_loop_unpacking(
+                        targets, iter_val, &key_type, &val_type, body,
+                    );
+                }
+                _ => {}
             }
-            PyType::ZipIter(types) => {
-                // zip yields tuples of the zipped elements
-                return self.generate_zip_for_loop_unpacking(targets, iter_val, &types, body);
-            }
-            PyType::DictItemsIter(key_type, val_type) => {
-                // dict.items() yields (key, value) tuples
-                return self.generate_dict_items_for_loop_unpacking(
-                    targets, iter_val, &key_type, &val_type, body,
-                );
-            }
-            _ => {}
         }
 
         use inkwell::values::AnyValue;
@@ -2543,17 +2581,30 @@ impl<'ctx> CodeGen<'ctx> {
         // Get the enumerate iterator pointer
         let iter_ptr = iter_val.value().into_pointer_value();
 
-        // Get the element type and source from EnumerateIter
-        let (source, inner_elem_type) = match iter_val.ty() {
-            PyType::EnumerateIter(src, elem) => (src.clone(), elem.as_ref().clone()),
-            _ => return Err("Expected EnumerateIter type".to_string()),
+        // Get the element type and source from enumerate instance
+        let (source_str, inner_elem_type) = match iter_val.ty() {
+            PyType::Instance(class_name, fields) if class_name == iter_names::ENUMERATE => {
+                let elem = get_field_type(&fields, "element_type")
+                    .cloned()
+                    .unwrap_or(PyType::Int);
+                // Get source type from fields (stored as Instance with source name)
+                let source =
+                    if let Some(PyType::Instance(src, _)) = get_field_type(&fields, "source") {
+                        src.clone()
+                    } else {
+                        "list".to_string()
+                    };
+                (source, elem)
+            }
+            _ => return Err("Expected enumerate iterator type".to_string()),
         };
 
         // Choose the appropriate enumerate_next function based on source type
-        let enumerate_next_fn_name = match source {
-            EnumerateSource::List => "enumerate_list_next",
-            EnumerateSource::Str => "enumerate_str_next",
-            EnumerateSource::Bytes => "enumerate_bytes_next",
+        let enumerate_next_fn_name = match source_str.as_str() {
+            "list" => "enumerate_list_next",
+            "str" => "enumerate_str_next",
+            "bytes" => "enumerate_bytes_next",
+            _ => "enumerate_list_next",
         };
         let enumerate_next_fn = self.get_or_declare_c_builtin(enumerate_next_fn_name);
         let enumerate_free_fn = self.get_or_declare_c_builtin("enumerate_free");
@@ -2744,16 +2795,18 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Get the zip iterator pointer
         let iter_ptr = match &iter_val {
-            PyValue::ZipIter(storage, _) => match storage {
-                types::PtrStorage::Direct(ptr) => *ptr,
-                types::PtrStorage::Alloca(ptr) => self
-                    .cg
-                    .builder
-                    .build_load(ptr_type, *ptr, "load_iter")
-                    .unwrap()
-                    .into_pointer_value(),
-            },
-            _ => return Err("Expected ZipIter".to_string()),
+            PyValue::Instance(storage, class_name, _) if class_name == iter_names::ZIP => {
+                match storage {
+                    types::PtrStorage::Direct(ptr) => *ptr,
+                    types::PtrStorage::Alloca(ptr) => self
+                        .cg
+                        .builder
+                        .build_load(ptr_type, *ptr, "load_iter")
+                        .unwrap()
+                        .into_pointer_value(),
+                }
+            }
+            _ => return Err("Expected zip iterator".to_string()),
         };
 
         // Determine which zip_next function to use based on element types
@@ -2947,16 +3000,18 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Get the zip iterator pointer
         let iter_ptr = match &iter_val {
-            PyValue::ZipIter(storage, _) => match storage {
-                types::PtrStorage::Direct(ptr) => *ptr,
-                types::PtrStorage::Alloca(ptr) => self
-                    .cg
-                    .builder
-                    .build_load(ptr_type, *ptr, "load_iter")
-                    .unwrap()
-                    .into_pointer_value(),
-            },
-            _ => return Err("Expected ZipIter".to_string()),
+            PyValue::Instance(storage, class_name, _) if class_name == iter_names::ZIP => {
+                match storage {
+                    types::PtrStorage::Direct(ptr) => *ptr,
+                    types::PtrStorage::Alloca(ptr) => self
+                        .cg
+                        .builder
+                        .build_load(ptr_type, *ptr, "load_iter")
+                        .unwrap()
+                        .into_pointer_value(),
+                }
+            }
+            _ => return Err("Expected zip iterator".to_string()),
         };
 
         let zip_next_fn = self.get_or_declare_c_builtin("zip_three_list_next");

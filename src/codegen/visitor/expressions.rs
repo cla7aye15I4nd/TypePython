@@ -98,9 +98,12 @@ impl<'ctx> CodeGen<'ctx> {
                     (vec![], crate::types::PyType::None)
                 };
 
-            // If it's a generator, wrap the return type in Generator
+            // If it's a generator, wrap the return type as a generator Instance
             if is_generator {
-                return_type = PyType::Generator(Box::new(return_type));
+                return_type = PyType::Instance(
+                    crate::codegen::types::iter_names::GENERATOR.to_string(),
+                    vec![("yield_type".to_string(), return_type)],
+                );
             }
 
             return Ok(PyValue::function(crate::types::FunctionInfo {

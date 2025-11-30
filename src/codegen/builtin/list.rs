@@ -11,7 +11,7 @@
 //! and discovered automatically by build.rs.
 
 use crate::ast::Expression;
-use crate::codegen::types::{BoolStorage, EnumerateSource, PtrStorage};
+use crate::codegen::types::{get_field_type, iter_names, BoolStorage, EnumerateSource, PtrStorage};
 use crate::codegen::CodeGen;
 use crate::types::{PyType, PyValue};
 use inkwell::values::BasicValueEnum;
@@ -577,10 +577,22 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap();
         let iter_ptr = self.extract_ptr_call_result(call_site);
 
-        Ok(PyValue::EnumerateIter(
+        // Store source type as a string field for iteration dispatch
+        let source_str = match source {
+            EnumerateSource::List => "list",
+            EnumerateSource::Str => "str",
+            EnumerateSource::Bytes => "bytes",
+        };
+        Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            source,
-            Box::new(elem_type),
+            iter_names::ENUMERATE.to_string(),
+            vec![
+                ("element_type".to_string(), elem_type),
+                (
+                    "source".to_string(),
+                    PyType::Instance(source_str.to_string(), vec![]),
+                ),
+            ],
         ))
     }
 
@@ -650,9 +662,11 @@ impl<'ctx> CodeGen<'ctx> {
             return Err("zip() with more than 3 iterables not yet supported".to_string());
         };
 
-        Ok(PyValue::ZipIter(
+        // Store element types as tuple type for unpacking
+        Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            elem_types,
+            iter_names::ZIP.to_string(),
+            vec![("element_types".to_string(), PyType::Tuple(elem_types))],
         ))
     }
 
@@ -683,9 +697,10 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap();
         let iter_ptr = self.extract_ptr_call_result(call_site);
 
-        Ok(PyValue::FilterIter(
+        Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            Box::new(elem_type),
+            iter_names::FILTER.to_string(),
+            vec![("element_type".to_string(), elem_type)],
         ))
     }
 
@@ -698,7 +713,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         let arg_val = self.evaluate_expression(&args[0])?;
 
-        // Handle Range specially - it returns a RangeIter
+        // Handle Range specially - it returns a range iterator
         if matches!(arg_val.ty(), PyType::Range) {
             let iter_fn = self.get_or_declare_c_builtin("range_iter");
             let call_site = self
@@ -707,9 +722,11 @@ impl<'ctx> CodeGen<'ctx> {
                 .build_call(iter_fn, &[arg_val.value().into()], "range_iter")
                 .unwrap();
             let iter_ptr = self.extract_ptr_call_result(call_site);
-            return Ok(PyValue::RangeIter(PtrStorage::Direct(
-                iter_ptr.value().into_pointer_value(),
-            )));
+            return Ok(PyValue::Instance(
+                PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
+                iter_names::RANGE_ITERATOR.to_string(),
+                vec![("element_type".to_string(), PyType::Int)],
+            ));
         }
 
         let elem_type = match arg_val.ty() {
@@ -736,9 +753,17 @@ impl<'ctx> CodeGen<'ctx> {
             .unwrap();
         let iter_ptr = self.extract_ptr_call_result(call_site);
 
-        Ok(PyValue::GenericIter(
+        // Use appropriate iterator class name based on source type
+        let iter_class = match arg_val.ty() {
+            PyType::List(_) => iter_names::LIST_ITERATOR,
+            PyType::Str => iter_names::STR_ITERATOR,
+            PyType::Bytes => iter_names::BYTES_ITERATOR,
+            _ => iter_names::LIST_ITERATOR,
+        };
+        Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            Box::new(elem_type),
+            iter_class.to_string(),
+            vec![("element_type".to_string(), elem_type)],
         ))
     }
 
@@ -776,8 +801,8 @@ impl<'ctx> CodeGen<'ctx> {
             .ptr_type(inkwell::AddressSpace::default())
             .const_null();
 
-        // Handle RangeIter specially
-        if let PyValue::RangeIter(storage) = &iter_val {
+        // Handle Instance-based iterators
+        if let PyValue::Instance(storage, class_name, fields) = &iter_val {
             let iter_ptr: inkwell::values::BasicValueEnum = match storage {
                 PtrStorage::Direct(ptr) => (*ptr).into(),
                 PtrStorage::Alloca(ptr) => self
@@ -791,89 +816,75 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap(),
             };
 
-            let next_fn = self.get_or_declare_c_builtin("range_iter_next_default");
-            let call_site = self
-                .cg
-                .builder
-                .build_call(
-                    next_fn,
-                    &[iter_ptr.into(), default_i64.into(), null_ptr.into()],
-                    "next",
-                )
-                .unwrap();
-            let result = self.extract_int_call_result(call_site);
-            return Ok(PyValue::int(result.value().into_int_value()));
-        }
+            // Get element type from fields
+            let elem_type = get_field_type(fields, "element_type")
+                .cloned()
+                .unwrap_or(PyType::Int);
 
-        // Get element type from iterator
-        let elem_type = match &iter_val {
-            PyValue::GenericIter(_, elem) => (*elem).clone(),
-            _ => {
-                return Err(format!(
-                    "next() requires an iterator, got {:?}",
-                    iter_val.ty()
-                ))
+            match class_name.as_str() {
+                iter_names::RANGE_ITERATOR => {
+                    let next_fn = self.get_or_declare_c_builtin("range_iter_next_default");
+                    let call_site = self
+                        .cg
+                        .builder
+                        .build_call(
+                            next_fn,
+                            &[iter_ptr.into(), default_i64.into(), null_ptr.into()],
+                            "next",
+                        )
+                        .unwrap();
+                    let result = self.extract_int_call_result(call_site);
+                    return Ok(PyValue::int(result.value().into_int_value()));
+                }
+                iter_names::STR_ITERATOR => {
+                    let next_fn = self.get_or_declare_c_builtin("iter_next_str");
+                    let default_ptr = self
+                        .cg
+                        .ctx
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null();
+                    let call_site = self
+                        .cg
+                        .builder
+                        .build_call(
+                            next_fn,
+                            &[iter_ptr.into(), default_ptr.into(), null_ptr.into()],
+                            "next",
+                        )
+                        .unwrap();
+                    let result = self.extract_ptr_call_result(call_site);
+                    return Ok(PyValue::new_str(result.value().into_pointer_value()));
+                }
+                iter_names::LIST_ITERATOR | iter_names::BYTES_ITERATOR => {
+                    let next_fn = self.get_or_declare_c_builtin("iter_next_list");
+                    let call_site = self
+                        .cg
+                        .builder
+                        .build_call(
+                            next_fn,
+                            &[iter_ptr.into(), default_i64.into(), null_ptr.into()],
+                            "next",
+                        )
+                        .unwrap();
+                    let result = self.extract_int_call_result(call_site);
+                    return match elem_type {
+                        PyType::Int => Ok(PyValue::int(result.value().into_int_value())),
+                        _ => Ok(PyValue::int(result.value().into_int_value())),
+                    };
+                }
+                _ => {
+                    return Err(format!(
+                        "next() not supported for iterator type: {}",
+                        class_name
+                    ))
+                }
             }
-        };
-
-        // Get iterator pointer
-        let iter_ptr: inkwell::values::BasicValueEnum = match &iter_val {
-            PyValue::GenericIter(PtrStorage::Direct(ptr), _) => (*ptr).into(),
-            PyValue::GenericIter(PtrStorage::Alloca(ptr), _) => self
-                .cg
-                .builder
-                .build_load(
-                    self.cg.ctx.ptr_type(inkwell::AddressSpace::default()),
-                    *ptr,
-                    "load_iter",
-                )
-                .unwrap(),
-            _ => return Err("Invalid iterator".to_string()),
-        };
-
-        // Handle string iterator specially - it returns a char* instead of int64
-        if *elem_type == PyType::Str {
-            let next_fn = self.get_or_declare_c_builtin("iter_next_str");
-
-            // For string iterator, default must be a pointer (we'll use null)
-            let default_ptr = self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .const_null();
-
-            let call_site = self
-                .cg
-                .builder
-                .build_call(
-                    next_fn,
-                    &[iter_ptr.into(), default_ptr.into(), null_ptr.into()],
-                    "next",
-                )
-                .unwrap();
-            let result = self.extract_ptr_call_result(call_site);
-            return Ok(PyValue::new_str(result.value().into_pointer_value()));
         }
 
-        // For non-string iterators
-        let next_fn = self.get_or_declare_c_builtin("iter_next_list");
-
-        let call_site = self
-            .cg
-            .builder
-            .build_call(
-                next_fn,
-                &[iter_ptr.into(), default_i64.into(), null_ptr.into()],
-                "next",
-            )
-            .unwrap();
-        let result = self.extract_int_call_result(call_site);
-
-        // Return value with appropriate type
-        match *elem_type {
-            PyType::Int => Ok(PyValue::int(result.value().into_int_value())),
-            _ => Ok(PyValue::int(result.value().into_int_value())), // For now, return as int
-        }
+        Err(format!(
+            "next() requires an iterator, got {:?}",
+            iter_val.ty()
+        ))
     }
 
     // ========================================================================

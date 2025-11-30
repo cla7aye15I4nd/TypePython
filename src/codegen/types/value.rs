@@ -52,6 +52,49 @@ pub enum PtrStorage<'ctx> {
 }
 
 // ============================================================================
+// Instance Fields - Named fields with types (like a named tuple/struct)
+// ============================================================================
+
+/// A named field with its type - used for Instance types
+pub type InstanceFields = Vec<(String, PyType)>;
+
+/// Builtin iterator class names - used with Instance variant
+pub mod iter_names {
+    pub const RANGE_ITERATOR: &str = "__builtin_range_iterator";
+    pub const LIST_ITERATOR: &str = "__builtin_list_iterator";
+    pub const STR_ITERATOR: &str = "__builtin_str_iterator";
+    pub const BYTES_ITERATOR: &str = "__builtin_bytes_iterator";
+    pub const ENUMERATE: &str = "__builtin_enumerate";
+    pub const ZIP: &str = "__builtin_zip";
+    pub const FILTER: &str = "__builtin_filter";
+    pub const DICT_KEYS: &str = "__builtin_dict_keys";
+    pub const DICT_VALUES: &str = "__builtin_dict_values";
+    pub const DICT_ITEMS: &str = "__builtin_dict_items";
+    pub const GENERATOR: &str = "__builtin_generator";
+}
+
+/// Check if a class name is a builtin iterator (includes generators)
+pub fn is_builtin_iterator(class_name: &str) -> bool {
+    class_name.starts_with("__builtin_")
+        && (class_name.contains("iterator")
+            || matches!(
+                class_name,
+                iter_names::ENUMERATE
+                    | iter_names::ZIP
+                    | iter_names::FILTER
+                    | iter_names::DICT_KEYS
+                    | iter_names::DICT_VALUES
+                    | iter_names::DICT_ITEMS
+                    | iter_names::GENERATOR
+            ))
+}
+
+/// Helper to get a field type from instance fields by name
+pub fn get_field_type<'a>(fields: &'a InstanceFields, name: &str) -> Option<&'a PyType> {
+    fields.iter().find(|(n, _)| n == name).map(|(_, t)| t)
+}
+
+// ============================================================================
 // PyType - Simple type tag
 // ============================================================================
 
@@ -69,23 +112,16 @@ pub enum PyType {
     Set(Box<PyType>),
     Tuple(Vec<PyType>), // Heterogeneous tuple with element types
     Range,
-    Instance(String), // Instance of a class, with class name
+    /// Instance of a class with named fields (like a named tuple/struct)
+    /// Fields store type information for attributes
+    /// For iterators/generators: fields like ("yield_type", PyType::Int)
+    /// For user classes: fields like ("x", PyType::Int), ("name", PyType::Str)
+    Instance(String, InstanceFields),
     Function,
     Module,
     Macro,
-    // Exception and generator types
-    Exception,              // Exception object
-    Generator(Box<PyType>), // Generator yielding type T
-    // Iterator types for builtins
-    EnumerateIter(EnumerateSource, Box<PyType>), // enumerate() iterator yielding (int, T)
-    ZipIter(Vec<PyType>),                        // zip() iterator yielding tuple of element types
-    FilterIter(Box<PyType>),                     // filter() iterator yielding T
-    GenericIter(Box<PyType>),                    // iter() returns an iterator yielding T
-    RangeIter,                                   // range iterator yielding Int
-    // Dict view iterators
-    DictKeysIter(Box<PyType>),   // dict.keys() iterator yielding key type
-    DictValuesIter(Box<PyType>), // dict.values() iterator yielding value type
-    DictItemsIter(Box<PyType>, Box<PyType>), // dict.items() iterator yielding (key, value) tuples
+    // Exception type
+    Exception, // Exception object
 }
 
 /// Source type for enumerate iterator - determines which C functions to use
@@ -118,7 +154,7 @@ impl PyType {
                     elems.iter().map(PyType::from_ast_type).collect();
                 Ok(PyType::Tuple(elem_types?))
             }
-            Type::Custom(name) => Ok(PyType::Instance(name.clone())),
+            Type::Custom(name) => Ok(PyType::Instance(name.clone(), vec![])),
         }
     }
 
@@ -135,17 +171,8 @@ impl PyType {
             | PyType::Set(_)
             | PyType::Tuple(_)
             | PyType::Range
-            | PyType::Instance(_)
-            | PyType::Exception
-            | PyType::Generator(_)
-            | PyType::EnumerateIter(_, _)
-            | PyType::ZipIter(_)
-            | PyType::FilterIter(_)
-            | PyType::GenericIter(_)
-            | PyType::RangeIter
-            | PyType::DictKeysIter(_)
-            | PyType::DictValuesIter(_)
-            | PyType::DictItemsIter(_, _) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            | PyType::Instance(_, _)
+            | PyType::Exception => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
             PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
         }
     }
@@ -426,7 +453,10 @@ impl PyType {
                         } else {
                             "dict_keys"
                         },
-                        PyType::DictKeysIter(key_type.clone()),
+                        PyType::Instance(
+                            iter_names::DICT_KEYS.to_string(),
+                            vec![("element_type".to_string(), key_type.as_ref().clone())],
+                        ),
                     )),
                     "values" => Some((
                         if is_str_keyed {
@@ -434,7 +464,10 @@ impl PyType {
                         } else {
                             "dict_values"
                         },
-                        PyType::DictValuesIter(val_type.clone()),
+                        PyType::Instance(
+                            iter_names::DICT_VALUES.to_string(),
+                            vec![("element_type".to_string(), val_type.as_ref().clone())],
+                        ),
                     )),
                     "items" => Some((
                         if is_str_keyed {
@@ -442,7 +475,13 @@ impl PyType {
                         } else {
                             "dict_items"
                         },
-                        PyType::DictItemsIter(key_type.clone(), val_type.clone()),
+                        PyType::Instance(
+                            iter_names::DICT_ITEMS.to_string(),
+                            vec![
+                                ("key_type".to_string(), key_type.as_ref().clone()),
+                                ("value_type".to_string(), val_type.as_ref().clone()),
+                            ],
+                        ),
                     )),
                     _ => None,
                 }
@@ -634,20 +673,10 @@ pub enum PyValue<'ctx> {
     Tuple(PtrStorage<'ctx>, Vec<PyType>),
     // Range type (start, stop, step stored in struct)
     Range(PtrStorage<'ctx>),
-    // Instance of a class
-    Instance(PtrStorage<'ctx>, String), // pointer to instance, class name
-    // Generator type
-    Generator(PtrStorage<'ctx>, Box<PyType>), // pointer to generator, yield type
-    // Iterator types for builtins
-    EnumerateIter(PtrStorage<'ctx>, EnumerateSource, Box<PyType>), // enumerate iterator with source type
-    ZipIter(PtrStorage<'ctx>, Vec<PyType>),                        // zip iterator
-    FilterIter(PtrStorage<'ctx>, Box<PyType>),                     // filter iterator
-    GenericIter(PtrStorage<'ctx>, Box<PyType>),                    // generic iterator from iter()
-    RangeIter(PtrStorage<'ctx>),                                   // range iterator yielding Int
-    // Dict view iterators
-    DictKeysIter(PtrStorage<'ctx>, Box<PyType>), // dict.keys() iterator
-    DictValuesIter(PtrStorage<'ctx>, Box<PyType>), // dict.values() iterator
-    DictItemsIter(PtrStorage<'ctx>, Box<PyType>, Box<PyType>), // dict.items() iterator
+    /// Instance of a class with named fields (like a named tuple/struct)
+    /// Fields store type information for attributes
+    /// For generators: Instance with class_name = "__builtin_generator" and ("yield_type", T)
+    Instance(PtrStorage<'ctx>, String, InstanceFields),
     // Compile-time types
     Function(FunctionInfo<'ctx>),
     Module(ModuleInfo<'ctx>),
@@ -734,66 +763,21 @@ impl<'ctx> PyValue<'ctx> {
             }
             (PyType::Range, Some(p)) => PyValue::Range(PtrStorage::Alloca(p)),
             (PyType::Range, None) => PyValue::Range(PtrStorage::Direct(value.into_pointer_value())),
-            (PyType::Instance(class_name), Some(p)) => {
-                PyValue::Instance(PtrStorage::Alloca(p), class_name)
+            (PyType::Instance(class_name, fields), Some(p)) => {
+                PyValue::Instance(PtrStorage::Alloca(p), class_name, fields)
             }
-            (PyType::Instance(class_name), None) => {
-                PyValue::Instance(PtrStorage::Direct(value.into_pointer_value()), class_name)
-            }
+            (PyType::Instance(class_name, fields), None) => PyValue::Instance(
+                PtrStorage::Direct(value.into_pointer_value()),
+                class_name,
+                fields,
+            ),
             (PyType::Exception, Some(p)) => {
-                PyValue::Instance(PtrStorage::Alloca(p), "Exception".to_string())
+                PyValue::Instance(PtrStorage::Alloca(p), "Exception".to_string(), vec![])
             }
             (PyType::Exception, None) => PyValue::Instance(
                 PtrStorage::Direct(value.into_pointer_value()),
                 "Exception".to_string(),
-            ),
-            (PyType::Generator(elem), Some(p)) => PyValue::Generator(PtrStorage::Alloca(p), elem),
-            (PyType::Generator(elem), None) => {
-                PyValue::Generator(PtrStorage::Direct(value.into_pointer_value()), elem)
-            }
-            (PyType::EnumerateIter(src, elem), Some(p)) => {
-                PyValue::EnumerateIter(PtrStorage::Alloca(p), src, elem)
-            }
-            (PyType::EnumerateIter(src, elem), None) => {
-                PyValue::EnumerateIter(PtrStorage::Direct(value.into_pointer_value()), src, elem)
-            }
-            (PyType::ZipIter(elem), Some(p)) => PyValue::ZipIter(PtrStorage::Alloca(p), elem),
-            (PyType::ZipIter(elem), None) => {
-                PyValue::ZipIter(PtrStorage::Direct(value.into_pointer_value()), elem)
-            }
-            (PyType::FilterIter(elem), Some(p)) => PyValue::FilterIter(PtrStorage::Alloca(p), elem),
-            (PyType::FilterIter(elem), None) => {
-                PyValue::FilterIter(PtrStorage::Direct(value.into_pointer_value()), elem)
-            }
-            (PyType::GenericIter(elem), Some(p)) => {
-                PyValue::GenericIter(PtrStorage::Alloca(p), elem)
-            }
-            (PyType::GenericIter(elem), None) => {
-                PyValue::GenericIter(PtrStorage::Direct(value.into_pointer_value()), elem)
-            }
-            (PyType::RangeIter, Some(p)) => PyValue::RangeIter(PtrStorage::Alloca(p)),
-            (PyType::RangeIter, None) => {
-                PyValue::RangeIter(PtrStorage::Direct(value.into_pointer_value()))
-            }
-            (PyType::DictKeysIter(key_ty), Some(p)) => {
-                PyValue::DictKeysIter(PtrStorage::Alloca(p), key_ty)
-            }
-            (PyType::DictKeysIter(key_ty), None) => {
-                PyValue::DictKeysIter(PtrStorage::Direct(value.into_pointer_value()), key_ty)
-            }
-            (PyType::DictValuesIter(val_ty), Some(p)) => {
-                PyValue::DictValuesIter(PtrStorage::Alloca(p), val_ty)
-            }
-            (PyType::DictValuesIter(val_ty), None) => {
-                PyValue::DictValuesIter(PtrStorage::Direct(value.into_pointer_value()), val_ty)
-            }
-            (PyType::DictItemsIter(key_ty, val_ty), Some(p)) => {
-                PyValue::DictItemsIter(PtrStorage::Alloca(p), key_ty, val_ty)
-            }
-            (PyType::DictItemsIter(key_ty, val_ty), None) => PyValue::DictItemsIter(
-                PtrStorage::Direct(value.into_pointer_value()),
-                key_ty,
-                val_ty,
+                vec![],
             ),
             (PyType::Function, _) | (PyType::Module, _) | (PyType::Macro, _) => {
                 panic!("Use specific constructors for Function/Module/Macro")
@@ -819,19 +803,8 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Set(_, elem) => PyType::Set(elem.clone()),
             PyValue::Tuple(_, elem) => PyType::Tuple(elem.clone()),
             PyValue::Range(_) => PyType::Range,
-            PyValue::Instance(_, class_name) => PyType::Instance(class_name.clone()),
-            PyValue::Generator(_, elem) => PyType::Generator(elem.clone()),
-            PyValue::EnumerateIter(_, src, elem) => {
-                PyType::EnumerateIter(src.clone(), elem.clone())
-            }
-            PyValue::ZipIter(_, elem) => PyType::ZipIter(elem.clone()),
-            PyValue::FilterIter(_, elem) => PyType::FilterIter(elem.clone()),
-            PyValue::GenericIter(_, elem) => PyType::GenericIter(elem.clone()),
-            PyValue::RangeIter(_) => PyType::RangeIter,
-            PyValue::DictKeysIter(_, key_ty) => PyType::DictKeysIter(key_ty.clone()),
-            PyValue::DictValuesIter(_, val_ty) => PyType::DictValuesIter(val_ty.clone()),
-            PyValue::DictItemsIter(_, key_ty, val_ty) => {
-                PyType::DictItemsIter(key_ty.clone(), val_ty.clone())
+            PyValue::Instance(_, class_name, fields) => {
+                PyType::Instance(class_name.clone(), fields.clone())
             }
             PyValue::Function(_) => PyType::Function,
             PyValue::Module(_) => PyType::Module,
@@ -871,26 +844,8 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Range(PtrStorage::Direct(v)) | PyValue::Range(PtrStorage::Alloca(v)) => {
                 (*v).into()
             }
-            PyValue::Instance(PtrStorage::Direct(v), _)
-            | PyValue::Instance(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::Generator(PtrStorage::Direct(v), _)
-            | PyValue::Generator(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::EnumerateIter(PtrStorage::Direct(v), _, _)
-            | PyValue::EnumerateIter(PtrStorage::Alloca(v), _, _) => (*v).into(),
-            PyValue::ZipIter(PtrStorage::Direct(v), _)
-            | PyValue::ZipIter(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::FilterIter(PtrStorage::Direct(v), _)
-            | PyValue::FilterIter(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::GenericIter(PtrStorage::Direct(v), _)
-            | PyValue::GenericIter(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::RangeIter(PtrStorage::Direct(v))
-            | PyValue::RangeIter(PtrStorage::Alloca(v)) => (*v).into(),
-            PyValue::DictKeysIter(PtrStorage::Direct(v), _)
-            | PyValue::DictKeysIter(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::DictValuesIter(PtrStorage::Direct(v), _)
-            | PyValue::DictValuesIter(PtrStorage::Alloca(v), _) => (*v).into(),
-            PyValue::DictItemsIter(PtrStorage::Direct(v), _, _)
-            | PyValue::DictItemsIter(PtrStorage::Alloca(v), _, _) => (*v).into(),
+            PyValue::Instance(PtrStorage::Direct(v), _, _)
+            | PyValue::Instance(PtrStorage::Alloca(v), _, _) => (*v).into(),
             PyValue::Function(_) => {
                 // Functions don't have a direct LLVM value - use get_or_declare to call them
                 panic!("Function has no direct LLVM value - use get_or_declare to call it")
@@ -1041,12 +996,17 @@ impl<'ctx> PyValue<'ctx> {
                     .into_pointer_value();
                 PyValue::Range(PtrStorage::Direct(loaded))
             }
-            PyValue::RangeIter(PtrStorage::Alloca(alloca)) => {
+            // Instances (including builtin iterators) can be loaded from allocas
+            PyValue::Instance(PtrStorage::Alloca(alloca), class_name, fields) => {
                 let loaded = builder
                     .build_load(ptr_type, *alloca, name)
                     .unwrap()
                     .into_pointer_value();
-                PyValue::RangeIter(PtrStorage::Direct(loaded))
+                PyValue::Instance(
+                    PtrStorage::Direct(loaded),
+                    class_name.clone(),
+                    fields.clone(),
+                )
             }
             // Non-pointer types just return a clone
             _ => self.clone(),
@@ -1104,21 +1064,8 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Set(_, _) => super::set_ops::binary_op(self, cg, op, rhs),
             PyValue::Tuple(_, _) => Err("Binary operations not supported on tuples".to_string()),
             PyValue::Range(_) => Err("Binary operations not supported on range".to_string()),
-            PyValue::Instance(_, _) => {
+            PyValue::Instance(_, _, _) => {
                 Err("Binary operations not supported on instances".to_string())
-            }
-            PyValue::Generator(_, _) => {
-                Err("Binary operations not supported on generators".to_string())
-            }
-            PyValue::EnumerateIter(_, _, _)
-            | PyValue::ZipIter(_, _)
-            | PyValue::FilterIter(_, _)
-            | PyValue::GenericIter(_, _)
-            | PyValue::RangeIter(_)
-            | PyValue::DictKeysIter(_, _)
-            | PyValue::DictValuesIter(_, _)
-            | PyValue::DictItemsIter(_, _, _) => {
-                Err("Binary operations not supported on iterators".to_string())
             }
             PyValue::Function(_) => Err("Binary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Binary operations not supported on modules".to_string()),
@@ -1153,22 +1100,8 @@ impl<'ctx> PyValue<'ctx> {
                     _ => Err(format!("Unary operator {:?} not supported on range", op)),
                 }
             }
-            PyValue::Instance(_, _) => {
+            PyValue::Instance(_, _, _) => {
                 Err(format!("Unary operator {:?} not supported on instance", op))
-            }
-            PyValue::Generator(_, _) => Err(format!(
-                "Unary operator {:?} not supported on generator",
-                op
-            )),
-            PyValue::EnumerateIter(_, _, _)
-            | PyValue::ZipIter(_, _)
-            | PyValue::FilterIter(_, _)
-            | PyValue::GenericIter(_, _)
-            | PyValue::RangeIter(_)
-            | PyValue::DictKeysIter(_, _)
-            | PyValue::DictValuesIter(_, _)
-            | PyValue::DictItemsIter(_, _, _) => {
-                Err(format!("Unary operator {:?} not supported on iterator", op))
             }
             PyValue::Function(_) => Err("Unary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Unary operations not supported on modules".to_string()),
@@ -1372,18 +1305,8 @@ impl<'ctx> CgCtx<'ctx> {
                     .unwrap()
             }
             // Instances are always truthy (unless __bool__ is implemented)
-            PyValue::Instance(_, _) => self.ctx.bool_type().const_int(1, false),
-            // Generators are always truthy
-            PyValue::Generator(_, _) => self.ctx.bool_type().const_int(1, false),
-            // Iterators are always truthy
-            PyValue::EnumerateIter(_, _, _)
-            | PyValue::ZipIter(_, _)
-            | PyValue::FilterIter(_, _)
-            | PyValue::GenericIter(_, _)
-            | PyValue::RangeIter(_)
-            | PyValue::DictKeysIter(_, _)
-            | PyValue::DictValuesIter(_, _)
-            | PyValue::DictItemsIter(_, _, _) => self.ctx.bool_type().const_int(1, false),
+            // This includes builtin iterators and generators which are represented as Instance
+            PyValue::Instance(_, _, _) => self.ctx.bool_type().const_int(1, false),
             PyValue::Function(_) | PyValue::Module(_) | PyValue::Macro(_) => {
                 self.ctx.bool_type().const_int(1, false)
             }
