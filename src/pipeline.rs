@@ -24,22 +24,12 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 
     cmd.arg("-o").arg(output_path);
 
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to execute clang: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "Linking failed with exit code: {}\nStdout: {}\nStderr: {}",
-            output.status.code().unwrap_or(-1),
-            stdout,
-            stderr
-        ));
-    }
-
-    Ok(())
+    cmd.output()
+        .map_err(|e| format!("Failed to run linker: {}", e))?
+        .status
+        .success()
+        .then_some(())
+        .ok_or_else(|| "Linking failed".to_string())
 }
 
 /// Full pipeline: compile source file and all imports to executable

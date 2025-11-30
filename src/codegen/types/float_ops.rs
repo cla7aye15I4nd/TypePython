@@ -185,22 +185,28 @@ pub fn binary_op<'a, 'ctx>(
             ))
         }
         BinaryOp::Is => {
-            let rhs_float = coerce_rhs(rhs)?;
-            Ok(PyValue::bool(
-                cg.builder
-                    .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "is")
-                    .unwrap()
-                    .into(),
-            ))
+            // If types are incompatible, return False directly (Python semantics)
+            match coerce_rhs(rhs) {
+                Ok(rhs_float) => Ok(PyValue::bool(
+                    cg.builder
+                        .build_float_compare(FloatPredicate::OEQ, lhs_float, rhs_float, "is")
+                        .unwrap()
+                        .into(),
+                )),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_zero().into())),
+            }
         }
         BinaryOp::IsNot => {
-            let rhs_float = coerce_rhs(rhs)?;
-            Ok(PyValue::bool(
-                cg.builder
-                    .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "isnot")
-                    .unwrap()
-                    .into(),
-            ))
+            // If types are incompatible, return True directly (Python semantics)
+            match coerce_rhs(rhs) {
+                Ok(rhs_float) => Ok(PyValue::bool(
+                    cg.builder
+                        .build_float_compare(FloatPredicate::ONE, lhs_float, rhs_float, "isnot")
+                        .unwrap()
+                        .into(),
+                )),
+                Err(_) => Ok(PyValue::bool(cg.ctx.bool_type().const_all_ones().into())),
+            }
         }
 
         // Logical and/or - same type returns same type, different types return bool
@@ -226,7 +232,7 @@ pub fn binary_op<'a, 'ctx>(
                         .builder
                         .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
@@ -254,7 +260,7 @@ pub fn binary_op<'a, 'ctx>(
                         .builder
                         .build_float_compare(FloatPredicate::ONE, lhs_float, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }

@@ -725,7 +725,7 @@ pub fn binary_op<'a, 'ctx>(
                         .builder
                         .build_int_compare(IntPredicate::NE, lhs_int, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_and(lhs_bool, rhs_bool, "and").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }
@@ -753,7 +753,7 @@ pub fn binary_op<'a, 'ctx>(
                         .builder
                         .build_int_compare(IntPredicate::NE, lhs_int, zero, "to_bool")
                         .unwrap();
-                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let rhs_bool = cg.value_to_bool(rhs);
                     let result = cg.builder.build_or(lhs_bool, rhs_bool, "or").unwrap();
                     Ok(PyValue::bool(result.into()))
                 }

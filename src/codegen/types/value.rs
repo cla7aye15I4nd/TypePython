@@ -32,35 +32,30 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
     }
 
     /// Convert a PyValue to a boolean (i1)
-    pub fn value_to_bool(
-        &self,
-        val: &PyValue<'ctx>,
-    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+    pub fn value_to_bool(&self, val: &PyValue<'ctx>) -> inkwell::values::IntValue<'ctx> {
         match &val.ty {
             PyType::Bool => {
                 // Already a bool
-                Ok(val.value().into_int_value())
+                val.value().into_int_value()
             }
             PyType::Int => {
                 // Non-zero is true
                 let int_val = val.value().into_int_value();
                 let zero = int_val.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, int_val, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Float => {
                 let float_val = val.value().into_float_value();
                 let zero = self.ctx.f64_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_float_compare(inkwell::FloatPredicate::ONE, float_val, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::None => {
                 // None is always falsy
-                Ok(self.ctx.bool_type().const_zero())
+                self.ctx.bool_type().const_zero()
             }
             PyType::Str => {
                 // Str is truthy if non-empty (check length > 0)
@@ -72,10 +67,9 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
                     .unwrap();
                 let len = super::extract_int_result(len_call, "str_len").into_int_value();
                 let zero = len.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Bytes => {
                 // Bytes is truthy if non-empty (check length > 0)
@@ -87,14 +81,13 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
                     .unwrap();
                 let len = super::extract_int_result(len_call, "bytes_len").into_int_value();
                 let zero = len.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Function | PyType::Module | PyType::Macro => {
                 // Functions, modules, and macros are always truthy
-                Ok(self.ctx.bool_type().const_int(1, false))
+                self.ctx.bool_type().const_int(1, false)
             }
             PyType::List(_) => {
                 // List is truthy if non-empty (check length > 0)
@@ -106,10 +99,9 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
                     .unwrap();
                 let len = super::extract_int_result(len_call, "list_len").into_int_value();
                 let zero = len.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Dict(_, _) => {
                 // Dict is truthy if non-empty (check length > 0)
@@ -121,10 +113,9 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
                     .unwrap();
                 let len = super::extract_int_result(len_call, "dict_len").into_int_value();
                 let zero = len.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Set(_) => {
                 // Set is truthy if non-empty (check length > 0)
@@ -136,14 +127,13 @@ impl<'a, 'ctx> CgCtx<'a, 'ctx> {
                     .unwrap();
                 let len = super::extract_int_result(len_call, "set_len").into_int_value();
                 let zero = len.get_type().const_zero();
-                Ok(self
-                    .builder
+                self.builder
                     .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap())
+                    .unwrap()
             }
             PyType::Tuple(_) => {
                 // Tuples from divmod are always non-empty, so truthy
-                Ok(self.ctx.bool_type().const_int(1, false))
+                self.ctx.bool_type().const_int(1, false)
             }
         }
     }

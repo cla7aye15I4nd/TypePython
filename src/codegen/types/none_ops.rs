@@ -114,7 +114,7 @@ pub fn binary_op<'a, 'ctx>(
                 }
                 _ => {
                     // Different types -> convert both to bool and return bool
-                    let rhs_bool = cg.value_to_bool(rhs)?;
+                    let rhs_bool = cg.value_to_bool(rhs);
                     Ok(PyValue::bool(rhs_bool.into()))
                 }
             }
