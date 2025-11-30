@@ -939,6 +939,15 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
+            PyType::Tuple(_) => {
+                let len_fn = self.get_or_declare_c_builtin("tuple_len");
+                let call = self
+                    .cg
+                    .builder
+                    .build_call(len_fn, &[val.value().into()], "len")
+                    .unwrap();
+                Ok(self.extract_int_call_result(call))
+            }
             _ => Err(format!("len() not supported for type {:?}", val.ty())),
         }
     }
@@ -1765,7 +1774,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let result = self.extract_ptr_call_result(call);
                 Ok(PyValue::new(
                     result.value(),
-                    PyType::Tuple(Box::new(PyType::Int)),
+                    PyType::Tuple(vec![PyType::Int, PyType::Int]),
                     None,
                 ))
             }
@@ -1806,7 +1815,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let result = self.extract_ptr_call_result(call);
                 Ok(PyValue::new(
                     result.value(),
-                    PyType::Tuple(Box::new(PyType::Int)),
+                    PyType::Tuple(vec![PyType::Int, PyType::Int]),
                     None,
                 ))
             }
@@ -1823,7 +1832,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let result = self.extract_ptr_call_result(call);
                 Ok(PyValue::new(
                     result.value(),
-                    PyType::Tuple(Box::new(PyType::Float)),
+                    PyType::Tuple(vec![PyType::Float, PyType::Float]),
                     None,
                 ))
             }

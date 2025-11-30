@@ -18,6 +18,11 @@ impl<'ctx> CodeGen<'ctx> {
 
         // External functions are now lazily declared when called
 
+        // Process all class definitions
+        for class in &program.classes {
+            self.visit_class(class)?;
+        }
+
         // First pass: Declare all functions (for mutual recursion support)
         for function in &program.functions {
             self.declare_function(function)?;
@@ -34,6 +39,12 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         Ok(self.cg.ctx.i32_type().const_zero().into())
+    }
+
+    pub(crate) fn visit_class_impl(&mut self, class: &Class) -> Result<(), String> {
+        // Register the class in our class registry
+        self.register_class(class)?;
+        Ok(())
     }
 
     pub(crate) fn enter_function_impl(&mut self, func: &Function) -> Result<(), String> {

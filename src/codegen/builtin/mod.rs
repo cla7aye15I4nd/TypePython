@@ -8,8 +8,10 @@ mod dict;
 mod list;
 mod math;
 mod print;
+mod range;
 mod set;
 mod str;
+mod tuple;
 
 use super::CodeGen;
 use crate::ast::Expression;
@@ -31,6 +33,7 @@ impl<'ctx> CodeGen<'ctx> {
             "set" => MacroKind::Set,
             "list" => MacroKind::List,
             "dict" => MacroKind::Dict,
+            "range" => MacroKind::Range,
             // Type conversion builtins
             "int" => MacroKind::Int,
             "float" => MacroKind::Float,
@@ -73,6 +76,7 @@ impl<'ctx> CodeGen<'ctx> {
             MacroKind::Set => self.generate_set_call(args),
             MacroKind::List => self.generate_list_call(args),
             MacroKind::Dict => self.generate_dict_call(args),
+            MacroKind::Range => self.generate_range_call(args),
             // Type conversion builtins
             MacroKind::Int => self.generate_int_call(args),
             MacroKind::Float => self.generate_float_call(args),

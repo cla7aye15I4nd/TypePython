@@ -20,8 +20,32 @@ pub enum Type {
 #[derive(Debug, Clone)]
 pub struct Program {
     pub imports: Vec<Import>,
+    pub classes: Vec<Class>,
     pub functions: Vec<Function>,
     pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Class {
+    pub name: String,
+    pub base: Option<String>,
+    pub fields: Vec<ClassField>,
+    pub methods: Vec<Method>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassField {
+    pub name: String,
+    pub field_type: Type,
+    pub default: Option<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Method {
+    pub name: String,
+    pub params: Vec<Parameter>, // First param should be 'self' for instance methods
+    pub return_type: Type,
+    pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +91,11 @@ pub enum Statement {
     },
     While {
         condition: Expression,
+        body: Vec<Statement>,
+    },
+    For {
+        target: String,
+        iter: Expression,
         body: Vec<Statement>,
     },
     Return(Option<Expression>),

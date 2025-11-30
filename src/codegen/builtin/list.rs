@@ -34,9 +34,55 @@ impl<'ctx> CodeGen<'ctx> {
             .build_call(getitem_fn, &[list_val.into(), index.into()], "list_getitem")
             .unwrap();
         let result = self.extract_int_call_result(call);
-        // For now, all elements are stored as i64
-        // TODO: Handle different element types properly
-        Ok(PyValue::new(result.value(), elem_type.clone(), None))
+
+        // Handle different element types - C runtime stores all as i64
+        // For pointer types, we need to cast the i64 back to a pointer
+        // For float, we need to bitcast the i64 bit pattern back to f64
+        match elem_type {
+            PyType::Str | PyType::Bytes | PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                // Cast i64 to pointer for reference types
+                let ptr_val = self
+                    .cg
+                    .builder
+                    .build_int_to_ptr(
+                        result.value().into_int_value(),
+                        self.cg.ctx.ptr_type(inkwell::AddressSpace::default()),
+                        "elem_ptr",
+                    )
+                    .unwrap();
+                Ok(PyValue::new(ptr_val.into(), elem_type.clone(), None))
+            }
+            PyType::Float => {
+                // Bitcast i64 to f64 (preserves bit pattern)
+                let float_val = self
+                    .cg
+                    .builder
+                    .build_bit_cast(
+                        result.value().into_int_value(),
+                        self.cg.ctx.f64_type(),
+                        "elem_float",
+                    )
+                    .unwrap();
+                Ok(PyValue::new(float_val, elem_type.clone(), None))
+            }
+            PyType::Bool => {
+                // Truncate i64 to i1 for booleans
+                let bool_val = self
+                    .cg
+                    .builder
+                    .build_int_truncate(
+                        result.value().into_int_value(),
+                        self.cg.ctx.bool_type(),
+                        "elem_bool",
+                    )
+                    .unwrap();
+                Ok(PyValue::new(bool_val.into(), elem_type.clone(), None))
+            }
+            _ => {
+                // For Int, use the value directly
+                Ok(PyValue::new(result.value(), elem_type.clone(), None))
+            }
+        }
     }
 
     /// Set an item at index: list[i] = value

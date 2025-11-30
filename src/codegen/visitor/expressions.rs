@@ -262,4 +262,89 @@ impl<'ctx> CodeGen<'ctx> {
             None,
         ))
     }
+
+    /// Create a tuple literal: (1, 2, 3)
+    pub(crate) fn visit_tuple_lit_impl(
+        &mut self,
+        elements: &[Expression],
+    ) -> Result<PyValue<'ctx>, String> {
+        // Create a new tuple with the right size
+        let len = self
+            .cg
+            .ctx
+            .i64_type()
+            .const_int(elements.len() as u64, false);
+        let tuple_new_fn = self.get_or_declare_c_builtin("tuple_new");
+        let call_site = self
+            .cg
+            .builder
+            .build_call(tuple_new_fn, &[len.into()], "tuple_new")
+            .unwrap();
+        let tuple_ptr = self.extract_ptr_call_result(call_site).value();
+
+        // Collect element types for heterogeneous tuple type
+        let mut elem_types = Vec::new();
+
+        // Set each element
+        let tuple_setitem_fn = self.get_or_declare_c_builtin("tuple_setitem");
+        for (i, elem) in elements.iter().enumerate() {
+            let elem_val = self.evaluate_expression(elem)?;
+            elem_types.push(elem_val.ty().clone());
+
+            // Convert value to i64 for storage
+            let value_as_i64 = match elem_val.ty() {
+                PyType::Float => {
+                    // Bitcast f64 to i64
+                    self.cg
+                        .builder
+                        .build_bit_cast(elem_val.value(), self.cg.ctx.i64_type(), "float_as_i64")
+                        .unwrap()
+                        .into_int_value()
+                }
+                PyType::Bool => {
+                    // Zero-extend i1 to i64
+                    self.cg
+                        .builder
+                        .build_int_z_extend(
+                            elem_val.value().into_int_value(),
+                            self.cg.ctx.i64_type(),
+                            "bool_as_i64",
+                        )
+                        .unwrap()
+                }
+                PyType::Str
+                | PyType::Bytes
+                | PyType::List(_)
+                | PyType::Dict(_, _)
+                | PyType::Set(_)
+                | PyType::Tuple(_) => {
+                    // Pointer to int for reference types
+                    self.cg
+                        .builder
+                        .build_ptr_to_int(
+                            elem_val.value().into_pointer_value(),
+                            self.cg.ctx.i64_type(),
+                            "ptr_as_i64",
+                        )
+                        .unwrap()
+                }
+                _ => {
+                    // Int and other types - use directly
+                    elem_val.value().into_int_value()
+                }
+            };
+
+            let index = self.cg.ctx.i64_type().const_int(i as u64, false);
+            self.cg
+                .builder
+                .build_call(
+                    tuple_setitem_fn,
+                    &[tuple_ptr.into(), index.into(), value_as_i64.into()],
+                    "tuple_setitem",
+                )
+                .unwrap();
+        }
+
+        Ok(PyValue::new(tuple_ptr, PyType::Tuple(elem_types), None))
+    }
 }

@@ -85,6 +85,15 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_while_impl(condition, body)
     }
 
+    fn visit_for(
+        &mut self,
+        target: &str,
+        iter: &Expression,
+        body: &[Statement],
+    ) -> Result<(), Self::Error> {
+        self.visit_for_impl(target, iter, body)
+    }
+
     fn visit_return(&mut self, expr: Option<&Expression>) -> Result<(), Self::Error> {
         self.visit_return_impl(expr)
     }
@@ -104,5 +113,9 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
     fn visit_import(&mut self, _import: &Import) -> Result<(), Self::Error> {
         // Imports are handled at program level, no action needed here
         Ok(())
+    }
+
+    fn visit_class(&mut self, class: &Class) -> Result<(), Self::Error> {
+        self.visit_class_impl(class)
     }
 }

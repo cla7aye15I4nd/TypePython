@@ -514,37 +514,6 @@ void print_list_float(PyList* list) {
     printf("]");
 }
 
-// Print tuple of ints (divmod for int/int returns this)
-void print_tuple_int(PyList* list) {
-    printf("(");
-    if (list != NULL) {
-        for (int64_t i = 0; i < list->len; i++) {
-            if (i > 0) printf(", ");
-            printf("%ld", list->data[i]);
-        }
-    }
-    printf(")");
-}
-
-// Print tuple of floats (divmod with floats returns this)
-void print_tuple_float(PyList* list) {
-    printf("(");
-    if (list != NULL) {
-        double* data = (double*)list->data;
-        for (int64_t i = 0; i < list->len; i++) {
-            if (i > 0) printf(", ");
-            // Print with .0 suffix for whole numbers like Python
-            double val = data[i];
-            if (val == (int64_t)val && val >= -9007199254740992.0 && val <= 9007199254740992.0) {
-                printf("%.1f", val);
-            } else {
-                printf("%g", val);
-            }
-        }
-    }
-    printf(")");
-}
-
 // ============================================================================
 // String List (PyStrList) Functions
 // ============================================================================
@@ -712,11 +681,20 @@ PyList* list_reversed(PyList* list) {
 }
 
 // ============================================================================
-// divmod - returns a list with [quotient, remainder]
+// divmod - returns a PyTuple with (quotient, remainder)
 // ============================================================================
 
-PyList* divmod_int(int64_t a, int64_t b) {
-    PyList* result = list_with_capacity(2);
+// Forward declaration of PyTuple (defined in tuple.c)
+typedef struct {
+    int64_t len;
+    int64_t* data;
+} PyTuple;
+
+// Forward declaration of tuple_new (defined in tuple.c)
+extern PyTuple* tuple_new(int64_t len);
+
+PyTuple* divmod_int(int64_t a, int64_t b) {
+    PyTuple* result = tuple_new(2);
     if (result == NULL) return NULL;
 
     // Python-style floor division and modulo
@@ -731,14 +709,13 @@ PyList* divmod_int(int64_t a, int64_t b) {
 
     result->data[0] = q;
     result->data[1] = r;
-    result->len = 2;
 
     return result;
 }
 
-// divmod for floats - returns a list with [quotient, remainder] stored as doubles
-PyList* divmod_float(double a, double b) {
-    PyList* result = list_with_capacity(2);
+// divmod for floats - returns a PyTuple with (quotient, remainder) stored as doubles
+PyTuple* divmod_float(double a, double b) {
+    PyTuple* result = tuple_new(2);
     if (result == NULL) return NULL;
 
     // Python-style floor division and modulo for floats
@@ -749,7 +726,6 @@ PyList* divmod_float(double a, double b) {
     double* data = (double*)result->data;
     data[0] = q;
     data[1] = r;
-    result->len = 2;
 
     return result;
 }

@@ -60,11 +60,13 @@ impl<'ctx> CodeGen<'ctx> {
                     "print_list"
                 }
             }
-            PyType::Tuple(elem_ty) => {
-                if matches!(elem_ty.as_ref(), PyType::Float) {
-                    "print_tuple_float"
+            PyType::Tuple(elem_types) => {
+                // For tuples, check if all elements are floats
+                // Use print_pytuple_* for PyTuple (real tuples)
+                if elem_types.iter().all(|t| matches!(t, PyType::Float)) {
+                    "print_pytuple_float"
                 } else {
-                    "print_tuple_int"
+                    "print_pytuple_int"
                 }
             }
             PyType::Dict(key_ty, _) => {

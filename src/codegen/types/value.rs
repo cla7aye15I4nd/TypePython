@@ -67,7 +67,9 @@ pub enum PyType {
     List(Box<PyType>),
     Dict(Box<PyType>, Box<PyType>),
     Set(Box<PyType>),
-    Tuple(Box<PyType>),
+    Tuple(Vec<PyType>), // Heterogeneous tuple with element types
+    Range,
+    Instance(String), // Instance of a class, with class name
     Function,
     Module,
     Macro,
@@ -89,8 +91,12 @@ impl PyType {
                 Box::new(PyType::from_ast_type(v)?),
             )),
             Type::Set(elem) => Ok(PyType::Set(Box::new(PyType::from_ast_type(elem)?))),
-            Type::Tuple(_) => Err("Tuple type not yet implemented".to_string()),
-            Type::Custom(name) => Err(format!("Custom type '{}' not yet implemented", name)),
+            Type::Tuple(elems) => {
+                let elem_types: Result<Vec<PyType>, String> =
+                    elems.iter().map(PyType::from_ast_type).collect();
+                Ok(PyType::Tuple(elem_types?))
+            }
+            Type::Custom(name) => Ok(PyType::Instance(name.clone())),
         }
     }
 
@@ -102,9 +108,12 @@ impl PyType {
             PyType::Bool => ctx.bool_type().into(),
             PyType::Str | PyType::Bytes => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
             PyType::None => ctx.i32_type().into(),
-            PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) | PyType::Tuple(_) => {
-                ctx.ptr_type(inkwell::AddressSpace::default()).into()
-            }
+            PyType::List(_)
+            | PyType::Dict(_, _)
+            | PyType::Set(_)
+            | PyType::Tuple(_)
+            | PyType::Range
+            | PyType::Instance(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
             PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
         }
     }
@@ -371,6 +380,7 @@ pub enum MacroKind {
     Set,
     List,
     Dict,
+    Range,
     Int,
     Float,
     Bool,
@@ -406,7 +416,11 @@ pub enum PyValue<'ctx> {
     List(PtrStorage<'ctx>, Box<PyType>),
     Dict(PtrStorage<'ctx>, Box<PyType>, Box<PyType>),
     Set(PtrStorage<'ctx>, Box<PyType>),
-    Tuple(PtrStorage<'ctx>, Box<PyType>),
+    Tuple(PtrStorage<'ctx>, Vec<PyType>),
+    // Range type (start, stop, step stored in struct)
+    Range(PtrStorage<'ctx>),
+    // Instance of a class
+    Instance(PtrStorage<'ctx>, String), // pointer to instance, class name
     // Compile-time types
     Function(FunctionInfo<'ctx>),
     Module(ModuleInfo<'ctx>),
@@ -440,6 +454,10 @@ impl<'ctx> PyValue<'ctx> {
 
     pub fn none(value: IntValue<'ctx>) -> Self {
         PyValue::None(NoneStorage::Immediate(value))
+    }
+
+    pub fn range(value: PointerValue<'ctx>) -> Self {
+        PyValue::Range(PtrStorage::Direct(value))
     }
 
     pub fn function(info: FunctionInfo<'ctx>) -> Self {
@@ -487,6 +505,14 @@ impl<'ctx> PyValue<'ctx> {
             (PyType::Tuple(elem), None) => {
                 PyValue::Tuple(PtrStorage::Direct(value.into_pointer_value()), elem)
             }
+            (PyType::Range, Some(p)) => PyValue::Range(PtrStorage::Alloca(p)),
+            (PyType::Range, None) => PyValue::Range(PtrStorage::Direct(value.into_pointer_value())),
+            (PyType::Instance(class_name), Some(p)) => {
+                PyValue::Instance(PtrStorage::Alloca(p), class_name)
+            }
+            (PyType::Instance(class_name), None) => {
+                PyValue::Instance(PtrStorage::Direct(value.into_pointer_value()), class_name)
+            }
             (PyType::Function, _) | (PyType::Module, _) | (PyType::Macro, _) => {
                 panic!("Use specific constructors for Function/Module/Macro")
             }
@@ -510,6 +536,8 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, k, v) => PyType::Dict(k.clone(), v.clone()),
             PyValue::Set(_, elem) => PyType::Set(elem.clone()),
             PyValue::Tuple(_, elem) => PyType::Tuple(elem.clone()),
+            PyValue::Range(_) => PyType::Range,
+            PyValue::Instance(_, class_name) => PyType::Instance(class_name.clone()),
             PyValue::Function(_) => PyType::Function,
             PyValue::Module(_) => PyType::Module,
             PyValue::Macro(_) => PyType::Macro,
@@ -545,6 +573,11 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Tuple(PtrStorage::Direct(v), _) | PyValue::Tuple(PtrStorage::Alloca(v), _) => {
                 (*v).into()
             }
+            PyValue::Range(PtrStorage::Direct(v)) | PyValue::Range(PtrStorage::Alloca(v)) => {
+                (*v).into()
+            }
+            PyValue::Instance(PtrStorage::Direct(v), _)
+            | PyValue::Instance(PtrStorage::Alloca(v), _) => (*v).into(),
             PyValue::Function(_) => {
                 // Functions don't have a direct LLVM value - use get_or_declare to call them
                 panic!("Function has no direct LLVM value - use get_or_declare to call it")
@@ -743,6 +776,10 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, _, _) => super::dict_ops::binary_op(self, cg, op, rhs),
             PyValue::Set(_, _) => super::set_ops::binary_op(self, cg, op, rhs),
             PyValue::Tuple(_, _) => Err("Binary operations not supported on tuples".to_string()),
+            PyValue::Range(_) => Err("Binary operations not supported on range".to_string()),
+            PyValue::Instance(_, _) => {
+                Err("Binary operations not supported on instances".to_string())
+            }
             PyValue::Function(_) => Err("Binary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Binary operations not supported on modules".to_string()),
             PyValue::Macro(_) => Err("Binary operations not supported on macros".to_string()),
@@ -765,6 +802,10 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, _, _) => super::dict_ops::unary_op(self, cg, op),
             PyValue::Set(_, _) => super::set_ops::unary_op(self, cg, op),
             PyValue::Tuple(_, _) => Err(format!("Unary operator {:?} not supported on tuple", op)),
+            PyValue::Range(_) => Err(format!("Unary operator {:?} not supported on range", op)),
+            PyValue::Instance(_, _) => {
+                Err(format!("Unary operator {:?} not supported on instance", op))
+            }
             PyValue::Function(_) => Err("Unary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Unary operations not supported on modules".to_string()),
             PyValue::Macro(_) => Err("Unary operations not supported on macros".to_string()),
@@ -942,6 +983,10 @@ impl<'ctx> CgCtx<'ctx> {
                     .unwrap()
             }
             PyValue::Tuple(_, _) => self.ctx.bool_type().const_int(1, false),
+            // Range is always truthy (even empty ranges are valid objects)
+            PyValue::Range(_) => self.ctx.bool_type().const_int(1, false),
+            // Instances are always truthy (unless __bool__ is implemented)
+            PyValue::Instance(_, _) => self.ctx.bool_type().const_int(1, false),
             PyValue::Function(_) | PyValue::Module(_) | PyValue::Macro(_) => {
                 self.ctx.bool_type().const_int(1, false)
             }

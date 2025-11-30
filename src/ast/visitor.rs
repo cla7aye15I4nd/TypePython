@@ -29,6 +29,9 @@ pub trait Visitor {
     /// Called when exiting a function (after visiting body)
     fn exit_function(&mut self, function: &Function) -> Result<(), Self::Error>;
 
+    /// Visit a class declaration
+    fn visit_class(&mut self, class: &Class) -> Result<(), Self::Error>;
+
     /// Visit a statement
     fn visit_statement(&mut self, statement: &Statement) -> Result<(), Self::Error> {
         match statement {
@@ -48,6 +51,7 @@ pub trait Visitor {
                 else_block,
             } => self.visit_if(condition, then_block, elif_clauses, else_block),
             Statement::While { condition, body } => self.visit_while(condition, body),
+            Statement::For { target, iter, body } => self.visit_for(target, iter, body),
             Statement::Return(expr) => self.visit_return(expr.as_ref()),
             Statement::Break => self.visit_break(),
             Statement::Continue => self.visit_continue(),
@@ -93,6 +97,14 @@ pub trait Visitor {
     fn visit_while(
         &mut self,
         condition: &Expression,
+        body: &[Statement],
+    ) -> Result<(), Self::Error>;
+
+    /// Visit for statement
+    fn visit_for(
+        &mut self,
+        target: &str,
+        iter: &Expression,
         body: &[Statement],
     ) -> Result<(), Self::Error>;
 

@@ -48,6 +48,7 @@ NONE_TYPE  = { "None" ~ kw_boundary }
 LIST_TYPE  = { "list" ~ kw_boundary }
 DICT_TYPE  = { "dict" ~ kw_boundary }
 SET_TYPE   = { "set" ~ kw_boundary }
+TUPLE_TYPE = { "tuple" ~ kw_boundary }
 
 // All keywords (for identifier exclusion)
 // Note: list, dict, set, int, float, bool, str are NOT keywords - they are builtin function names
@@ -254,10 +255,12 @@ method_return_type = { ARROW ~ WS* ~ type_spec }
 // Types
 // ============================================================================
 
-// Generic type syntax: list[int], dict[str, int], set[int]
+// Generic type syntax: list[int], dict[str, int], set[int], tuple[int, str]
 list_type = { LIST_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
 dict_type = { DICT_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ COMMA ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
 set_type  = { SET_TYPE ~ LBRACKET ~ WS* ~ type_spec ~ WS* ~ RBRACKET }
+tuple_type = { TUPLE_TYPE ~ LBRACKET ~ WS* ~ type_spec_list ~ WS* ~ RBRACKET }
+type_spec_list = { type_spec ~ (WS* ~ COMMA ~ WS* ~ type_spec)* }
 
 // Basic types (non-generic)
 basic_type = {
@@ -274,6 +277,7 @@ type_spec = {
     list_type
     | dict_type
     | set_type
+    | tuple_type
     | basic_type
 }
 

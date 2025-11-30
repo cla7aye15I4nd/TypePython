@@ -171,6 +171,15 @@ impl<'ctx> CodeGen<'ctx> {
         self.generate_while_statement(condition, body)
     }
 
+    pub(crate) fn visit_for_impl(
+        &mut self,
+        target: &str,
+        iter: &Expression,
+        body: &[Statement],
+    ) -> Result<(), String> {
+        self.generate_for_statement(target, iter, body)
+    }
+
     pub(crate) fn visit_return_impl(&mut self, expr: Option<&Expression>) -> Result<(), String> {
         if let Some(expr) = expr {
             let val = self.evaluate_expression(expr)?;

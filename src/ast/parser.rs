@@ -4,6 +4,7 @@ use pest::iterators::{Pair, Pairs};
 
 pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
     let mut imports = Vec::new();
+    let mut classes = Vec::new();
     let mut functions = Vec::new();
     let mut statements = Vec::new();
 
@@ -14,7 +15,7 @@ pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
                 match pair.as_rule() {
                     Rule::import_stmt => imports.push(build_import(pair)),
                     Rule::func_decl => functions.push(build_function(pair)),
-                    Rule::class_decl => panic!("Classes are not supported"),
+                    Rule::class_decl => classes.push(build_class(pair)),
                     Rule::statement => statements.push(build_statement(pair)),
                     Rule::EOI | Rule::NEWLINE => {}
                     _ => panic!("Unexpected rule in program: {:?}", pair.as_rule()),
@@ -25,6 +26,7 @@ pub fn build_program(mut pairs: Pairs<Rule>) -> Program {
 
     Program {
         imports,
+        classes,
         functions,
         statements,
     }
@@ -104,6 +106,187 @@ fn build_param_list(pair: Pair<Rule>) -> Vec<Parameter> {
         .collect()
 }
 
+fn build_class(pair: Pair<Rule>) -> Class {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::CLASS);
+
+    let id_pair = inner.next().unwrap();
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let name = id_pair.as_str().to_string();
+
+    // Check for optional inheritance
+    let next_pair = inner.next().unwrap();
+    let (base, class_body_pair) = if next_pair.as_rule() == Rule::class_inheritance {
+        let base_name = next_pair
+            .into_inner()
+            .find(|p| p.as_rule() == Rule::ID)
+            .map(|p| p.as_str().to_string());
+        assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+        let body = inner.next().unwrap();
+        assert_eq!(body.as_rule(), Rule::class_body);
+        (base_name, body)
+    } else {
+        assert_eq!(next_pair.as_rule(), Rule::COLON);
+        let body = inner.next().unwrap();
+        assert_eq!(body.as_rule(), Rule::class_body);
+        (None, body)
+    };
+
+    let (fields, methods) = build_class_body(class_body_pair);
+
+    Class {
+        name,
+        base,
+        fields,
+        methods,
+    }
+}
+
+fn build_class_body(pair: Pair<Rule>) -> (Vec<ClassField>, Vec<Method>) {
+    let mut fields = Vec::new();
+    let mut methods = Vec::new();
+
+    for member in pair.into_inner() {
+        match member.as_rule() {
+            Rule::class_member => {
+                let inner = member.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::method_decl => methods.push(build_method(inner)),
+                    Rule::var_decl_stmt => {
+                        let var_decl = inner.into_inner().next().unwrap();
+                        fields.push(build_class_field(var_decl));
+                    }
+                    Rule::pass_stmt => {} // Ignore pass statements
+                    _ => panic!("Unexpected class member: {:?}", inner.as_rule()),
+                }
+            }
+            Rule::INDENT | Rule::DEDENT | Rule::NEWLINE => {}
+            _ => panic!("Unexpected in class body: {:?}", member.as_rule()),
+        }
+    }
+
+    (fields, methods)
+}
+
+fn build_class_field(pair: Pair<Rule>) -> ClassField {
+    // var_decl = { target ~ WS* ~ COLON ~ WS* ~ type_spec ~ WS* ~ ASSIGN ~ WS* ~ expression }
+    let mut inner = pair.into_inner();
+
+    let target = inner.next().unwrap();
+    let name = match target.as_rule() {
+        Rule::ID => target.as_str().to_string(),
+        Rule::target => {
+            // target can contain ID directly
+            target.into_inner().next().unwrap().as_str().to_string()
+        }
+        _ => panic!(
+            "Expected ID or target in class field, got {:?}",
+            target.as_rule()
+        ),
+    };
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let type_pair = inner.next().unwrap();
+    assert_eq!(type_pair.as_rule(), Rule::type_spec);
+    let field_type = build_type(type_pair);
+
+    // Check if there's an assignment (default value)
+    let default = if let Some(assign) = inner.next() {
+        if assign.as_rule() == Rule::ASSIGN {
+            let expr = inner.next().unwrap();
+            Some(build_expression(expr))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    ClassField {
+        name,
+        field_type,
+        default,
+    }
+}
+
+fn build_method(pair: Pair<Rule>) -> Method {
+    // method_decl = { DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ method_param_list? ~ WS* ~ RPAREN ~ WS* ~ method_return_type? ~ WS* ~ COLON ~ NEWLINE ~ block }
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::DEF);
+
+    let id_pair = inner.next().unwrap();
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let name = id_pair.as_str().to_string();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::LPAREN);
+
+    // Handle parameters (may include 'self')
+    let next_pair = inner.next().unwrap();
+    let (params, after_params) = if next_pair.as_rule() == Rule::method_param_list {
+        let params = build_method_param_list(next_pair);
+        (params, inner.next().unwrap())
+    } else {
+        (vec![], next_pair)
+    };
+
+    assert_eq!(after_params.as_rule(), Rule::RPAREN);
+
+    // Handle optional return type
+    let next = inner.next().unwrap();
+    let (return_type, block_pair) = if next.as_rule() == Rule::method_return_type {
+        let ret_type = build_method_return_type(next);
+        assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+        (ret_type, inner.next().unwrap())
+    } else {
+        assert_eq!(next.as_rule(), Rule::COLON);
+        (Type::None, inner.next().unwrap())
+    };
+
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    let body = build_block(block_pair);
+
+    Method {
+        name,
+        params,
+        return_type,
+        body,
+    }
+}
+
+fn build_method_param_list(pair: Pair<Rule>) -> Vec<Parameter> {
+    pair.into_inner()
+        .filter(|p| p.as_rule() == Rule::method_param)
+        .map(build_method_param)
+        .collect()
+}
+
+fn build_method_param(pair: Pair<Rule>) -> Parameter {
+    let mut inner = pair.into_inner();
+
+    let id_pair = inner.next().unwrap();
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let name = id_pair.as_str().to_string();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let type_pair = inner.next().unwrap();
+    assert_eq!(type_pair.as_rule(), Rule::type_spec);
+    let param_type = build_type(type_pair);
+
+    Parameter { name, param_type }
+}
+
+fn build_method_return_type(pair: Pair<Rule>) -> Type {
+    let mut inner = pair.into_inner();
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::ARROW);
+    let type_pair = inner.next().unwrap();
+    assert_eq!(type_pair.as_rule(), Rule::type_spec);
+    build_type(type_pair)
+}
+
 fn build_parameter(pair: Pair<Rule>) -> Parameter {
     let mut inner = pair.into_inner();
 
@@ -129,6 +312,7 @@ fn build_type(pair: Pair<Rule>) -> Type {
         Rule::list_type => build_list_type(inner),
         Rule::dict_type => build_dict_type(inner),
         Rule::set_type => build_set_type(inner),
+        Rule::tuple_type => build_tuple_type(inner),
         _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
     }
 }
@@ -184,6 +368,21 @@ fn build_set_type(pair: Pair<Rule>) -> Type {
     Type::Set(Box::new(build_type(elem_type_pair)))
 }
 
+fn build_tuple_type(pair: Pair<Rule>) -> Type {
+    // tuple_type = { TUPLE_TYPE ~ LBRACKET ~ WS* ~ type_spec_list ~ WS* ~ RBRACKET }
+    // type_spec_list = { type_spec ~ (WS* ~ COMMA ~ WS* ~ type_spec)* }
+    let type_spec_list = pair
+        .into_inner()
+        .find(|p| p.as_rule() == Rule::type_spec_list)
+        .unwrap();
+    let elem_types: Vec<Type> = type_spec_list
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::type_spec)
+        .map(build_type)
+        .collect();
+    Type::Tuple(elem_types)
+}
+
 fn build_block(pair: Pair<Rule>) -> Vec<Statement> {
     let mut stmts = Vec::new();
 
@@ -203,7 +402,7 @@ fn build_statement(pair: Pair<Rule>) -> Statement {
             Rule::aug_assignment_stmt => build_aug_assignment(inner.into_inner().next().unwrap()),
             Rule::if_stmt => build_if_stmt(inner),
             Rule::while_stmt => build_while_stmt(inner),
-            Rule::for_stmt => panic!("For loops are not supported"),
+            Rule::for_stmt => build_for_stmt(inner),
             Rule::return_stmt => build_return_stmt(inner),
             Rule::break_stmt => Statement::Break,
             Rule::continue_stmt => Statement::Continue,
@@ -427,6 +626,32 @@ fn build_while_stmt(pair: Pair<Rule>) -> Statement {
     assert_eq!(inner.next(), None);
 
     Statement::While { condition, body }
+}
+
+fn build_for_stmt(pair: Pair<Rule>) -> Statement {
+    let mut inner = pair.into_inner();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::FOR);
+
+    let id_pair = inner.next().unwrap();
+    assert_eq!(id_pair.as_rule(), Rule::ID);
+    let target = id_pair.as_str().to_string();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::IN);
+
+    let iter_pair = inner.next().unwrap();
+    assert_eq!(iter_pair.as_rule(), Rule::expression);
+    let iter = build_expression(iter_pair);
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let block_pair = inner.next().unwrap();
+    assert_eq!(block_pair.as_rule(), Rule::block);
+    let body = build_block(block_pair);
+
+    assert_eq!(inner.next(), None);
+
+    Statement::For { target, iter, body }
 }
 
 fn build_return_stmt(pair: Pair<Rule>) -> Statement {
@@ -916,6 +1141,10 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
                 assert_eq!(inner.next(), None);
                 expr
             }
+            Rule::tuple_literal => {
+                assert_eq!(inner.next(), None);
+                build_tuple_literal(first)
+            }
             _ => panic!("Unexpected rule in atom: {:?}", first.as_rule()),
         },
         None => panic!("Empty atom - grammar should ensure atoms have content"),
@@ -960,6 +1189,16 @@ fn build_set_literal(pair: Pair<Rule>) -> Expression {
         .collect();
 
     Expression::Set(elements)
+}
+
+fn build_tuple_literal(pair: Pair<Rule>) -> Expression {
+    let elements: Vec<Expression> = pair
+        .into_inner()
+        .filter(|p| !matches!(p.as_rule(), Rule::LPAREN | Rule::RPAREN | Rule::COMMA))
+        .map(build_expression)
+        .collect();
+
+    Expression::Tuple(elements)
 }
 
 /// Process escape sequences in a string literal
