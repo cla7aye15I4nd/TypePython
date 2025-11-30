@@ -15,8 +15,9 @@ mod str_ops;
 mod value;
 
 pub use value::{
-    get_field_type, is_builtin_iterator, iter_names, BoolStorage, CgCtx, EnumerateSource,
-    FunctionInfo, InstanceFields, MacroKind, ModuleInfo, PtrStorage, PyType, PyValue,
+    get_field_type, is_builtin_iterator, is_exception, is_range, iter_names, BoolStorage, CgCtx,
+    EnumerateSource, FunctionInfo, FunctionStorage, FunctionType, InstanceFields, InstanceType,
+    MacroKind, ModuleInfo, PtrStorage, PyType, PyValue,
 };
 
 // ============================================================================

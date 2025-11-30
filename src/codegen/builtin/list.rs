@@ -11,9 +11,11 @@
 //! and discovered automatically by build.rs.
 
 use crate::ast::Expression;
-use crate::codegen::types::{get_field_type, iter_names, BoolStorage, EnumerateSource, PtrStorage};
+use crate::codegen::types::{
+    get_field_type, is_range, iter_names, BoolStorage, EnumerateSource, PtrStorage,
+};
 use crate::codegen::CodeGen;
-use crate::types::{PyType, PyValue};
+use crate::types::{InstanceType, PyType, PyValue};
 use inkwell::values::BasicValueEnum;
 use inkwell::IntPredicate;
 
@@ -585,14 +587,16 @@ impl<'ctx> CodeGen<'ctx> {
         };
         Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            iter_names::ENUMERATE.to_string(),
-            vec![
-                ("element_type".to_string(), elem_type),
-                (
-                    "source".to_string(),
-                    PyType::Instance(source_str.to_string(), vec![]),
-                ),
-            ],
+            InstanceType::new(
+                iter_names::ENUMERATE.to_string(),
+                vec![
+                    ("element_type".to_string(), elem_type),
+                    (
+                        "source".to_string(),
+                        PyType::Instance(InstanceType::new(source_str.to_string(), vec![])),
+                    ),
+                ],
+            ),
         ))
     }
 
@@ -665,8 +669,10 @@ impl<'ctx> CodeGen<'ctx> {
         // Store element types as tuple type for unpacking
         Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            iter_names::ZIP.to_string(),
-            vec![("element_types".to_string(), PyType::Tuple(elem_types))],
+            InstanceType::new(
+                iter_names::ZIP.to_string(),
+                vec![("element_types".to_string(), PyType::Tuple(elem_types))],
+            ),
         ))
     }
 
@@ -699,8 +705,10 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            iter_names::FILTER.to_string(),
-            vec![("element_type".to_string(), elem_type)],
+            InstanceType::new(
+                iter_names::FILTER.to_string(),
+                vec![("element_type".to_string(), elem_type)],
+            ),
         ))
     }
 
@@ -714,7 +722,7 @@ impl<'ctx> CodeGen<'ctx> {
         let arg_val = self.evaluate_expression(&args[0])?;
 
         // Handle Range specially - it returns a range iterator
-        if matches!(arg_val.ty(), PyType::Range) {
+        if is_range(&arg_val.ty()) {
             let iter_fn = self.get_or_declare_c_builtin("range_iter");
             let call_site = self
                 .cg
@@ -724,8 +732,10 @@ impl<'ctx> CodeGen<'ctx> {
             let iter_ptr = self.extract_ptr_call_result(call_site);
             return Ok(PyValue::Instance(
                 PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-                iter_names::RANGE_ITERATOR.to_string(),
-                vec![("element_type".to_string(), PyType::Int)],
+                InstanceType::new(
+                    iter_names::RANGE_ITERATOR.to_string(),
+                    vec![("element_type".to_string(), PyType::Int)],
+                ),
             ));
         }
 
@@ -762,8 +772,10 @@ impl<'ctx> CodeGen<'ctx> {
         };
         Ok(PyValue::Instance(
             PtrStorage::Direct(iter_ptr.value().into_pointer_value()),
-            iter_class.to_string(),
-            vec![("element_type".to_string(), elem_type)],
+            InstanceType::new(
+                iter_class.to_string(),
+                vec![("element_type".to_string(), elem_type)],
+            ),
         ))
     }
 
@@ -802,7 +814,7 @@ impl<'ctx> CodeGen<'ctx> {
             .const_null();
 
         // Handle Instance-based iterators
-        if let PyValue::Instance(storage, class_name, fields) = &iter_val {
+        if let PyValue::Instance(storage, inst) = &iter_val {
             let iter_ptr: inkwell::values::BasicValueEnum = match storage {
                 PtrStorage::Direct(ptr) => (*ptr).into(),
                 PtrStorage::Alloca(ptr) => self
@@ -817,11 +829,11 @@ impl<'ctx> CodeGen<'ctx> {
             };
 
             // Get element type from fields
-            let elem_type = get_field_type(fields, "element_type")
+            let elem_type = get_field_type(&inst.fields, "element_type")
                 .cloned()
                 .unwrap_or(PyType::Int);
 
-            match class_name.as_str() {
+            match inst.class_name.as_str() {
                 iter_names::RANGE_ITERATOR => {
                     let next_fn = self.get_or_declare_c_builtin("range_iter_next_default");
                     let call_site = self
@@ -875,7 +887,7 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => {
                     return Err(format!(
                         "next() not supported for iterator type: {}",
-                        class_name
+                        inst.class_name
                     ))
                 }
             }

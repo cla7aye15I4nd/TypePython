@@ -5,6 +5,7 @@
 use super::super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
+use crate::codegen::types::iter_names;
 use crate::types::{PyType, PyValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::values::{AnyValue, FunctionValue, PointerValue};
@@ -1159,17 +1160,18 @@ impl<'ctx> CodeGen<'ctx> {
         let iter_val = self.evaluate_expression(iter)?;
 
         match iter_val.ty() {
-            PyType::Range => self.generate_range_for_with_yield(
-                target,
-                iter_val,
-                body,
-                gen_ptr,
-                yield_index,
-                resume_blocks,
-                done_bb,
-                frame_ptr,
-                var_infos,
-            ),
+            PyType::Instance(inst) if inst.class_name == iter_names::RANGE => self
+                .generate_range_for_with_yield(
+                    target,
+                    iter_val,
+                    body,
+                    gen_ptr,
+                    yield_index,
+                    resume_blocks,
+                    done_bb,
+                    frame_ptr,
+                    var_infos,
+                ),
             PyType::List(elem_type) => self.generate_list_for_with_yield(
                 target,
                 iter_val,

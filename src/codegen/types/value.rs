@@ -58,8 +58,51 @@ pub enum PtrStorage<'ctx> {
 /// A named field with its type - used for Instance types
 pub type InstanceFields = Vec<(String, PyType)>;
 
-/// Builtin iterator class names - used with Instance variant
+/// Instance type info - class name and fields bundled together
+#[derive(Clone, Debug, PartialEq)]
+pub struct InstanceType {
+    pub class_name: String,
+    pub fields: InstanceFields,
+}
+
+impl InstanceType {
+    pub fn new(class_name: String, fields: InstanceFields) -> Self {
+        Self { class_name, fields }
+    }
+}
+
+/// Function type info - parameter types and return types
+/// return_types is a Vec to handle multiple returns or no returns
+/// - Empty Vec means void/None return
+/// - Single element means single return type
+/// - Multiple elements could be used for tuple returns in future
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionType {
+    pub param_types: Vec<PyType>,
+    pub return_types: Vec<PyType>,
+}
+
+impl FunctionType {
+    pub fn new(param_types: Vec<PyType>, return_type: PyType) -> Self {
+        let return_types = match return_type {
+            PyType::None => vec![],
+            other => vec![other],
+        };
+        Self {
+            param_types,
+            return_types,
+        }
+    }
+
+    /// Get the single return type (or None if void/empty)
+    pub fn return_type(&self) -> PyType {
+        self.return_types.first().cloned().unwrap_or(PyType::None)
+    }
+}
+
+/// Builtin class names - used with Instance variant
 pub mod iter_names {
+    // Iterators
     pub const RANGE_ITERATOR: &str = "__builtin_range_iterator";
     pub const LIST_ITERATOR: &str = "__builtin_list_iterator";
     pub const STR_ITERATOR: &str = "__builtin_str_iterator";
@@ -71,6 +114,9 @@ pub mod iter_names {
     pub const DICT_VALUES: &str = "__builtin_dict_values";
     pub const DICT_ITEMS: &str = "__builtin_dict_items";
     pub const GENERATOR: &str = "__builtin_generator";
+    // Other builtin types represented as Instance
+    pub const RANGE: &str = "__builtin_range";
+    pub const EXCEPTION: &str = "__builtin_exception";
 }
 
 /// Check if a class name is a builtin iterator (includes generators)
@@ -94,6 +140,16 @@ pub fn get_field_type<'a>(fields: &'a InstanceFields, name: &str) -> Option<&'a 
     fields.iter().find(|(n, _)| n == name).map(|(_, t)| t)
 }
 
+/// Check if a PyType is a Range (Instance with RANGE class name)
+pub fn is_range(ty: &PyType) -> bool {
+    matches!(ty, PyType::Instance(inst) if inst.class_name == iter_names::RANGE)
+}
+
+/// Check if a PyType is an Exception (Instance with EXCEPTION class name)
+pub fn is_exception(ty: &PyType) -> bool {
+    matches!(ty, PyType::Instance(inst) if inst.class_name == iter_names::EXCEPTION)
+}
+
 // ============================================================================
 // PyType - Simple type tag
 // ============================================================================
@@ -111,17 +167,16 @@ pub enum PyType {
     Dict(Box<PyType>, Box<PyType>),
     Set(Box<PyType>),
     Tuple(Vec<PyType>), // Heterogeneous tuple with element types
-    Range,
     /// Instance of a class with named fields (like a named tuple/struct)
     /// Fields store type information for attributes
     /// For iterators/generators: fields like ("yield_type", PyType::Int)
     /// For user classes: fields like ("x", PyType::Int), ("name", PyType::Str)
-    Instance(String, InstanceFields),
-    Function,
+    /// For Range: Instance with class_name = "__builtin_range"
+    /// For Exception: Instance with class_name = "__builtin_exception"
+    Instance(InstanceType),
+    /// Function type with parameter and return types
+    Function(FunctionType),
     Module,
-    Macro,
-    // Exception type
-    Exception, // Exception object
 }
 
 /// Source type for enumerate iterator - determines which C functions to use
@@ -142,7 +197,10 @@ impl PyType {
             Type::Bytes => Ok(PyType::Bytes),
             Type::Str => Ok(PyType::Str),
             Type::None => Ok(PyType::None),
-            Type::Range => Ok(PyType::Range),
+            Type::Range => Ok(PyType::Instance(InstanceType::new(
+                iter_names::RANGE.to_string(),
+                vec![],
+            ))),
             Type::List(elem) => Ok(PyType::List(Box::new(PyType::from_ast_type(elem)?))),
             Type::Dict(k, v) => Ok(PyType::Dict(
                 Box::new(PyType::from_ast_type(k)?),
@@ -154,7 +212,7 @@ impl PyType {
                     elems.iter().map(PyType::from_ast_type).collect();
                 Ok(PyType::Tuple(elem_types?))
             }
-            Type::Custom(name) => Ok(PyType::Instance(name.clone(), vec![])),
+            Type::Custom(name) => Ok(PyType::Instance(InstanceType::new(name.clone(), vec![]))),
         }
     }
 
@@ -170,10 +228,8 @@ impl PyType {
             | PyType::Dict(_, _)
             | PyType::Set(_)
             | PyType::Tuple(_)
-            | PyType::Range
-            | PyType::Instance(_, _)
-            | PyType::Exception => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-            PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
+            | PyType::Instance(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Function(_) | PyType::Module => ctx.i64_type().into(),
         }
     }
 
@@ -453,10 +509,10 @@ impl PyType {
                         } else {
                             "dict_keys"
                         },
-                        PyType::Instance(
+                        PyType::Instance(InstanceType::new(
                             iter_names::DICT_KEYS.to_string(),
                             vec![("element_type".to_string(), key_type.as_ref().clone())],
-                        ),
+                        )),
                     )),
                     "values" => Some((
                         if is_str_keyed {
@@ -464,10 +520,10 @@ impl PyType {
                         } else {
                             "dict_values"
                         },
-                        PyType::Instance(
+                        PyType::Instance(InstanceType::new(
                             iter_names::DICT_VALUES.to_string(),
                             vec![("element_type".to_string(), val_type.as_ref().clone())],
-                        ),
+                        )),
                     )),
                     "items" => Some((
                         if is_str_keyed {
@@ -475,13 +531,13 @@ impl PyType {
                         } else {
                             "dict_items"
                         },
-                        PyType::Instance(
+                        PyType::Instance(InstanceType::new(
                             iter_names::DICT_ITEMS.to_string(),
                             vec![
                                 ("key_type".to_string(), key_type.as_ref().clone()),
                                 ("value_type".to_string(), val_type.as_ref().clone()),
                             ],
-                        ),
+                        )),
                     )),
                     _ => None,
                 }
@@ -495,34 +551,60 @@ impl PyType {
 // FunctionInfo, ModuleInfo, MacroKind
 // ============================================================================
 
+/// Function storage - runtime-specific data for function calls
+/// This is the "storage" part of the Function variant, analogous to PtrStorage for containers
+#[derive(Clone, Debug)]
+pub struct FunctionStorage<'ctx> {
+    pub mangled_name: String,
+    pub bound_args: Vec<BasicValueEnum<'ctx>>,
+    /// For builtin functions that need special codegen (type dispatch, etc.)
+    pub macro_kind: Option<MacroKind>,
+}
+
 /// Function metadata for compile-time function references
 /// Functions are declared lazily via get_or_declare when needed
+/// For builtin macros, macro_kind specifies the builtin function dispatch
 #[derive(Clone, Debug)]
 pub struct FunctionInfo<'ctx> {
-    pub mangled_name: String,
-    pub param_types: Vec<PyType>,
-    pub return_type: PyType,
-    pub bound_args: Vec<BasicValueEnum<'ctx>>,
+    pub storage: FunctionStorage<'ctx>,
+    pub fn_type: FunctionType,
 }
 
 impl<'ctx> FunctionInfo<'ctx> {
     /// Create a FunctionInfo for a builtin or method
     pub fn new(mangled_name: &str, return_type: PyType) -> Self {
         FunctionInfo {
-            mangled_name: mangled_name.to_string(),
-            param_types: vec![],
-            return_type,
-            bound_args: vec![],
+            storage: FunctionStorage {
+                mangled_name: mangled_name.to_string(),
+                bound_args: vec![],
+                macro_kind: None,
+            },
+            fn_type: FunctionType::new(vec![], return_type),
         }
     }
 
     /// Create a FunctionInfo with a bound receiver (for method calls)
     pub fn bound(mangled_name: &str, return_type: PyType, bound_arg: BasicValueEnum<'ctx>) -> Self {
         FunctionInfo {
-            mangled_name: mangled_name.to_string(),
-            param_types: vec![],
-            return_type,
-            bound_args: vec![bound_arg],
+            storage: FunctionStorage {
+                mangled_name: mangled_name.to_string(),
+                bound_args: vec![bound_arg],
+                macro_kind: None,
+            },
+            fn_type: FunctionType::new(vec![], return_type),
+        }
+    }
+
+    /// Create a FunctionInfo for a builtin macro (special codegen dispatch)
+    pub fn builtin_macro(kind: MacroKind) -> Self {
+        FunctionInfo {
+            storage: FunctionStorage {
+                mangled_name: String::new(),
+                bound_args: vec![],
+                macro_kind: Some(kind),
+            },
+            // Return type is determined at expansion time
+            fn_type: FunctionType::new(vec![], PyType::None),
         }
     }
 
@@ -537,11 +619,39 @@ impl<'ctx> FunctionInfo<'ctx> {
         let return_type = PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
 
         FunctionInfo {
-            mangled_name: mangled_name.to_string(),
-            param_types,
-            return_type,
-            bound_args: vec![],
+            storage: FunctionStorage {
+                mangled_name: mangled_name.to_string(),
+                bound_args: vec![],
+                macro_kind: None,
+            },
+            fn_type: FunctionType::new(param_types, return_type),
         }
+    }
+
+    // Convenience accessors for backward compatibility
+    pub fn mangled_name(&self) -> &str {
+        &self.storage.mangled_name
+    }
+
+    pub fn param_types(&self) -> &[PyType] {
+        &self.fn_type.param_types
+    }
+
+    pub fn return_type(&self) -> PyType {
+        self.fn_type.return_type()
+    }
+
+    pub fn bound_args(&self) -> &[BasicValueEnum<'ctx>] {
+        &self.storage.bound_args
+    }
+
+    pub fn macro_kind(&self) -> Option<MacroKind> {
+        self.storage.macro_kind
+    }
+
+    /// Check if this is a builtin macro
+    pub fn is_macro(&self) -> bool {
+        self.storage.macro_kind.is_some()
     }
 
     /// Get the function, declaring it in the module if needed
@@ -552,7 +662,7 @@ impl<'ctx> FunctionInfo<'ctx> {
     ) -> FunctionValue<'ctx> {
         // Check if it's a C builtin - use BUILTIN_TABLE for correct signature and symbol
         if let Some(builtin) =
-            crate::codegen::builtins::BUILTIN_TABLE.get(self.mangled_name.as_str())
+            crate::codegen::builtins::BUILTIN_TABLE.get(self.storage.mangled_name.as_str())
         {
             // Check if already declared with the actual symbol name
             if let Some(f) = module.get_function(builtin.symbol) {
@@ -564,7 +674,7 @@ impl<'ctx> FunctionInfo<'ctx> {
         }
 
         // For user-defined functions, check if already declared
-        if let Some(f) = module.get_function(&self.mangled_name) {
+        if let Some(f) = module.get_function(&self.storage.mangled_name) {
             return f;
         }
 
@@ -579,25 +689,27 @@ impl<'ctx> FunctionInfo<'ctx> {
     ) -> FunctionValue<'ctx> {
         use inkwell::types::{BasicMetadataTypeEnum, BasicType};
 
-        if let Some(f) = module.get_function(&self.mangled_name) {
+        if let Some(f) = module.get_function(&self.storage.mangled_name) {
             return f;
         }
 
         let llvm_param_types: Vec<BasicMetadataTypeEnum> = self
+            .fn_type
             .param_types
             .iter()
             .map(|t| t.to_llvm(context).into())
             .collect();
 
-        let fn_type = match &self.return_type {
+        let return_type = self.fn_type.return_type();
+        let fn_type = match &return_type {
             PyType::None => context.void_type().fn_type(&llvm_param_types, false),
             _ => {
-                let ret_type = self.return_type.to_llvm(context);
+                let ret_type = return_type.to_llvm(context);
                 ret_type.fn_type(&llvm_param_types, false)
             }
         };
 
-        module.add_function(&self.mangled_name, fn_type, None)
+        module.add_function(&self.storage.mangled_name, fn_type, None)
     }
 }
 
@@ -671,16 +783,16 @@ pub enum PyValue<'ctx> {
     Dict(PtrStorage<'ctx>, Box<PyType>, Box<PyType>),
     Set(PtrStorage<'ctx>, Box<PyType>),
     Tuple(PtrStorage<'ctx>, Vec<PyType>),
-    // Range type (start, stop, step stored in struct)
-    Range(PtrStorage<'ctx>),
     /// Instance of a class with named fields (like a named tuple/struct)
     /// Fields store type information for attributes
     /// For generators: Instance with class_name = "__builtin_generator" and ("yield_type", T)
-    Instance(PtrStorage<'ctx>, String, InstanceFields),
-    // Compile-time types
-    Function(FunctionInfo<'ctx>),
+    /// For range: Instance with class_name = "__builtin_range"
+    /// For exception: Instance with class_name = "__builtin_exception"
+    Instance(PtrStorage<'ctx>, InstanceType),
+    // Compile-time types - follow XXValue(Storage, Type) pattern
+    /// Function - storage contains name/bound_args/macro_kind, type contains param/return types
+    Function(FunctionStorage<'ctx>, FunctionType),
     Module(ModuleInfo<'ctx>),
-    Macro(MacroKind),
 }
 
 impl<'ctx> PyValue<'ctx> {
@@ -713,19 +825,24 @@ impl<'ctx> PyValue<'ctx> {
     }
 
     pub fn range(value: PointerValue<'ctx>) -> Self {
-        PyValue::Range(PtrStorage::Direct(value))
+        PyValue::Instance(
+            PtrStorage::Direct(value),
+            InstanceType::new(iter_names::RANGE.to_string(), vec![]),
+        )
     }
 
     pub fn function(info: FunctionInfo<'ctx>) -> Self {
-        PyValue::Function(info)
+        PyValue::Function(info.storage, info.fn_type)
     }
 
     pub fn module(info: ModuleInfo<'ctx>) -> Self {
         PyValue::Module(info)
     }
 
+    /// Create a builtin macro function
     pub fn macro_fn(kind: MacroKind) -> Self {
-        PyValue::Macro(kind)
+        let info = FunctionInfo::builtin_macro(kind);
+        PyValue::Function(info.storage, info.fn_type)
     }
 
     /// Create with pointer (for variables) - converts from BasicValueEnum
@@ -761,26 +878,12 @@ impl<'ctx> PyValue<'ctx> {
             (PyType::Tuple(elem), None) => {
                 PyValue::Tuple(PtrStorage::Direct(value.into_pointer_value()), elem)
             }
-            (PyType::Range, Some(p)) => PyValue::Range(PtrStorage::Alloca(p)),
-            (PyType::Range, None) => PyValue::Range(PtrStorage::Direct(value.into_pointer_value())),
-            (PyType::Instance(class_name, fields), Some(p)) => {
-                PyValue::Instance(PtrStorage::Alloca(p), class_name, fields)
+            (PyType::Instance(inst), Some(p)) => PyValue::Instance(PtrStorage::Alloca(p), inst),
+            (PyType::Instance(inst), None) => {
+                PyValue::Instance(PtrStorage::Direct(value.into_pointer_value()), inst)
             }
-            (PyType::Instance(class_name, fields), None) => PyValue::Instance(
-                PtrStorage::Direct(value.into_pointer_value()),
-                class_name,
-                fields,
-            ),
-            (PyType::Exception, Some(p)) => {
-                PyValue::Instance(PtrStorage::Alloca(p), "Exception".to_string(), vec![])
-            }
-            (PyType::Exception, None) => PyValue::Instance(
-                PtrStorage::Direct(value.into_pointer_value()),
-                "Exception".to_string(),
-                vec![],
-            ),
-            (PyType::Function, _) | (PyType::Module, _) | (PyType::Macro, _) => {
-                panic!("Use specific constructors for Function/Module/Macro")
+            (PyType::Function(_), _) | (PyType::Module, _) => {
+                panic!("Use specific constructors for Function/Module")
             }
         }
     }
@@ -802,13 +905,9 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, k, v) => PyType::Dict(k.clone(), v.clone()),
             PyValue::Set(_, elem) => PyType::Set(elem.clone()),
             PyValue::Tuple(_, elem) => PyType::Tuple(elem.clone()),
-            PyValue::Range(_) => PyType::Range,
-            PyValue::Instance(_, class_name, fields) => {
-                PyType::Instance(class_name.clone(), fields.clone())
-            }
-            PyValue::Function(_) => PyType::Function,
+            PyValue::Instance(_, inst) => PyType::Instance(inst.clone()),
+            PyValue::Function(_, fn_type) => PyType::Function(fn_type.clone()),
             PyValue::Module(_) => PyType::Module,
-            PyValue::Macro(_) => PyType::Macro,
         }
     }
 
@@ -841,17 +940,13 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Tuple(PtrStorage::Direct(v), _) | PyValue::Tuple(PtrStorage::Alloca(v), _) => {
                 (*v).into()
             }
-            PyValue::Range(PtrStorage::Direct(v)) | PyValue::Range(PtrStorage::Alloca(v)) => {
-                (*v).into()
-            }
-            PyValue::Instance(PtrStorage::Direct(v), _, _)
-            | PyValue::Instance(PtrStorage::Alloca(v), _, _) => (*v).into(),
-            PyValue::Function(_) => {
+            PyValue::Instance(PtrStorage::Direct(v), _)
+            | PyValue::Instance(PtrStorage::Alloca(v), _) => (*v).into(),
+            PyValue::Function(_, _) => {
                 // Functions don't have a direct LLVM value - use get_or_declare to call them
                 panic!("Function has no direct LLVM value - use get_or_declare to call it")
             }
             PyValue::Module(_) => panic!("Module has no LLVM value"),
-            PyValue::Macro(_) => panic!("Macro has no LLVM value"),
         }
     }
 
@@ -897,15 +992,19 @@ impl<'ctx> PyValue<'ctx> {
 
     pub fn get_function(&self) -> FunctionInfo<'ctx> {
         match self {
-            PyValue::Function(info) => info.clone(),
+            PyValue::Function(storage, fn_type) => FunctionInfo {
+                storage: storage.clone(),
+                fn_type: fn_type.clone(),
+            },
             _ => panic!("get_function called on non-function"),
         }
     }
 
-    pub fn get_macro_kind(&self) -> MacroKind {
+    /// Get the macro kind if this is a builtin macro function
+    pub fn get_macro_kind(&self) -> Option<MacroKind> {
         match self {
-            PyValue::Macro(kind) => *kind,
-            _ => panic!("get_macro_kind called on non-macro"),
+            PyValue::Function(storage, _) => storage.macro_kind,
+            _ => None,
         }
     }
 
@@ -989,24 +1088,13 @@ impl<'ctx> PyValue<'ctx> {
                     .into_pointer_value();
                 PyValue::Tuple(PtrStorage::Direct(loaded), elem.clone())
             }
-            PyValue::Range(PtrStorage::Alloca(alloca)) => {
+            // Instances (including builtin iterators, range, exception) can be loaded from allocas
+            PyValue::Instance(PtrStorage::Alloca(alloca), inst) => {
                 let loaded = builder
                     .build_load(ptr_type, *alloca, name)
                     .unwrap()
                     .into_pointer_value();
-                PyValue::Range(PtrStorage::Direct(loaded))
-            }
-            // Instances (including builtin iterators) can be loaded from allocas
-            PyValue::Instance(PtrStorage::Alloca(alloca), class_name, fields) => {
-                let loaded = builder
-                    .build_load(ptr_type, *alloca, name)
-                    .unwrap()
-                    .into_pointer_value();
-                PyValue::Instance(
-                    PtrStorage::Direct(loaded),
-                    class_name.clone(),
-                    fields.clone(),
-                )
+                PyValue::Instance(PtrStorage::Direct(loaded), inst.clone())
             }
             // Non-pointer types just return a clone
             _ => self.clone(),
@@ -1063,13 +1151,13 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, _, _) => super::dict_ops::binary_op(self, cg, op, rhs),
             PyValue::Set(_, _) => super::set_ops::binary_op(self, cg, op, rhs),
             PyValue::Tuple(_, _) => Err("Binary operations not supported on tuples".to_string()),
-            PyValue::Range(_) => Err("Binary operations not supported on range".to_string()),
-            PyValue::Instance(_, _, _) => {
+            PyValue::Instance(_, _) => {
                 Err("Binary operations not supported on instances".to_string())
             }
-            PyValue::Function(_) => Err("Binary operations not supported on functions".to_string()),
+            PyValue::Function(_, _) => {
+                Err("Binary operations not supported on functions".to_string())
+            }
             PyValue::Module(_) => Err("Binary operations not supported on modules".to_string()),
-            PyValue::Macro(_) => Err("Binary operations not supported on macros".to_string()),
         }
     }
 
@@ -1089,23 +1177,26 @@ impl<'ctx> PyValue<'ctx> {
             PyValue::Dict(_, _, _) => super::dict_ops::unary_op(self, cg, op),
             PyValue::Set(_, _) => super::set_ops::unary_op(self, cg, op),
             PyValue::Tuple(_, _) => Err(format!("Unary operator {:?} not supported on tuple", op)),
-            PyValue::Range(_) => {
-                match op {
-                    UnaryOp::Not => {
-                        // not range: true if range is empty, false otherwise
-                        let bool_val = cg.value_to_bool(self);
-                        let negated = cg.builder.build_not(bool_val, "not_range").unwrap();
-                        Ok(PyValue::bool(negated))
+            PyValue::Instance(_, inst) => {
+                // Range supports 'not' operator
+                if inst.class_name == iter_names::RANGE {
+                    match op {
+                        UnaryOp::Not => {
+                            // not range: true if range is empty, false otherwise
+                            let bool_val = cg.value_to_bool(self);
+                            let negated = cg.builder.build_not(bool_val, "not_range").unwrap();
+                            Ok(PyValue::bool(negated))
+                        }
+                        _ => Err(format!("Unary operator {:?} not supported on range", op)),
                     }
-                    _ => Err(format!("Unary operator {:?} not supported on range", op)),
+                } else {
+                    Err(format!("Unary operator {:?} not supported on instance", op))
                 }
             }
-            PyValue::Instance(_, _, _) => {
-                Err(format!("Unary operator {:?} not supported on instance", op))
+            PyValue::Function(_, _) => {
+                Err("Unary operations not supported on functions".to_string())
             }
-            PyValue::Function(_) => Err("Unary operations not supported on functions".to_string()),
             PyValue::Module(_) => Err("Unary operations not supported on modules".to_string()),
-            PyValue::Macro(_) => Err("Unary operations not supported on macros".to_string()),
         }
     }
 
@@ -1280,34 +1371,36 @@ impl<'ctx> CgCtx<'ctx> {
                     .unwrap()
             }
             PyValue::Tuple(_, _) => self.ctx.bool_type().const_int(1, false),
-            // Range is truthy if it has at least one element
-            PyValue::Range(PtrStorage::Direct(v)) | PyValue::Range(PtrStorage::Alloca(v)) => {
-                // Need to load from alloca if necessary
-                let range_ptr = match val {
-                    PyValue::Range(PtrStorage::Alloca(alloca)) => {
-                        let ptr_type = self.ctx.ptr_type(inkwell::AddressSpace::default());
-                        self.builder
-                            .build_load(ptr_type, *alloca, "range_load")
-                            .unwrap()
-                            .into_pointer_value()
-                    }
-                    _ => *v,
-                };
-                let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "range_len");
-                let len_call = self
-                    .builder
-                    .build_call(len_fn, &[range_ptr.into()], "range_len")
-                    .unwrap();
-                let len = super::extract_int_result(len_call, "range_len");
-                let zero = len.get_type().const_zero();
-                self.builder
-                    .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
-                    .unwrap()
+            // Instances - most are truthy, but range checks length
+            PyValue::Instance(storage, inst) => {
+                if inst.class_name == iter_names::RANGE {
+                    // Range is truthy if it has at least one element
+                    let range_ptr = match storage {
+                        PtrStorage::Alloca(alloca) => {
+                            let ptr_type = self.ctx.ptr_type(inkwell::AddressSpace::default());
+                            self.builder
+                                .build_load(ptr_type, *alloca, "range_load")
+                                .unwrap()
+                                .into_pointer_value()
+                        }
+                        PtrStorage::Direct(v) => *v,
+                    };
+                    let len_fn = super::get_or_declare_builtin(&self.module, self.ctx, "range_len");
+                    let len_call = self
+                        .builder
+                        .build_call(len_fn, &[range_ptr.into()], "range_len")
+                        .unwrap();
+                    let len = super::extract_int_result(len_call, "range_len");
+                    let zero = len.get_type().const_zero();
+                    self.builder
+                        .build_int_compare(inkwell::IntPredicate::NE, len, zero, "to_bool")
+                        .unwrap()
+                } else {
+                    // Other instances are always truthy (unless __bool__ is implemented)
+                    self.ctx.bool_type().const_int(1, false)
+                }
             }
-            // Instances are always truthy (unless __bool__ is implemented)
-            // This includes builtin iterators and generators which are represented as Instance
-            PyValue::Instance(_, _, _) => self.ctx.bool_type().const_int(1, false),
-            PyValue::Function(_) | PyValue::Module(_) | PyValue::Macro(_) => {
+            PyValue::Function(_, _) | PyValue::Module(_) => {
                 self.ctx.bool_type().const_int(1, false)
             }
         }

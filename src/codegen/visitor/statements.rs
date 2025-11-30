@@ -2,7 +2,8 @@
 use super::super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::{PyType, PyValue};
+use crate::codegen::types::iter_names;
+use crate::types::{InstanceType, PyType, PyValue};
 use inkwell::values::AnyValue;
 
 impl<'ctx> CodeGen<'ctx> {
@@ -85,9 +86,9 @@ impl<'ctx> CodeGen<'ctx> {
                     var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
-                    // Functions/Modules/Macros are stored directly without alloca
+                    // Functions/Modules are stored directly without alloca
                     match val.ty() {
-                        PyType::Function | PyType::Module | PyType::Macro => {
+                        PyType::Function(_) | PyType::Module => {
                             self.variables.insert(name.to_string(), val);
                         }
                         _ => {
@@ -471,13 +472,15 @@ impl<'ctx> CodeGen<'ctx> {
             // Bind exception to name if specified
             if let Some(name) = &handler.name {
                 // Store exception pointer as the bound variable
+                let exc_type =
+                    PyType::Instance(InstanceType::new(iter_names::EXCEPTION.to_string(), vec![]));
                 let alloca = self.create_entry_block_alloca(
                     &function.get_name().to_string_lossy(),
                     name,
-                    &PyType::Exception,
+                    &exc_type,
                 );
                 self.cg.builder.build_store(alloca, current_exc).unwrap();
-                let exc_val = PyValue::new(current_exc.into(), PyType::Exception, Some(alloca));
+                let exc_val = PyValue::new(current_exc.into(), exc_type, Some(alloca));
                 self.variables.insert(name.clone(), exc_val);
             }
 

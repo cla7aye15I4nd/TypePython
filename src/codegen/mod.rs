@@ -182,30 +182,32 @@ impl<'ctx> CodeGen<'ctx> {
                 // Evaluate the function expression first
                 let func_val = self.evaluate_expression(func)?;
 
-                // Check if it's a macro (builtin with special expansion)
-                if func_val.ty() == PyType::Macro {
-                    return self.expand_macro(&func_val, args);
+                // Get function info - this handles both regular functions and builtin macros
+                let function_info = func_val.get_function();
+
+                // Check if it's a builtin macro (needs special expansion)
+                if let Some(kind) = function_info.macro_kind() {
+                    return self.expand_macro_kind(kind, args);
                 }
 
                 // Regular function call
-                let function_info = func_val.get_function();
                 // Declare function in module if needed
                 let function = function_info.get_or_declare(self.cg.ctx, &self.cg.module);
-                let return_type = function_info.return_type;
+                let return_type = function_info.return_type();
 
                 // Prepend bound args (for method calls), then add explicit args
                 let mut arg_values: Vec<inkwell::values::BasicMetadataValueEnum> = function_info
-                    .bound_args
+                    .bound_args()
                     .iter()
                     .map(|v| (*v).into())
                     .collect();
                 for arg in args {
                     let arg_val = self.evaluate_expression(arg)?;
                     // For bool_list_append and bool_set_add, convert i1 to i8 for C ABI compatibility
-                    let converted = if (function_info.mangled_name.contains("bool_list_append")
-                        || function_info.mangled_name.contains("bool_set_add")
-                        || function_info.mangled_name.contains("bool_set_remove")
-                        || function_info.mangled_name.contains("bool_set_discard"))
+                    let converted = if (function_info.mangled_name().contains("bool_list_append")
+                        || function_info.mangled_name().contains("bool_set_add")
+                        || function_info.mangled_name().contains("bool_set_remove")
+                        || function_info.mangled_name().contains("bool_set_discard"))
                         && matches!(arg_val.ty(), PyType::Bool)
                     {
                         self.cg
@@ -217,10 +219,10 @@ impl<'ctx> CodeGen<'ctx> {
                             )
                             .unwrap()
                             .into()
-                    } else if (function_info.mangled_name.contains("float_list_append")
-                        || function_info.mangled_name.contains("float_set_add")
-                        || function_info.mangled_name.contains("float_set_remove")
-                        || function_info.mangled_name.contains("float_set_discard"))
+                    } else if (function_info.mangled_name().contains("float_list_append")
+                        || function_info.mangled_name().contains("float_set_add")
+                        || function_info.mangled_name().contains("float_set_remove")
+                        || function_info.mangled_name().contains("float_set_discard"))
                         && matches!(arg_val.ty(), PyType::Int)
                     {
                         // Convert int to float for float_* methods
@@ -241,16 +243,16 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // Add default arguments for certain methods when not provided
                 // list.pop() without args should pass -1 to pop from end
-                if function_info.mangled_name.contains("list_pop") && args.is_empty() {
+                if function_info.mangled_name().contains("list_pop") && args.is_empty() {
                     arg_values.push(self.cg.ctx.i64_type().const_int(-1i64 as u64, true).into());
                 }
                 // set.pop() without args doesn't need extra args (set_pop takes only set ptr)
                 // dict.pop() requires a key, so no default needed
 
                 // bytes.strip/lstrip/rstrip() without args should pass NULL for chars
-                if (function_info.mangled_name.contains("bytes_strip")
-                    || function_info.mangled_name.contains("bytes_lstrip")
-                    || function_info.mangled_name.contains("bytes_rstrip"))
+                if (function_info.mangled_name().contains("bytes_strip")
+                    || function_info.mangled_name().contains("bytes_lstrip")
+                    || function_info.mangled_name().contains("bytes_rstrip"))
                     && args.is_empty()
                 {
                     let null_ptr = self
@@ -262,9 +264,9 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 // bytes.center/ljust/rjust() without fillchar should pass NULL
-                if (function_info.mangled_name.contains("bytes_center")
-                    || function_info.mangled_name.contains("bytes_ljust")
-                    || function_info.mangled_name.contains("bytes_rjust"))
+                if (function_info.mangled_name().contains("bytes_center")
+                    || function_info.mangled_name().contains("bytes_ljust")
+                    || function_info.mangled_name().contains("bytes_rjust"))
                     && args.len() == 1
                 {
                     let null_ptr = self
@@ -276,7 +278,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 // str.split() without separator should pass NULL to split on whitespace
-                if function_info.mangled_name.contains("str_split") && args.is_empty() {
+                if function_info.mangled_name().contains("str_split") && args.is_empty() {
                     let null_ptr = self
                         .cg
                         .ctx
@@ -299,10 +301,7 @@ impl<'ctx> CodeGen<'ctx> {
                     PyType::Bool => Ok(self.extract_bool_call_result(call_site)),
                     PyType::Bytes => Ok(self.extract_bytes_call_result(call_site)),
                     PyType::Str => Ok(self.extract_str_call_result(call_site)),
-                    PyType::List(_)
-                    | PyType::Dict(_, _)
-                    | PyType::Set(_)
-                    | PyType::Instance(_, _) => {
+                    PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) | PyType::Instance(_) => {
                         // Container types, instances (including iterators and generators) return pointers
                         let ptr_val = self.extract_ptr_call_result(call_site);
                         Ok(PyValue::new(ptr_val.value(), return_type.clone(), None))
@@ -476,7 +475,7 @@ impl<'ctx> CodeGen<'ctx> {
                             // str[index] returns a single-character string
                             self.str_getitem(obj.value(), idx.value())
                         }
-                        PyType::Range => {
+                        PyType::Instance(inst) if inst.class_name == iter_names::RANGE => {
                             // range[index] returns the element at that index
                             self.range_getitem(obj.value(), idx.value())
                         }
@@ -745,7 +744,7 @@ impl<'ctx> CodeGen<'ctx> {
         let target = targets.first().map(|s| s.as_str()).unwrap_or("_");
 
         match iter_val.ty() {
-            PyType::Range => {
+            PyType::Instance(inst) if inst.class_name == iter_names::RANGE => {
                 // For range iteration, we use the range_iter functions
                 self.generate_range_for_loop(target, iter_val, body, else_block)
             }
@@ -775,11 +774,11 @@ impl<'ctx> CodeGen<'ctx> {
                 // For dict iteration, iterate over keys
                 self.generate_dict_for_loop(target, iter_val, &key_type, body, else_block)
             }
-            PyType::Instance(class_name, fields) => {
+            PyType::Instance(inst) => {
                 // Handle builtin iterator instances (dict views and generators are iterable)
-                match class_name.as_str() {
+                match inst.class_name.as_str() {
                     iter_names::DICT_KEYS => {
-                        let key_type = get_field_type(&fields, "element_type")
+                        let key_type = get_field_type(&inst.fields, "element_type")
                             .cloned()
                             .unwrap_or(PyType::Int);
                         self.generate_dict_keys_iter_for_loop(
@@ -787,7 +786,7 @@ impl<'ctx> CodeGen<'ctx> {
                         )
                     }
                     iter_names::DICT_VALUES => {
-                        let val_type = get_field_type(&fields, "element_type")
+                        let val_type = get_field_type(&inst.fields, "element_type")
                             .cloned()
                             .unwrap_or(PyType::Int);
                         self.generate_dict_values_iter_for_loop(
@@ -796,7 +795,7 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                     iter_names::GENERATOR => {
                         // For generator iteration, use generator_next
-                        let elem_type = get_field_type(&fields, "yield_type")
+                        let elem_type = get_field_type(&inst.fields, "yield_type")
                             .cloned()
                             .unwrap_or(PyType::Int);
                         self.generate_generator_for_loop(
@@ -808,7 +807,7 @@ impl<'ctx> CodeGen<'ctx> {
                     // For direct for-loop usage, iterate over the source (Range, List, Str) instead.
                     _ => Err(format!(
                         "for loop iteration not supported for instance type: {}",
-                        class_name
+                        inst.class_name
                     )),
                 }
             }
@@ -2348,11 +2347,11 @@ impl<'ctx> CodeGen<'ctx> {
         _else_block: &Option<Vec<Statement>>,
     ) -> Result<(), String> {
         // Handle different iterable types that yield tuples
-        if let PyType::Instance(class_name, fields) = iter_val.ty() {
-            match class_name.as_str() {
+        if let PyType::Instance(inst) = iter_val.ty() {
+            match inst.class_name.as_str() {
                 iter_names::ENUMERATE => {
                     // enumerate yields (int, T) tuples
-                    let elem_type = get_field_type(&fields, "element_type")
+                    let elem_type = get_field_type(&inst.fields, "element_type")
                         .cloned()
                         .unwrap_or(PyType::Int);
                     let elem_types = vec![PyType::Int, elem_type];
@@ -2366,7 +2365,7 @@ impl<'ctx> CodeGen<'ctx> {
                 iter_names::ZIP => {
                     // zip yields tuples of the zipped elements
                     let types = if let Some(PyType::Tuple(types)) =
-                        get_field_type(&fields, "element_types")
+                        get_field_type(&inst.fields, "element_types")
                     {
                         types.clone()
                     } else {
@@ -2376,10 +2375,10 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 iter_names::DICT_ITEMS => {
                     // dict.items() yields (key, value) tuples
-                    let key_type = get_field_type(&fields, "key_type")
+                    let key_type = get_field_type(&inst.fields, "key_type")
                         .cloned()
                         .unwrap_or(PyType::Int);
-                    let val_type = get_field_type(&fields, "value_type")
+                    let val_type = get_field_type(&inst.fields, "value_type")
                         .cloned()
                         .unwrap_or(PyType::Int);
                     return self.generate_dict_items_for_loop_unpacking(
@@ -2583,14 +2582,14 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Get the element type and source from enumerate instance
         let (source_str, inner_elem_type) = match iter_val.ty() {
-            PyType::Instance(class_name, fields) if class_name == iter_names::ENUMERATE => {
-                let elem = get_field_type(&fields, "element_type")
+            PyType::Instance(inst) if inst.class_name == iter_names::ENUMERATE => {
+                let elem = get_field_type(&inst.fields, "element_type")
                     .cloned()
                     .unwrap_or(PyType::Int);
                 // Get source type from fields (stored as Instance with source name)
                 let source =
-                    if let Some(PyType::Instance(src, _)) = get_field_type(&fields, "source") {
-                        src.clone()
+                    if let Some(PyType::Instance(src)) = get_field_type(&inst.fields, "source") {
+                        src.class_name.clone()
                     } else {
                         "list".to_string()
                     };
@@ -2795,17 +2794,16 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Get the zip iterator pointer
         let iter_ptr = match &iter_val {
-            PyValue::Instance(storage, class_name, _) if class_name == iter_names::ZIP => {
-                match storage {
-                    types::PtrStorage::Direct(ptr) => *ptr,
-                    types::PtrStorage::Alloca(ptr) => self
-                        .cg
-                        .builder
-                        .build_load(ptr_type, *ptr, "load_iter")
-                        .unwrap()
-                        .into_pointer_value(),
-                }
-            }
+            PyValue::Instance(storage, inst) if inst.class_name == iter_names::ZIP => match storage
+            {
+                types::PtrStorage::Direct(ptr) => *ptr,
+                types::PtrStorage::Alloca(ptr) => self
+                    .cg
+                    .builder
+                    .build_load(ptr_type, *ptr, "load_iter")
+                    .unwrap()
+                    .into_pointer_value(),
+            },
             _ => return Err("Expected zip iterator".to_string()),
         };
 
@@ -3000,17 +2998,16 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Get the zip iterator pointer
         let iter_ptr = match &iter_val {
-            PyValue::Instance(storage, class_name, _) if class_name == iter_names::ZIP => {
-                match storage {
-                    types::PtrStorage::Direct(ptr) => *ptr,
-                    types::PtrStorage::Alloca(ptr) => self
-                        .cg
-                        .builder
-                        .build_load(ptr_type, *ptr, "load_iter")
-                        .unwrap()
-                        .into_pointer_value(),
-                }
-            }
+            PyValue::Instance(storage, inst) if inst.class_name == iter_names::ZIP => match storage
+            {
+                types::PtrStorage::Direct(ptr) => *ptr,
+                types::PtrStorage::Alloca(ptr) => self
+                    .cg
+                    .builder
+                    .build_load(ptr_type, *ptr, "load_iter")
+                    .unwrap()
+                    .into_pointer_value(),
+            },
             _ => return Err("Expected zip iterator".to_string()),
         };
 

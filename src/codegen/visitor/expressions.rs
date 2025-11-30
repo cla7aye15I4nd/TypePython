@@ -88,9 +88,9 @@ impl<'ctx> CodeGen<'ctx> {
             // Get type info from global_variables if available (for correct return type)
             let (param_types, mut return_type) =
                 if let Some(global) = self.global_variables.get(name) {
-                    if global.ty() == crate::types::PyType::Function {
+                    if matches!(global.ty(), crate::types::PyType::Function(_)) {
                         let info = global.get_function();
-                        (info.param_types.clone(), info.return_type.clone())
+                        (info.fn_type.param_types.clone(), info.fn_type.return_type())
                     } else {
                         (vec![], crate::types::PyType::None)
                     }
@@ -100,17 +100,19 @@ impl<'ctx> CodeGen<'ctx> {
 
             // If it's a generator, wrap the return type as a generator Instance
             if is_generator {
-                return_type = PyType::Instance(
+                return_type = PyType::Instance(crate::types::InstanceType::new(
                     crate::codegen::types::iter_names::GENERATOR.to_string(),
                     vec![("yield_type".to_string(), return_type)],
-                );
+                ));
             }
 
             return Ok(PyValue::function(crate::types::FunctionInfo {
-                mangled_name,
-                param_types,
-                return_type,
-                bound_args: vec![],
+                storage: crate::types::FunctionStorage {
+                    mangled_name,
+                    bound_args: vec![],
+                    macro_kind: None,
+                },
+                fn_type: crate::types::FunctionType::new(param_types, return_type),
             }));
         }
 

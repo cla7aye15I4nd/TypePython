@@ -19,7 +19,7 @@ use crate::types::{MacroKind, PyValue};
 use inkwell::values::FunctionValue;
 
 impl<'ctx> CodeGen<'ctx> {
-    /// Get a Python builtin function as a PyValue::Macro
+    /// Get a Python builtin function as a PyValue::Function with macro_kind
     /// Returns None if the name is not a builtin function
     pub fn get_builtin_function(&mut self, name: &str) -> Option<PyValue<'ctx>> {
         let kind = match name {
@@ -76,14 +76,13 @@ impl<'ctx> CodeGen<'ctx> {
         Some(PyValue::macro_fn(kind))
     }
 
-    /// Expand a macro function call
+    /// Expand a builtin macro function call by kind
     /// This is the main entry point for macro expansion at call time
-    pub fn expand_macro(
+    pub fn expand_macro_kind(
         &mut self,
-        macro_val: &PyValue<'ctx>,
+        kind: MacroKind,
         args: &[Expression],
     ) -> Result<PyValue<'ctx>, String> {
-        let kind = macro_val.get_macro_kind();
         match kind {
             MacroKind::Print => self.generate_print_call(args),
             MacroKind::Abs => self.generate_abs_call(args),

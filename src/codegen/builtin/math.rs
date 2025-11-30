@@ -1,6 +1,7 @@
 //! Math builtin functions: abs, min, max, pow, round, len, print
 
 use crate::ast::Expression;
+use crate::codegen::types::iter_names;
 use crate::codegen::CodeGen;
 use crate::types::{PyType, PyValue};
 use inkwell::FloatPredicate;
@@ -948,7 +949,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 Ok(self.extract_int_call_result(call))
             }
-            PyType::Range => {
+            PyType::Instance(inst) if inst.class_name == iter_names::RANGE => {
                 let len_fn = self.get_or_declare_c_builtin("range_len");
                 let call = self
                     .cg
@@ -1750,7 +1751,7 @@ impl<'ctx> CodeGen<'ctx> {
                     None,
                 ))
             }
-            PyType::Range => {
+            PyType::Instance(inst) if inst.class_name == iter_names::RANGE => {
                 let reversed_fn = self.get_or_declare_c_builtin("range_reversed");
                 let call = self
                     .cg
@@ -1758,7 +1759,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .build_call(reversed_fn, &[val.value().into()], "reversed")
                     .unwrap();
                 let result = self.extract_ptr_call_result(call);
-                Ok(PyValue::new(result.value(), PyType::Range, None))
+                Ok(PyValue::range(result.value().into_pointer_value()))
             }
             _ => Err(format!("reversed() not supported for type {:?}", val.ty())),
         }

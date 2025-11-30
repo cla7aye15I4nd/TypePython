@@ -840,7 +840,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val))
             }
-            PyType::Range => {
+            PyType::Instance(inst) if inst.class_name == super::iter_names::RANGE => {
                 let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "range_contains");
                 let call_site = cg
                     .builder
@@ -976,7 +976,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bool(bool_val))
             }
-            PyType::Range => {
+            PyType::Instance(inst) if inst.class_name == super::iter_names::RANGE => {
                 let contains_fn = get_or_declare_builtin(&cg.module, cg.ctx, "range_contains");
                 let call_site = cg
                     .builder
