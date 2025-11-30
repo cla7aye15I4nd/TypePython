@@ -332,6 +332,32 @@ x = {func_name}({args_str})
     return filename, content
 
 
+def generate_invalid_arg_count_file(func_name: str, num_args: int, min_args: int, max_args: int) -> tuple[str, str]:
+    """Generate content for an invalid argument count test file."""
+    if num_args == 0:
+        filename = f"{func_name}_no_args.py"
+        args_str = ""
+        if min_args == 1:
+            reason = f"{func_name}() requires at least 1 argument"
+        else:
+            reason = f"{func_name}() requires at least {min_args} arguments"
+    elif num_args < min_args:
+        filename = f"{func_name}_{num_args}_args.py"
+        # Use simple int arguments
+        args_str = ", ".join(["1"] * num_args)
+        reason = f"{func_name}() requires at least {min_args} argument{'s' if min_args > 1 else ''}, got {num_args}"
+    else:
+        # Too many args
+        filename = f"{func_name}_{num_args}_args.py"
+        args_str = ", ".join(["1"] * num_args)
+        reason = f"{func_name}() takes at most {max_args} argument{'s' if max_args > 1 else ''}, got {num_args}"
+
+    content = f"""# {reason}
+x = {func_name}({args_str})
+"""
+    return filename, content
+
+
 def generate_valid_line(left_type: str, right_type: str, op: str, idx: int) -> str:
     """Generate a single line for valid binary operation."""
     _, left_example, _ = TYPES[left_type]
@@ -491,6 +517,37 @@ def process_builtins():
             continue
 
         _, min_args, max_args, _ = config
+
+        # Generate invalid argument count tests
+        # Test with 0 args if min_args > 0
+        if min_args > 0:
+            filename, content = generate_invalid_arg_count_file(func_name, 0, min_args, max_args)
+            filepath = INVALID_DIR / filename
+            # Verify Python also rejects this
+            if is_code_valid(content.split('\n')[1] + '\n'):
+                print(f"  WARNING: Python accepts {func_name}() with 0 args, skipping")
+            elif filepath.exists():
+                invalid_skipped += 1
+            else:
+                filepath.write_text(content)
+                invalid_generated += 1
+                print(f"  Generated: {filename}")
+
+        # Test with too many args (max_args + 1, max_args + 2)
+        for extra_args in range(1, 3):
+            num_args = max_args + extra_args
+            filename, content = generate_invalid_arg_count_file(func_name, num_args, min_args, max_args)
+            filepath = INVALID_DIR / filename
+            # Verify Python also rejects this
+            if is_code_valid(content.split('\n')[1] + '\n'):
+                # Some functions like print accept any number of args
+                pass
+            elif filepath.exists():
+                invalid_skipped += 1
+            else:
+                filepath.write_text(content)
+                invalid_generated += 1
+                print(f"  Generated: {filename}")
 
         # Collect valid calls for this function
         valid_lines = [
