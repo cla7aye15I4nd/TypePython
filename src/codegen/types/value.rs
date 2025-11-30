@@ -139,31 +139,6 @@ impl<'ctx> CgCtx<'ctx> {
             }
         }
     }
-
-    /// Convert PyType to LLVM BasicTypeEnum
-    pub fn pytype_to_llvm(&self, ty: &PyType) -> inkwell::types::BasicTypeEnum<'ctx> {
-        pytype_to_llvm(self.ctx, ty)
-    }
-}
-
-/// Convert PyType to LLVM BasicTypeEnum (standalone function)
-pub fn pytype_to_llvm<'ctx>(
-    ctx: &'ctx Context,
-    ty: &PyType,
-) -> inkwell::types::BasicTypeEnum<'ctx> {
-    match ty {
-        PyType::Int => ctx.i64_type().into(),
-        PyType::Float => ctx.f64_type().into(),
-        PyType::Bool => ctx.bool_type().into(),
-        PyType::Str => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::Bytes => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::None => ctx.i32_type().into(),
-        PyType::List(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::Dict(_, _) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::Set(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::Tuple(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
-        PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
-    }
 }
 
 /// Function metadata for compile-time function references
@@ -213,14 +188,14 @@ impl<'ctx> FunctionInfo<'ctx> {
         // Build LLVM param types
         let llvm_param_types: Vec<BasicMetadataTypeEnum> = param_types
             .iter()
-            .map(|p| pytype_to_llvm(context, p).into())
+            .map(|p| p.to_llvm(context).into())
             .collect();
 
         // Build function type
         let fn_type = match return_type {
             PyType::None => context.void_type().fn_type(&llvm_param_types, false),
             _ => {
-                let ret_type = pytype_to_llvm(context, &return_type);
+                let ret_type = return_type.to_llvm(context);
                 ret_type.fn_type(&llvm_param_types, false)
             }
         };
@@ -253,14 +228,14 @@ impl<'ctx> FunctionInfo<'ctx> {
         let llvm_param_types: Vec<BasicMetadataTypeEnum> = self
             .param_types
             .iter()
-            .map(|t| pytype_to_llvm(context, t).into())
+            .map(|t| t.to_llvm(context).into())
             .collect();
 
         // Build function type
         let fn_type = match &self.return_type {
             PyType::None => context.void_type().fn_type(&llvm_param_types, false),
             _ => {
-                let ret_type = pytype_to_llvm(context, &self.return_type);
+                let ret_type = self.return_type.to_llvm(context);
                 ret_type.fn_type(&llvm_param_types, false)
             }
         };
@@ -353,6 +328,23 @@ impl PyType {
             Type::Set(elem_ty) => Ok(PyType::Set(Box::new(PyType::from_ast_type(elem_ty)?))),
             Type::Tuple(_) => Err("Tuple type not yet implemented".to_string()),
             Type::Custom(name) => Err(format!("Custom type '{}' not yet implemented", name)),
+        }
+    }
+
+    /// Convert PyType to LLVM BasicTypeEnum
+    pub fn to_llvm<'ctx>(&self, ctx: &'ctx Context) -> inkwell::types::BasicTypeEnum<'ctx> {
+        match self {
+            PyType::Int => ctx.i64_type().into(),
+            PyType::Float => ctx.f64_type().into(),
+            PyType::Bool => ctx.bool_type().into(),
+            PyType::Str => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Bytes => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::None => ctx.i32_type().into(),
+            PyType::List(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Dict(_, _) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Set(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Tuple(_) => ctx.ptr_type(inkwell::AddressSpace::default()).into(),
+            PyType::Function | PyType::Module | PyType::Macro => ctx.i64_type().into(),
         }
     }
 }

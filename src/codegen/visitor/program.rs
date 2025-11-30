@@ -2,7 +2,7 @@
 use super::super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
-use crate::types::PyValue;
+use crate::types::{PyType, PyValue};
 
 use inkwell::values::BasicValueEnum;
 
@@ -56,9 +56,10 @@ impl<'ctx> CodeGen<'ctx> {
         // Allocate space for parameters and store them
         for (i, param) in func.params.iter().enumerate() {
             let param_value = function.get_nth_param(i as u32).unwrap();
-            let alloca = self.create_entry_block_alloca(&func.name, &param.name, &param.param_type);
+            let py_type = PyType::from_ast_type(&param.param_type)?;
+            let alloca = self.create_entry_block_alloca(&func.name, &param.name, &py_type);
             self.cg.builder.build_store(alloca, param_value).unwrap();
-            let var = PyValue::from_ast_type(&param.param_type, param_value, Some(alloca))?;
+            let var = PyValue::new(param_value, py_type, Some(alloca));
             self.variables.insert(param.name.clone(), var);
         }
 

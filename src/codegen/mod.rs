@@ -417,13 +417,18 @@ impl<'ctx> CodeGen<'ctx> {
         let param_types: Vec<BasicMetadataTypeEnum> = func
             .params
             .iter()
-            .map(|p| self.type_to_llvm(&p.param_type).into())
+            .map(|p| {
+                let py_type = PyType::from_ast_type(&p.param_type).unwrap_or(PyType::None);
+                py_type.to_llvm(self.cg.ctx).into()
+            })
             .collect();
 
         let fn_type = match func.return_type {
             Type::None => self.cg.ctx.void_type().fn_type(&param_types, false),
             _ => {
-                let return_type = self.type_to_llvm(&func.return_type);
+                let return_py_type =
+                    PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
+                let return_type = return_py_type.to_llvm(self.cg.ctx);
                 return_type.fn_type(&param_types, false)
             }
         };
@@ -720,50 +725,13 @@ impl<'ctx> CodeGen<'ctx> {
         PyValue::int(pv.into())
     }
 
-    pub(crate) fn type_to_llvm(&self, ty: &Type) -> BasicTypeEnum<'ctx> {
-        match ty {
-            Type::Int => self.cg.ctx.i64_type().into(),
-            Type::Float => self.cg.ctx.f64_type().into(),
-            Type::Bool => self.cg.ctx.bool_type().into(),
-            Type::Str => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            Type::Bytes => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            Type::None => self.cg.ctx.i32_type().into(),
-            // Container types are all pointers to heap-allocated structs
-            Type::List(_) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            Type::Dict(_, _) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            Type::Set(_) => self
-                .cg
-                .ctx
-                .ptr_type(inkwell::AddressSpace::default())
-                .into(),
-            Type::Tuple(_) => panic!("Tuple type not yet supported"),
-            Type::Custom(_) => panic!("Custom type not yet supported"),
-        }
-    }
-
     pub(crate) fn create_entry_block_alloca(
         &self,
         _fn_name: &str,
         var_name: &str,
-        var_type: &Type,
+        var_type: &PyType,
     ) -> PointerValue<'ctx> {
-        let llvm_type = self.type_to_llvm(var_type);
+        let llvm_type = var_type.to_llvm(self.cg.ctx);
         self.create_entry_block_alloca_with_type(var_name, llvm_type)
     }
 

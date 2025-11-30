@@ -55,7 +55,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub(crate) fn visit_none_lit_impl(&mut self) -> Result<PyValue<'ctx>, String> {
-        // Represent None as i32(0) - consistent with type_to_llvm(Type::None)
+        // Represent None as i32(0) - consistent with PyType::None.to_llvm()
         let ir_val = self.cg.ctx.i32_type().const_zero().into();
         Ok(PyValue::none(ir_val))
     }

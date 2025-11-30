@@ -16,14 +16,15 @@ impl<'ctx> CodeGen<'ctx> {
             .get_name()
             .to_string_lossy()
             .to_string();
-        let alloca = self.create_entry_block_alloca(&fn_name, name, var_type);
+        let py_type = PyType::from_ast_type(var_type)?;
+        let alloca = self.create_entry_block_alloca(&fn_name, name, &py_type);
         let val = self.evaluate_expression(value)?;
 
         // Coerce the value to match the declared type if needed
         let coerced_val = self.coerce_value_to_type(val.value(), var_type)?;
 
         self.cg.builder.build_store(alloca, coerced_val).unwrap();
-        let var = PyValue::from_ast_type(var_type, coerced_val, Some(alloca))?;
+        let var = PyValue::new(coerced_val, py_type, Some(alloca));
         self.variables.insert(name.to_string(), var);
         Ok(())
     }
@@ -44,7 +45,7 @@ impl<'ctx> CodeGen<'ctx> {
                     var.store_value(&self.cg.builder, &val)?;
                 } else {
                     // Variable doesn't exist, create it with inferred type
-                    let llvm_type = self.cg.pytype_to_llvm(&val.ty);
+                    let llvm_type = val.ty.to_llvm(self.cg.ctx);
                     let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
                     self.cg.builder.build_store(alloca, val.value()).unwrap();
                     let var = PyValue::new(val.value(), val.ty.clone(), Some(alloca));
