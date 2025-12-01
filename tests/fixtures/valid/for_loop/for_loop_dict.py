@@ -19,10 +19,14 @@ print(b"Total age:", total)
 for name, age in ages.items():
     print(b"Person:", name, b"Age:", age)
 
-# Dict with int keys
+# Dict with int keys - use sum to avoid order dependency
 scores: dict[int, str] = {1: "first", 2: "second", 3: "third"}
+pos_sum: int = 0
 for pos in scores:
-    print(b"Position:", pos)
+    pos_sum = pos_sum + pos
+print(b"Position sum:", pos_sum)
 
+items_sum: int = 0
 for pos, label in scores.items():
-    print(b"Pos:", pos, b"Label:", label)
+    items_sum = items_sum + pos
+print(b"Items sum:", items_sum)

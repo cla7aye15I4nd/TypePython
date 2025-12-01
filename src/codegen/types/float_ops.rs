@@ -273,7 +273,14 @@ pub fn binary_op<'ctx>(
             let (fn_name, label) = match &rhs.ty() {
                 PyType::List(_) => ("list_contains_float", "list_contains"),
                 PyType::Dict(_, _) => ("dict_contains_float", "dict_contains"),
-                PyType::Set(_) => ("set_contains_float", "set_contains"),
+                PyType::Set(elem_ty) => {
+                    // For set[float], use float_set_contains; for set[int], use set_contains_float
+                    if matches!(elem_ty.as_ref(), PyType::Float) {
+                        ("float_set_contains", "float_set_contains")
+                    } else {
+                        ("set_contains_float", "set_contains")
+                    }
+                }
                 _ => {
                     return Err(format!(
                         "Membership operator {:?} not supported for float in {:?}",

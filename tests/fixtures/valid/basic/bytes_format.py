@@ -7,10 +7,10 @@ b2: bytes = b"Pi is %f"
 result2: bytes = b2 % 3.14
 print(result2)
 
-b3: bytes = b"Flag: %s"
-result3: bytes = b3 % True
+b3: bytes = b"Flag: %d"
+result3: bytes = b3 % 1
 print(result3)
 
-b4: bytes = b"Name: %s"
-result4: bytes = b4 % "Alice"
+b4: bytes = b"Num: %d"
+result4: bytes = b4 % 99
 print(result4)

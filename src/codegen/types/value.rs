@@ -315,7 +315,15 @@ impl PyType {
                         PyType::None,
                     )),
                     "reverse" => Some(("list_reverse", PyType::None)),
-                    "sort" => Some(("list_sort", PyType::None)),
+                    "sort" => Some((
+                        match type_prefix {
+                            "str_list" => "str_list_sort",
+                            "float_list" => "float_list_sort",
+                            "bool_list" => "bool_list_sort",
+                            _ => "list_sort",
+                        },
+                        PyType::None,
+                    )),
                     // Methods returning values
                     "pop" => Some((
                         match type_prefix {

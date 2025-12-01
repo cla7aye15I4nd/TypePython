@@ -637,6 +637,22 @@ PyStrList* str_list_sorted(PyStrList* list) {
     return result;
 }
 
+// Sort string list in place (alphabetically)
+void str_list_sort(PyStrList* list) {
+    if (list == NULL || list->len <= 1) return;
+
+    // Simple bubble sort for strings
+    for (int64_t i = 0; i < list->len - 1; i++) {
+        for (int64_t j = 0; j < list->len - i - 1; j++) {
+            if (strcmp(list->data[j], list->data[j+1]) > 0) {
+                char* tmp = list->data[j];
+                list->data[j] = list->data[j+1];
+                list->data[j+1] = tmp;
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Builtin Functions: sum, sorted, reversed
 // ============================================================================
@@ -984,6 +1000,21 @@ void float_list_setitem(PyFloatList* list, int64_t index, double value) {
     list->data[index] = value;
 }
 
+// Helper for qsort - compare doubles
+static int cmp_double(const void* a, const void* b) {
+    double va = *(const double*)a;
+    double vb = *(const double*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+// Sort float list in place (ascending order)
+void float_list_sort(PyFloatList* list) {
+    if (list == NULL || list->len <= 1) return;
+    qsort(list->data, list->len, sizeof(double), cmp_double);
+}
+
 // --- Bool List Operations ---
 // Note: Bool lists reuse PyList but store int8_t (bool is i1 in LLVM)
 
@@ -1060,6 +1091,19 @@ void bool_list_setitem(PyBoolList* list, int64_t index, int8_t value) {
     if (index < 0) index = list->len + index;
     if (index < 0 || index >= list->len) return;
     list->data[index] = value ? 1 : 0;
+}
+
+// Helper for qsort - compare int8_t (bools)
+static int cmp_int8(const void* a, const void* b) {
+    int8_t va = *(const int8_t*)a;
+    int8_t vb = *(const int8_t*)b;
+    return va - vb;
+}
+
+// Sort bool list in place (False before True)
+void bool_list_sort(PyBoolList* list) {
+    if (list == NULL || list->len <= 1) return;
+    qsort(list->data, list->len, sizeof(int8_t), cmp_int8);
 }
 
 // Print bool list

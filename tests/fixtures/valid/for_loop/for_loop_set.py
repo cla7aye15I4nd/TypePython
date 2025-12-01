@@ -7,10 +7,14 @@ for n in nums:
     total = total + n
 print(b"Sum:", total)
 
-# Iterate over set of strings
+# Iterate over set of strings - collect and sort for deterministic order
 colors: set[str] = {"red", "green", "blue"}
+color_list: list[str] = []
 for color in colors:
-    print(b"Color:", color)
+    color_list.append(color)
+color_list.sort()
+for c in color_list:
+    print(b"Color:", c)
 
 # Empty set iteration
 empty: set[int] = set()

@@ -213,7 +213,42 @@ pub fn binary_op<'ctx>(
         }
 
         BinaryOp::In | BinaryOp::NotIn => {
-            // Coerce Bool to Int and delegate to int_ops
+            // Check if rhs is a set[bool] - need to call bool_set_contains
+            if let PyType::Set(elem_ty) = &rhs.ty() {
+                if matches!(elem_ty.as_ref(), PyType::Bool) {
+                    // bool in set[bool] - use bool_set_contains
+                    let contains_fn =
+                        super::get_or_declare_builtin(&cg.module, cg.ctx, "bool_set_contains");
+                    // Convert i1 to i8 for C ABI compatibility
+                    let lhs_i8 = cg
+                        .builder
+                        .build_int_z_extend(lhs_bool, cg.ctx.i8_type(), "btoi8")
+                        .unwrap();
+                    let call_site = cg
+                        .builder
+                        .build_call(
+                            contains_fn,
+                            &[rhs.runtime_value().into(), lhs_i8.into()],
+                            "bool_set_contains",
+                        )
+                        .unwrap();
+                    let result = super::extract_int_result(call_site, "bool_set_contains");
+                    let bool_val = cg
+                        .builder
+                        .build_int_compare(
+                            IntPredicate::NE,
+                            result,
+                            cg.ctx.i64_type().const_zero(),
+                            "in_bool",
+                        )
+                        .unwrap();
+                    if matches!(op, BinaryOp::NotIn) {
+                        return Ok(PyValue::bool(cg.builder.build_not(bool_val, "not").unwrap()));
+                    }
+                    return Ok(PyValue::bool(bool_val));
+                }
+            }
+            // For other containers, coerce Bool to Int and delegate to int_ops
             let lhs_int = cg
                 .builder
                 .build_int_z_extend(lhs_bool, cg.ctx.i64_type(), "btoi")
