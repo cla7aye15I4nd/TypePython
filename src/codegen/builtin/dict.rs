@@ -92,36 +92,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    /// Get an item by key: dict[key] -> value (for int-keyed dicts)
-    #[allow(dead_code)]
-    pub fn dict_getitem(
-        &mut self,
-        dict_val: BasicValueEnum<'ctx>,
-        key: BasicValueEnum<'ctx>,
-        val_type: &PyType,
-    ) -> Result<PyValue<'ctx>, String> {
-        self.dict_getitem_typed(dict_val, key, &PyType::Int, val_type)
-    }
-
-    /// Set an item by key: dict[key] = value
-    pub fn dict_setitem(
-        &mut self,
-        dict_val: BasicValueEnum<'ctx>,
-        key: BasicValueEnum<'ctx>,
-        value: BasicValueEnum<'ctx>,
-    ) -> Result<(), String> {
-        let setitem_fn = self.get_or_declare_c_builtin("dict_setitem");
-        self.cg
-            .builder
-            .build_call(
-                setitem_fn,
-                &[dict_val.into(), key.into(), value.into()],
-                "dict_setitem",
-            )
-            .unwrap();
-        Ok(())
-    }
-
     /// Delete an item by key: del dict[key]
     pub fn dict_delitem(
         &mut self,

@@ -119,22 +119,6 @@ pub mod iter_names {
     pub const EXCEPTION: &str = "__builtin_exception";
 }
 
-/// Check if a class name is a builtin iterator (includes generators)
-pub fn is_builtin_iterator(class_name: &str) -> bool {
-    class_name.starts_with("__builtin_")
-        && (class_name.contains("iterator")
-            || matches!(
-                class_name,
-                iter_names::ENUMERATE
-                    | iter_names::ZIP
-                    | iter_names::FILTER
-                    | iter_names::DICT_KEYS
-                    | iter_names::DICT_VALUES
-                    | iter_names::DICT_ITEMS
-                    | iter_names::GENERATOR
-            ))
-}
-
 /// Helper to get a field type from instance fields by name
 pub fn get_field_type<'a>(fields: &'a InstanceFields, name: &str) -> Option<&'a PyType> {
     fields.iter().find(|(n, _)| n == name).map(|(_, t)| t)
@@ -143,11 +127,6 @@ pub fn get_field_type<'a>(fields: &'a InstanceFields, name: &str) -> Option<&'a 
 /// Check if a PyType is a Range (Instance with RANGE class name)
 pub fn is_range(ty: &PyType) -> bool {
     matches!(ty, PyType::Instance(inst) if inst.class_name == iter_names::RANGE)
-}
-
-/// Check if a PyType is an Exception (Instance with EXCEPTION class name)
-pub fn is_exception(ty: &PyType) -> bool {
-    matches!(ty, PyType::Instance(inst) if inst.class_name == iter_names::EXCEPTION)
 }
 
 // ============================================================================
@@ -571,18 +550,6 @@ pub struct FunctionInfo<'ctx> {
 }
 
 impl<'ctx> FunctionInfo<'ctx> {
-    /// Create a FunctionInfo for a builtin or method
-    pub fn new(mangled_name: &str, return_type: PyType) -> Self {
-        FunctionInfo {
-            storage: FunctionStorage {
-                mangled_name: mangled_name.to_string(),
-                bound_args: vec![],
-                macro_kind: None,
-            },
-            fn_type: FunctionType::new(vec![], return_type),
-        }
-    }
-
     /// Create a FunctionInfo with a bound receiver (for method calls)
     pub fn bound(mangled_name: &str, return_type: PyType, bound_arg: BasicValueEnum<'ctx>) -> Self {
         FunctionInfo {
@@ -633,10 +600,6 @@ impl<'ctx> FunctionInfo<'ctx> {
         &self.storage.mangled_name
     }
 
-    pub fn param_types(&self) -> &[PyType] {
-        &self.fn_type.param_types
-    }
-
     pub fn return_type(&self) -> PyType {
         self.fn_type.return_type()
     }
@@ -647,11 +610,6 @@ impl<'ctx> FunctionInfo<'ctx> {
 
     pub fn macro_kind(&self) -> Option<MacroKind> {
         self.storage.macro_kind
-    }
-
-    /// Check if this is a builtin macro
-    pub fn is_macro(&self) -> bool {
-        self.storage.macro_kind.is_some()
     }
 
     /// Get the function, declaring it in the module if needed
@@ -997,14 +955,6 @@ impl<'ctx> PyValue<'ctx> {
                 fn_type: fn_type.clone(),
             },
             _ => panic!("get_function called on non-function"),
-        }
-    }
-
-    /// Get the macro kind if this is a builtin macro function
-    pub fn get_macro_kind(&self) -> Option<MacroKind> {
-        match self {
-            PyValue::Function(storage, _) => storage.macro_kind,
-            _ => None,
         }
     }
 

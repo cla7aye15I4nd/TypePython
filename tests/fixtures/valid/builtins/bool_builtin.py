@@ -1,0 +1,10 @@
+# bool builtin
+print(bool(0))
+print(bool(1))
+print(bool(-1))
+print(bool(0.0))
+print(bool(1.0))
+print(bool(""))
+print(bool("hello"))
+print(bool([]))
+print(bool([1, 2]))
