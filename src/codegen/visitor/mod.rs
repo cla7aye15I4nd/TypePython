@@ -5,14 +5,14 @@
 /// - statements.rs: Statement visitor methods (var decl, assignment, if, while, return, etc.)
 /// - program.rs: Program and function visitor methods
 mod expressions;
-mod generator_codegen;
+mod generator;
 mod program;
 mod statements;
 
-use super::generator::is_generator_function;
 use super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
+pub use generator::is_generator_function;
 use inkwell::values::BasicValueEnum;
 
 // Implement the Visitor trait for CodeGen by delegating to the _impl methods
@@ -59,12 +59,31 @@ impl<'ctx> Visitor for CodeGen<'ctx> {
         self.visit_var_decl_impl(name, var_type, value)
     }
 
+    fn visit_annotated_assignment(
+        &mut self,
+        target: &Expression,
+        _var_type: &Type,
+        value: &Expression,
+    ) -> Result<(), Self::Error> {
+        // Annotated assignment is treated as a regular assignment at runtime
+        // The type annotation is used only for static analysis and field type inference
+        self.visit_assignment_impl(target, value)
+    }
+
     fn visit_assignment(
         &mut self,
         target: &Expression,
         value: &Expression,
     ) -> Result<(), Self::Error> {
         self.visit_assignment_impl(target, value)
+    }
+
+    fn visit_tuple_unpack_assignment(
+        &mut self,
+        targets: &[Expression],
+        value: &Expression,
+    ) -> Result<(), Self::Error> {
+        self.visit_tuple_unpack_assignment_impl(targets, value)
     }
 
     fn visit_aug_assignment(

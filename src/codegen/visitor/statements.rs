@@ -13,8 +13,15 @@ impl<'ctx> CodeGen<'ctx> {
         var_type: &Type,
         value: &Expression,
     ) -> Result<(), String> {
-        let py_type = PyType::from_ast_type(var_type)?;
         let val = self.evaluate_expression(value)?;
+
+        // For Instance types, use the type from the evaluated value since it has field info
+        // For other types, use the declared type
+        let py_type = if matches!(val.ty(), PyType::Instance(_)) {
+            val.ty()
+        } else {
+            PyType::from_ast_type(var_type)?
+        };
 
         // Coerce the value to match the declared type if needed
         let coerced_val = self.coerce_value_to_type(val.value(), var_type)?;
@@ -135,7 +142,251 @@ impl<'ctx> CodeGen<'ctx> {
                     _ => panic!("Subscript assignment not supported for type {:?}", obj.ty()),
                 }
             }
+            Expression::Attribute { object, attr } => {
+                // Attribute assignment to class instances (e.g., self.x = value)
+                let obj = self.evaluate_expression(object)?;
+                let val = self.evaluate_expression(value)?;
+
+                match obj.ty() {
+                    PyType::Instance(ref inst) => {
+                        // Find the field index and type
+                        let field_idx = inst
+                            .fields
+                            .iter()
+                            .position(|(name, _)| name == attr)
+                            .ok_or_else(|| format!("Instance has no field '{}'", attr))?;
+
+                        // Get the instance pointer
+                        let instance_ptr = obj.value().into_pointer_value();
+
+                        // Create struct type for GEP
+                        let num_fields = inst.fields.len();
+                        let struct_type = self
+                            .cg
+                            .ctx
+                            .struct_type(&vec![self.cg.ctx.i64_type().into(); num_fields], false);
+
+                        // Get pointer to the field
+                        let field_ptr = self
+                            .cg
+                            .builder
+                            .build_struct_gep(
+                                struct_type,
+                                instance_ptr,
+                                field_idx as u32,
+                                &format!("field_{}_ptr", attr),
+                            )
+                            .unwrap();
+
+                        // Convert value to i64 for storage
+                        let val_as_i64 = self.convert_value_to_i64(&val)?;
+
+                        // Store the value
+                        self.cg.builder.build_store(field_ptr, val_as_i64).unwrap();
+                        Ok(())
+                    }
+                    _ => Err(format!(
+                        "Cannot assign to attribute '{}' on type {:?}",
+                        attr,
+                        obj.ty()
+                    )),
+                }
+            }
             _ => panic!("Invalid assignment target: {:?}", target),
+        }
+    }
+
+    pub(crate) fn visit_tuple_unpack_assignment_impl(
+        &mut self,
+        targets: &[Expression],
+        value: &Expression,
+    ) -> Result<(), String> {
+        // Evaluate the RHS which should be a tuple
+        let val = self.evaluate_expression(value)?;
+
+        match val.ty() {
+            PyType::Tuple(element_types) => {
+                if targets.len() != element_types.len() {
+                    return Err(format!(
+                        "Tuple unpacking: {} targets but tuple has {} elements",
+                        targets.len(),
+                        element_types.len()
+                    ));
+                }
+
+                // Get tuple_getitem function
+                let tuple_getitem_fn = self.get_or_declare_c_builtin("tuple_getitem");
+                let tuple_ptr = val.value().into_pointer_value();
+
+                // First, extract ALL values from the tuple BEFORE any assignment
+                // This is critical for swap patterns like: a, b = b, a
+                let mut extracted_values: Vec<PyValue<'ctx>> = Vec::new();
+
+                for (i, _target) in targets.iter().enumerate() {
+                    let elem_ty = &element_types[i];
+                    let index = self.cg.ctx.i64_type().const_int(i as u64, false);
+
+                    // Call tuple_getitem to get the raw i64 value
+                    use inkwell::values::AnyValue;
+                    let call_site = self
+                        .cg
+                        .builder
+                        .build_call(
+                            tuple_getitem_fn,
+                            &[tuple_ptr.into(), index.into()],
+                            &format!("tuple_elem_{}", i),
+                        )
+                        .unwrap();
+                    let raw_i64 = call_site.as_any_value_enum().into_int_value();
+
+                    // Convert the raw i64 value back to the appropriate type
+                    let elem_val: inkwell::values::BasicValueEnum = match elem_ty {
+                        PyType::Float => {
+                            // Bitcast i64 back to f64
+                            self.cg
+                                .builder
+                                .build_bit_cast(raw_i64, self.cg.ctx.f64_type(), "i64_as_float")
+                                .unwrap()
+                        }
+                        PyType::Bool => {
+                            // Truncate i64 to i1 for bool
+                            self.cg
+                                .builder
+                                .build_int_truncate(raw_i64, self.cg.ctx.bool_type(), "i64_as_bool")
+                                .unwrap()
+                                .into()
+                        }
+                        PyType::Str
+                        | PyType::Bytes
+                        | PyType::List(_)
+                        | PyType::Dict(_, _)
+                        | PyType::Set(_)
+                        | PyType::Tuple(_)
+                        | PyType::Instance(_) => {
+                            // Int to pointer for reference types
+                            self.cg
+                                .builder
+                                .build_int_to_ptr(
+                                    raw_i64,
+                                    self.cg.ctx.ptr_type(inkwell::AddressSpace::default()),
+                                    "i64_as_ptr",
+                                )
+                                .unwrap()
+                                .into()
+                        }
+                        _ => {
+                            // Int - use directly
+                            raw_i64.into()
+                        }
+                    };
+
+                    extracted_values.push(PyValue::new(elem_val, elem_ty.clone(), None));
+                }
+
+                // Now assign all values to their targets
+                for (i, target) in targets.iter().enumerate() {
+                    self.assign_to_target(target, extracted_values[i].clone())?;
+                }
+
+                Ok(())
+            }
+            _ => Err(format!(
+                "Tuple unpacking requires a tuple, got {:?}",
+                val.ty()
+            )),
+        }
+    }
+
+    /// Helper function to assign a value to a target expression
+    fn assign_to_target(&mut self, target: &Expression, val: PyValue<'ctx>) -> Result<(), String> {
+        match target {
+            Expression::Var(name) => {
+                // Check if variable exists
+                if let Some(var) = self.variables.get(name).cloned() {
+                    var.store_value(&self.cg.builder, &val)?;
+                } else {
+                    // Create new variable
+                    let llvm_type = val.ty().to_llvm(self.cg.ctx);
+                    let alloca = self.create_entry_block_alloca_with_type(name, llvm_type);
+                    self.cg.builder.build_store(alloca, val.value()).unwrap();
+                    let var = PyValue::new(val.value(), val.ty().clone(), Some(alloca));
+                    self.variables.insert(name.to_string(), var);
+                }
+                Ok(())
+            }
+            Expression::Attribute { object, attr } => {
+                let obj = self.evaluate_expression(object)?;
+                match obj.ty() {
+                    PyType::Instance(ref inst) => {
+                        // Find the field index
+                        let field_idx = inst
+                            .fields
+                            .iter()
+                            .position(|(name, _)| name == attr)
+                            .ok_or_else(|| format!("Instance has no field '{}'", attr))?;
+
+                        let instance_ptr = obj.value().into_pointer_value();
+                        let num_fields = inst.fields.len();
+                        let struct_type = self
+                            .cg
+                            .ctx
+                            .struct_type(&vec![self.cg.ctx.i64_type().into(); num_fields], false);
+
+                        let field_ptr = self
+                            .cg
+                            .builder
+                            .build_struct_gep(
+                                struct_type,
+                                instance_ptr,
+                                field_idx as u32,
+                                &format!("field_{}_ptr", attr),
+                            )
+                            .unwrap();
+
+                        let val_as_i64 = self.convert_value_to_i64(&val)?;
+                        self.cg.builder.build_store(field_ptr, val_as_i64).unwrap();
+                        Ok(())
+                    }
+                    _ => Err(format!(
+                        "Cannot assign to attribute '{}' on type {:?}",
+                        attr,
+                        obj.ty()
+                    )),
+                }
+            }
+            Expression::Subscript { object, index } => {
+                let obj = self.evaluate_expression(object)?;
+                let idx = self.evaluate_expression(index)?;
+
+                match &obj.ty() {
+                    PyType::List(_) => {
+                        self.list_setitem(obj.value(), idx.value(), val.value())?;
+                        Ok(())
+                    }
+                    PyType::Dict(key_type, _) => {
+                        let val_as_i64 = self.convert_value_to_i64(&val)?;
+                        let setitem_fn = if matches!(key_type.as_ref(), PyType::Str) {
+                            self.get_or_declare_c_builtin("str_dict_setitem")
+                        } else {
+                            self.get_or_declare_c_builtin("dict_setitem")
+                        };
+                        self.cg
+                            .builder
+                            .build_call(
+                                setitem_fn,
+                                &[obj.value().into(), idx.value().into(), val_as_i64.into()],
+                                "dict_setitem",
+                            )
+                            .unwrap();
+                        Ok(())
+                    }
+                    _ => Err(format!(
+                        "Subscript assignment not supported for type {:?}",
+                        obj.ty()
+                    )),
+                }
+            }
+            _ => Err(format!("Invalid assignment target: {:?}", target)),
         }
     }
 
@@ -637,8 +888,38 @@ impl<'ctx> CodeGen<'ctx> {
             // Could be: raise ValueError, raise ValueError("msg"), raise exc_instance
             match exc_expr {
                 Expression::Var(name) => {
+                    // Special handling for StopIteration - just set flag and return
+                    if name == "StopIteration" {
+                        self.set_stop_iteration_flag();
+                        // Return from the current function with a default value
+                        if let Some(current_fn) = self.current_function {
+                            let ret_type = current_fn.get_type().get_return_type();
+                            if let Some(ret_ty) = ret_type {
+                                if ret_ty.is_int_type() {
+                                    self.cg
+                                        .builder
+                                        .build_return(Some(&self.cg.ctx.i64_type().const_zero()))
+                                        .unwrap();
+                                } else if ret_ty.is_pointer_type() {
+                                    self.cg
+                                        .builder
+                                        .build_return(Some(&ptr_type.const_null()))
+                                        .unwrap();
+                                } else {
+                                    self.cg.builder.build_return(None).unwrap();
+                                }
+                            } else {
+                                self.cg.builder.build_return(None).unwrap();
+                            }
+                        } else {
+                            self.cg.builder.build_return(None).unwrap();
+                        }
+                        return Ok(());
+                    }
+
                     // Could be an exception type name or an exception instance
                     let type_id = self.exception_type_id_from_name(name);
+
                     if type_id != 1 {
                         // Known exception type - create new instance
                         let exception_new_fn = self.get_or_declare_exception_fn("exception_new");
@@ -700,6 +981,37 @@ impl<'ctx> CodeGen<'ctx> {
                 Expression::Call { func, args } => {
                     // raise ValueError("message")
                     if let Expression::Var(type_name) = func.as_ref() {
+                        // Special handling for StopIteration - just set flag and return
+                        if type_name == "StopIteration" {
+                            self.set_stop_iteration_flag();
+                            // Return from the current function with a default value
+                            if let Some(current_fn) = self.current_function {
+                                let ret_type = current_fn.get_type().get_return_type();
+                                if let Some(ret_ty) = ret_type {
+                                    if ret_ty.is_int_type() {
+                                        self.cg
+                                            .builder
+                                            .build_return(Some(
+                                                &self.cg.ctx.i64_type().const_zero(),
+                                            ))
+                                            .unwrap();
+                                    } else if ret_ty.is_pointer_type() {
+                                        self.cg
+                                            .builder
+                                            .build_return(Some(&ptr_type.const_null()))
+                                            .unwrap();
+                                    } else {
+                                        self.cg.builder.build_return(None).unwrap();
+                                    }
+                                } else {
+                                    self.cg.builder.build_return(None).unwrap();
+                                }
+                            } else {
+                                self.cg.builder.build_return(None).unwrap();
+                            }
+                            return Ok(());
+                        }
+
                         let type_id = self.exception_type_id_from_name(type_name);
                         let exception_new_fn = self.get_or_declare_exception_fn("exception_new");
                         let type_id_val = self.cg.ctx.i64_type().const_int(type_id as u64, false);
@@ -824,6 +1136,34 @@ impl<'ctx> CodeGen<'ctx> {
             self.nonlocal_vars.insert(name.clone());
         }
         Ok(())
+    }
+
+    /// Set the global __stop_iteration_flag to true
+    /// This is used by the iterator protocol when StopIteration is raised
+    pub(crate) fn set_stop_iteration_flag(&mut self) {
+        // Get or create the global stop iteration flag
+        let stop_flag_global = self
+            .cg
+            .module
+            .get_global("__stop_iteration_flag")
+            .unwrap_or_else(|| {
+                let g = self.cg.module.add_global(
+                    self.cg.ctx.bool_type(),
+                    None,
+                    "__stop_iteration_flag",
+                );
+                g.set_initializer(&self.cg.ctx.bool_type().const_zero());
+                g
+            });
+
+        // Set the flag to true
+        self.cg
+            .builder
+            .build_store(
+                stop_flag_global.as_pointer_value(),
+                self.cg.ctx.bool_type().const_int(1, false),
+            )
+            .unwrap();
     }
 }
 

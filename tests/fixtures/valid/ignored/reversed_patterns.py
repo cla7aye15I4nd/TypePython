@@ -76,11 +76,14 @@ for x in reversed([1, 2, 3, 4, 5]):
 
 # Reversed custom iterator
 class Countdown:
+    n: int
+    current: int
+
     def __init__(self, n: int) -> None:
         self.n: int = n
         self.current: int = n
 
-    def __iter__(self) -> Countdown:
+    def __iter__(self) -> 'Countdown':
         self.current = self.n
         return self
 

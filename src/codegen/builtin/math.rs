@@ -1,7 +1,7 @@
 //! Math builtin functions: abs, min, max, pow, round, len, print
 
 use crate::ast::Expression;
-use crate::codegen::types::iter_names;
+use crate::codegen::types::{iter_names, PtrStorage};
 use crate::codegen::CodeGen;
 use crate::types::{PyType, PyValue};
 use inkwell::FloatPredicate;
@@ -1760,6 +1760,22 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 let result = self.extract_ptr_call_result(call);
                 Ok(PyValue::range(result.value().into_pointer_value()))
+            }
+            PyType::Tuple(elem_types) => {
+                // For tuples, we call tuple_reversed which returns a new tuple
+                let reversed_fn = self.get_or_declare_c_builtin("tuple_reversed");
+                let call = self
+                    .cg
+                    .builder
+                    .build_call(reversed_fn, &[val.value().into()], "reversed")
+                    .unwrap();
+                let result = self.extract_ptr_call_result(call);
+                // Reverse the element types in the returned tuple type
+                let reversed_types: Vec<PyType> = elem_types.iter().rev().cloned().collect();
+                Ok(PyValue::Tuple(
+                    PtrStorage::Direct(result.value().into_pointer_value()),
+                    reversed_types,
+                ))
             }
             _ => Err(format!("reversed() not supported for type {:?}", val.ty())),
         }

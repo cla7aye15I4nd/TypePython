@@ -422,7 +422,7 @@ pub fn binary_op<'ctx>(
             }
             PyType::Bytes => {
                 let format_fn =
-                    super::get_or_declare_builtin(&cg.module, cg.ctx, "str_format_bytes");
+                    super::get_or_declare_builtin(&cg.module, cg.ctx, "bytes_format_bytes");
                 let call_site = cg
                     .builder
                     .build_call(
@@ -433,7 +433,7 @@ pub fn binary_op<'ctx>(
                     .unwrap();
                 Ok(PyValue::bytes(super::extract_ptr_result(
                     call_site,
-                    "str_format_bytes",
+                    "bytes_format_bytes",
                 )))
             }
             PyType::None => {

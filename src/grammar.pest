@@ -199,9 +199,14 @@ expr_stmt = { expression ~ NEWLINE }
 
 // Core statement forms
 var_decl = { target ~ WS* ~ COLON ~ WS* ~ type_spec ~ WS* ~ ASSIGN ~ WS* ~ expression }
-assignment = { target ~ WS* ~ ASSIGN ~ WS* ~ expression }
+// Assignment supports both single target and tuple unpacking: x = y or x, y = z
+// RHS uses tuple_or_expr to allow bare tuple creation: a, b = c, d
+assignment = { target_list ~ WS* ~ ASSIGN ~ WS* ~ tuple_or_expr }
 aug_assignment = { target ~ WS* ~ aug_op ~ WS* ~ expression }
 return_inner = { RETURN ~ (WS+ ~ expression)? }
+
+// Tuple expression or single expression - allows bare tuples like a, b on RHS
+tuple_or_expr = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ | expression }
 
 // Augmented assignment operators
 aug_op = {
@@ -209,6 +214,9 @@ aug_op = {
     PERCENT_ASSIGN | POW_ASSIGN | BITOR_ASSIGN | BITXOR_ASSIGN | BITAND_ASSIGN |
     LSHIFT_ASSIGN | RSHIFT_ASSIGN
 }
+
+// Target list for tuple unpacking: x, y or (x, y) - at least one comma makes it a tuple
+target_list = { target ~ (WS* ~ COMMA ~ WS* ~ target)+ | target }
 
 // Assignment target (can be simple name or subscript/attribute)
 target = { subscript_expr | attribute_expr | ID }
@@ -284,9 +292,13 @@ class_body = { INDENT ~ NEWLINE* ~ class_member+ ~ DEDENT }
 
 class_member = {
     method_decl
+    | class_field_stmt
     | var_decl_stmt
     | pass_stmt
 }
+
+// Class field declaration without default value: name: type
+class_field_stmt = { ID ~ WS* ~ COLON ~ WS* ~ type_spec ~ NEWLINE }
 
 method_decl = {
     DEF ~ WS+ ~ ID ~ WS* ~ LPAREN ~ WS* ~ method_param_list? ~ WS* ~ RPAREN ~ WS* ~ method_return_type? ~ WS* ~ COLON ~ NEWLINE ~ block
@@ -322,14 +334,19 @@ basic_type = {
 
 // Full type specification - generic types must come first due to how parsing works
 // ID allows class type references like Fibonacci, MyClass, etc.
+// quoted_type allows forward references like 'Countdown'
 type_spec = {
     list_type
     | dict_type
     | set_type
     | tuple_type
     | basic_type
+    | quoted_type
     | ID
 }
+
+// Forward reference type: 'ClassName' or "ClassName"
+quoted_type = { "'" ~ ID ~ "'" | "\"" ~ ID ~ "\"" }
 
 // ============================================================================
 // Expressions (Precedence from lowest to highest)
@@ -396,7 +413,16 @@ slice_expr = {
     expression? ~ COLON ~ expression? ~ (COLON ~ expression?)?
 }
 
-arg_list = { expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)? }
+// Argument list for function calls
+// Supports either:
+// 1. Regular arguments: f(a, b, c)
+// 2. Single generator expression without parens: sum(x for x in items)
+arg_list = {
+    // Generator expression as sole argument (no parens): sum(x for x in items)
+    comp_iterable_expr ~ WS+ ~ comprehension_clauses
+    // Regular arguments
+    | expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)?
+}
 
 // Atoms (highest precedence)
 atom = {
@@ -413,6 +439,7 @@ atom = {
     | list_literal
     | set_literal
     | dict_literal
+    | generator_expression
     | tuple_literal
     | SELF
     | ID
@@ -421,7 +448,66 @@ atom = {
 
 // List literal: [1, 2, 3] or []
 list_literal = {
-    LBRACKET ~ WS* ~ (expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACKET
+    // List comprehension: [expr for var in iterable] or [expr for var in iterable if condition]
+    // Use comp_iterable_expr to support ternary expressions
+    LBRACKET ~ WS* ~ comp_iterable_expr ~ WS+ ~ comprehension_clauses ~ WS* ~ RBRACKET
+    // Regular list: [1, 2, 3]
+    | LBRACKET ~ WS* ~ (expression ~ (WS* ~ COMMA ~ WS* ~ expression)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACKET
+}
+
+// Multiple comprehension clauses - first clause, then optional additional clauses
+comprehension_clauses = { comprehension_clause ~ (WS+ ~ comprehension_clause)* }
+
+comprehension_clause = {
+    FOR ~ WS+ ~ comprehension_target ~ WS+ ~ IN ~ WS+ ~ comp_iterable_expr ~ comprehension_ifs
+}
+
+// Zero or more if conditions after the iterable
+comprehension_ifs = { (WS+ ~ comprehension_if)* }
+
+comprehension_target = { ID ~ (WS* ~ COMMA ~ WS* ~ ID)* }
+
+comprehension_if = { IF ~ WS+ ~ comp_condition_expr }
+
+// Expression for comprehension iterable - supports ternary expressions
+// We need to prevent expression rules from consuming whitespace before FOR/IF keywords
+// Ternary: value if condition else other_value
+comp_iterable_expr = { comp_ternary_expr }
+
+// Expression for comprehension condition
+comp_condition_expr = { comp_logic_or_expr }
+
+// Ternary expression for comprehensions: value if condition else other
+// The key is that ternary always has ELSE, while comprehension IF doesn't
+comp_ternary_expr = {
+    comp_logic_or_expr ~ WS+ ~ IF ~ WS+ ~ comp_logic_or_expr ~ WS+ ~ ELSE ~ WS+ ~ comp_ternary_expr
+    | comp_logic_or_expr
+}
+
+// Comprehension-specific expression rules that are aware of FOR/IF boundaries
+// These use negative lookahead to avoid consuming whitespace before FOR/IF keywords
+comp_logic_or_expr = { comp_logic_and_expr ~ (!(WS+ ~ (FOR | IF)) ~ WS+ ~ OR ~ WS* ~ comp_logic_and_expr)* }
+comp_logic_and_expr = { comp_logic_not_expr ~ (!(WS+ ~ (FOR | IF)) ~ WS+ ~ AND ~ WS* ~ comp_logic_not_expr)* }
+comp_logic_not_expr = { (NOT ~ WS+)* ~ comp_comparison_expr }
+comp_comparison_expr = { comp_bitwise_or_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ comp_op ~ WS* ~ comp_bitwise_or_expr)* }
+comp_bitwise_or_expr = { comp_bitwise_xor_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ BITOR ~ WS* ~ comp_bitwise_xor_expr)* }
+comp_bitwise_xor_expr = { comp_bitwise_and_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ BITXOR ~ WS* ~ comp_bitwise_and_expr)* }
+comp_bitwise_and_expr = { comp_shift_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ BITAND ~ WS* ~ comp_shift_expr)* }
+comp_shift_expr = { comp_arith_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ (LSHIFT | RSHIFT) ~ WS* ~ comp_arith_expr)* }
+comp_arith_expr = { comp_term_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ (PLUS | MINUS) ~ WS* ~ comp_term_expr)* }
+comp_term_expr = { comp_factor_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ (STAR | DSLASH | SLASH | PERCENT) ~ WS* ~ comp_factor_expr)* }
+comp_factor_expr = { unary_op ~ WS* ~ comp_factor_expr | comp_power_expr }
+comp_power_expr = { comp_postfix_expr ~ (!(WS* ~ (FOR | IF)) ~ WS* ~ POW ~ WS* ~ comp_factor_expr)? }
+comp_postfix_expr = { atom ~ comp_postfix_trailer* }
+comp_postfix_trailer = {
+    !(WS* ~ (FOR | IF)) ~ WS* ~ DOT ~ WS* ~ ID           // attribute access
+    | !(WS* ~ (FOR | IF)) ~ WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET  // subscript
+    | !(WS* ~ (FOR | IF)) ~ WS* ~ LPAREN ~ WS* ~ arg_list? ~ WS* ~ RPAREN  // function call
+}
+
+// Generator expression: (expr for var in iterable) or (expr for var in iterable if condition)
+generator_expression = {
+    LPAREN ~ WS* ~ comp_iterable_expr ~ WS+ ~ comprehension_clauses ~ WS* ~ RPAREN
 }
 
 // Tuple literal: (1, 2) or (1,) - needs at least one comma to distinguish from grouping
@@ -429,22 +515,36 @@ tuple_literal = {
     LPAREN ~ WS* ~ (expression ~ WS* ~ COMMA ~ WS* ~ (expression ~ (WS* ~ COMMA ~ WS* ~ expression)*)?)? ~ WS* ~ RPAREN
 }
 
-// Dict literal: {key: value, ...} or {}
+// Dict literal: {key: value, ...} or {} or dict comprehension: {k: v for k, v in items}
 dict_literal = {
-    LBRACE ~ WS* ~ (dict_pair ~ (WS* ~ COMMA ~ WS* ~ dict_pair)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACE
+    // Dict comprehension: {key: val for var in iterable}
+    LBRACE ~ WS* ~ comp_iterable_expr ~ WS* ~ COLON ~ WS* ~ comp_iterable_expr ~ WS+ ~ comprehension_clauses ~ WS* ~ RBRACE
+    // Regular dict literal
+    | LBRACE ~ WS* ~ (dict_pair ~ (WS* ~ COMMA ~ WS* ~ dict_pair)* ~ (WS* ~ COMMA)?)? ~ WS* ~ RBRACE
 }
 
 dict_pair = { expression ~ WS* ~ COLON ~ WS* ~ expression }
 
-// Set literal: {1, 2, 3} or {1} - must have at least one element to distinguish from empty dict {}
-// Single element without trailing comma must not look like dict (no colon after first expr)
+// Set literal: {1, 2, 3} or {1} or set comprehension: {x for x in items}
+// Must have at least one element to distinguish from empty dict {}
 set_literal = {
-    LBRACE ~ WS* ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ ~ (WS* ~ COMMA)? ~ WS* ~ RBRACE  // Multiple elements
-    | LBRACE ~ WS* ~ expression ~ WS* ~ COMMA ~ WS* ~ RBRACE  // Single element with trailing comma
-    | LBRACE ~ WS* ~ expression ~ WS* ~ RBRACE  // Single element without comma (distinguished from dict by no colon)
+    // Set comprehension: {elem for var in iterable}
+    LBRACE ~ WS* ~ comp_iterable_expr ~ WS+ ~ comprehension_clauses ~ WS* ~ RBRACE
+    // Multiple elements
+    | LBRACE ~ WS* ~ expression ~ (WS* ~ COMMA ~ WS* ~ expression)+ ~ (WS* ~ COMMA)? ~ WS* ~ RBRACE
+    // Single element with trailing comma
+    | LBRACE ~ WS* ~ expression ~ WS* ~ COMMA ~ WS* ~ RBRACE
+    // Single element without comma (distinguished from dict by no colon)
+    | LBRACE ~ WS* ~ expression ~ WS* ~ RBRACE
 }
 
 // Additional expression helpers
 // These are only used in assignment targets - they match postfix expressions that actually have subscript/attribute access
-subscript_expr = { (SELF | ID) ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+// subscript_expr must come before attribute_expr in target rule due to PEG ordered choice
+
+// A subscript target base can be: self, ID, or an attribute expression (self.attr or obj.attr)
+subscript_base = { (SELF | ID) ~ (WS* ~ DOT ~ WS* ~ ID)* }
+subscript_expr = { subscript_base ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+
+// Attribute expression: self.attr or obj.attr or obj.attr.attr2 etc.
 attribute_expr = { (SELF | ID) ~ (WS* ~ DOT ~ WS* ~ ID)+ }

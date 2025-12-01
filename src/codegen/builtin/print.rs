@@ -53,13 +53,13 @@ impl<'ctx> CodeGen<'ctx> {
             PyType::Str => "print_str",
             PyType::Bytes => "print_bytes",
             PyType::None => "print_none",
-            PyType::List(elem_ty) => {
-                if matches!(elem_ty.as_ref(), PyType::Str) {
-                    "print_str_list"
-                } else {
-                    "print_list"
-                }
-            }
+            PyType::List(elem_ty) => match elem_ty.as_ref() {
+                PyType::Str => "print_str_list",
+                PyType::Float => "print_list_float",
+                PyType::Bool => "print_bool_list",
+                PyType::List(_) => "print_list_list",
+                _ => "print_list",
+            },
             PyType::Tuple(elem_types) => {
                 // For tuples, check if all elements are floats
                 // Use print_pytuple_* for PyTuple (real tuples)

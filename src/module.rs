@@ -13,9 +13,6 @@ pub fn get_clang_path() -> String {
 
 /// Module registry manages all compiled modules
 pub struct ModuleRegistry<'ctx> {
-    /// LLVM context (shared across all modules)
-    #[allow(dead_code)]
-    context: &'ctx Context,
     /// Root paths for all module
     root: PathBuf,
     /// Module values: module_name -> PyValue (Module type with ModuleInfo)
@@ -26,9 +23,8 @@ pub struct ModuleRegistry<'ctx> {
 
 impl<'ctx> ModuleRegistry<'ctx> {
     /// Create a new module registry and preprocess all modules starting from entry_path
-    pub fn new(context: &'ctx Context, root: PathBuf, entry_path: &Path) -> Result<Self, String> {
+    pub fn new(_context: &'ctx Context, root: PathBuf, entry_path: &Path) -> Result<Self, String> {
         let mut registry = ModuleRegistry {
-            context,
             root,
             modules: HashMap::new(),
             programs: HashMap::new(),

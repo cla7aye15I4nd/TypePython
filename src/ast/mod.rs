@@ -86,8 +86,19 @@ pub enum Statement {
         var_type: Type,
         value: Expression,
     },
+    /// Annotated assignment for attribute targets: self.x: Type = value
+    AnnotatedAssignment {
+        target: Expression,
+        var_type: Type,
+        value: Expression,
+    },
     Assignment {
         target: Expression,
+        value: Expression,
+    },
+    /// Tuple unpacking assignment: x, y = expr or self.a, self.b = expr
+    TupleUnpackAssignment {
+        targets: Vec<Expression>,
         value: Expression,
     },
     AugAssignment {
@@ -204,6 +215,41 @@ pub enum Expression {
         value: Option<Box<Expression>>,
         is_from: bool, // yield from vs plain yield
     },
+    /// List comprehension: [expr for var in iterable if condition]
+    ListComprehension {
+        element: Box<Expression>,
+        clauses: Vec<ComprehensionClause>,
+    },
+    /// Dict comprehension: {key: val for var in iterable if condition}
+    DictComprehension {
+        key: Box<Expression>,
+        value: Box<Expression>,
+        clauses: Vec<ComprehensionClause>,
+    },
+    /// Set comprehension: {expr for var in iterable if condition}
+    SetComprehension {
+        element: Box<Expression>,
+        clauses: Vec<ComprehensionClause>,
+    },
+    /// Generator expression: (expr for var in iterable if condition)
+    GeneratorExpression {
+        element: Box<Expression>,
+        clauses: Vec<ComprehensionClause>,
+    },
+    /// Ternary/conditional expression: true_value if condition else false_value
+    Ternary {
+        condition: Box<Expression>,
+        true_value: Box<Expression>,
+        false_value: Box<Expression>,
+    },
+}
+
+/// A comprehension clause (for var in iterable if condition if condition2 ...)
+#[derive(Debug, Clone)]
+pub struct ComprehensionClause {
+    pub target: Vec<String>, // Variable(s) to bind (e.g., x, or k, v for tuple unpacking)
+    pub iterable: Box<Expression>,
+    pub conditions: Vec<Expression>, // Zero or more if conditions
 }
 
 #[derive(Debug, Clone)]

@@ -153,6 +153,9 @@ fn build_class_body(pair: Pair<Rule>) -> (Vec<ClassField>, Vec<Method>) {
                 let inner = member.into_inner().next().unwrap();
                 match inner.as_rule() {
                     Rule::method_decl => methods.push(build_method(inner)),
+                    Rule::class_field_stmt => {
+                        fields.push(build_class_field_simple(inner));
+                    }
                     Rule::var_decl_stmt => {
                         let var_decl = inner.into_inner().next().unwrap();
                         fields.push(build_class_field(var_decl));
@@ -167,6 +170,27 @@ fn build_class_body(pair: Pair<Rule>) -> (Vec<ClassField>, Vec<Method>) {
     }
 
     (fields, methods)
+}
+
+/// Build a class field from class_field_stmt (no default value): name: type
+fn build_class_field_simple(pair: Pair<Rule>) -> ClassField {
+    let mut inner = pair.into_inner();
+
+    let id = inner.next().unwrap();
+    assert_eq!(id.as_rule(), Rule::ID);
+    let name = id.as_str().to_string();
+
+    assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
+
+    let type_pair = inner.next().unwrap();
+    assert_eq!(type_pair.as_rule(), Rule::type_spec);
+    let field_type = build_type(type_pair);
+
+    ClassField {
+        name,
+        field_type,
+        default: None,
+    }
 }
 
 fn build_class_field(pair: Pair<Rule>) -> ClassField {
@@ -257,10 +281,27 @@ fn build_method(pair: Pair<Rule>) -> Method {
 }
 
 fn build_method_param_list(pair: Pair<Rule>) -> Vec<Parameter> {
-    pair.into_inner()
-        .filter(|p| p.as_rule() == Rule::method_param)
-        .map(build_method_param)
-        .collect()
+    let mut params = Vec::new();
+
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::self_param => {
+                // self_param = { SELF ~ (WS* ~ COLON ~ WS* ~ type_spec)? }
+                // Create a parameter for self with the class type (we'll use a placeholder for now)
+                params.push(Parameter {
+                    name: "self".to_string(),
+                    param_type: Type::Custom("Self".to_string()), // Placeholder
+                });
+            }
+            Rule::method_param => {
+                params.push(build_method_param(p));
+            }
+            Rule::COMMA => {} // Skip commas
+            _ => {}
+        }
+    }
+
+    params
 }
 
 fn build_method_param(pair: Pair<Rule>) -> Parameter {
@@ -313,6 +354,14 @@ fn build_type(pair: Pair<Rule>) -> Type {
         Rule::dict_type => build_dict_type(inner),
         Rule::set_type => build_set_type(inner),
         Rule::tuple_type => build_tuple_type(inner),
+        Rule::quoted_type => {
+            // Forward reference: 'ClassName' or "ClassName" - extract the ID inside quotes
+            let id = inner
+                .into_inner()
+                .find(|p| p.as_rule() == Rule::ID)
+                .unwrap();
+            Type::Custom(id.as_str().to_string())
+        }
         Rule::ID => Type::Custom(inner.as_str().to_string()),
         _ => panic!("Unexpected rule in type spec: {:?}", inner.as_rule()),
     }
@@ -431,25 +480,9 @@ fn build_var_decl(pair: Pair<Rule>) -> Statement {
     let target_pair = inner.next().unwrap();
     assert_eq!(target_pair.as_rule(), Rule::target);
 
-    // For var_decl, target must be a simple ID
-    let name = {
-        let mut target_inner = target_pair.into_inner();
-        if let Some(id_pair) = target_inner.next() {
-            // Could be subscript_expr, attribute_expr, or ID
-            match id_pair.as_rule() {
-                Rule::ID => id_pair.as_str().to_string(),
-                Rule::subscript_expr | Rule::attribute_expr => {
-                    panic!("Variable declaration target must be a simple identifier, not a subscript or attribute");
-                }
-                _ => panic!(
-                    "Unexpected rule in var_decl target: {:?}",
-                    id_pair.as_rule()
-                ),
-            }
-        } else {
-            panic!("Expected ID in var_decl target");
-        }
-    };
+    // Check target type - could be ID, subscript_expr, or attribute_expr
+    let target_inner = target_pair.clone().into_inner().next().unwrap();
+    let is_simple_id = target_inner.as_rule() == Rule::ID;
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::COLON);
 
@@ -465,29 +498,73 @@ fn build_var_decl(pair: Pair<Rule>) -> Statement {
 
     assert_eq!(inner.next(), None);
 
-    Statement::VarDecl {
-        name,
-        var_type,
-        value,
+    if is_simple_id {
+        // Simple variable declaration: x: int = 5
+        Statement::VarDecl {
+            name: target_inner.as_str().to_string(),
+            var_type,
+            value,
+        }
+    } else {
+        // Annotated attribute/subscript assignment: self.x: int = 5
+        Statement::AnnotatedAssignment {
+            target: build_target_expr(target_pair),
+            var_type,
+            value,
+        }
     }
 }
 
 fn build_assignment(pair: Pair<Rule>) -> Statement {
     let mut inner = pair.into_inner();
 
-    let target_pair = inner.next().unwrap();
-    assert_eq!(target_pair.as_rule(), Rule::target);
-    let target = build_target_expr(target_pair);
+    let target_list_pair = inner.next().unwrap();
+    assert_eq!(target_list_pair.as_rule(), Rule::target_list);
+
+    // Collect all targets from target_list
+    let targets: Vec<Expression> = target_list_pair
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::target)
+        .map(build_target_expr)
+        .collect();
 
     assert_eq!(inner.next().unwrap().as_rule(), Rule::ASSIGN);
 
-    let expr_pair = inner.next().unwrap();
-    assert_eq!(expr_pair.as_rule(), Rule::expression);
-    let value = build_expression(expr_pair);
+    let tuple_or_expr_pair = inner.next().unwrap();
+    assert_eq!(tuple_or_expr_pair.as_rule(), Rule::tuple_or_expr);
+
+    // Build the RHS - could be a single expression or a bare tuple
+    let value = build_tuple_or_expr(tuple_or_expr_pair);
 
     assert_eq!(inner.next(), None);
 
-    Statement::Assignment { target, value }
+    if targets.len() == 1 {
+        // Single target - regular assignment
+        Statement::Assignment {
+            target: targets.into_iter().next().unwrap(),
+            value,
+        }
+    } else {
+        // Multiple targets - tuple unpacking
+        Statement::TupleUnpackAssignment { targets, value }
+    }
+}
+
+/// Build a tuple_or_expr - could be a single expression or a bare tuple (comma-separated expressions)
+fn build_tuple_or_expr(pair: Pair<Rule>) -> Expression {
+    let expressions: Vec<Expression> = pair
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::expression)
+        .map(build_expression)
+        .collect();
+
+    if expressions.len() == 1 {
+        // Single expression
+        expressions.into_iter().next().unwrap()
+    } else {
+        // Multiple expressions - create a tuple
+        Expression::Tuple(expressions)
+    }
 }
 
 fn build_aug_assignment(pair: Pair<Rule>) -> Statement {
@@ -911,19 +988,25 @@ fn build_expression(pair: Pair<Rule>) -> Expression {
             build_expression(inner)
         }
         Rule::yield_expr => build_yield_expr(pair),
-        Rule::logic_or_expr => build_binary_chain(pair, BinaryOp::Or),
-        Rule::logic_and_expr => build_binary_chain(pair, BinaryOp::And),
-        Rule::logic_not_expr => build_logic_not_expr(pair),
-        Rule::comparison_expr => build_comparison_expr(pair),
-        Rule::bitwise_or_expr => build_binary_chain(pair, BinaryOp::BitOr),
-        Rule::bitwise_xor_expr => build_binary_chain(pair, BinaryOp::BitXor),
-        Rule::bitwise_and_expr => build_binary_chain(pair, BinaryOp::BitAnd),
-        Rule::shift_expr => build_shift_expr(pair),
-        Rule::arith_expr => build_arith_expr(pair),
-        Rule::term_expr => build_term_expr(pair),
-        Rule::factor_expr => build_factor_expr(pair),
-        Rule::power_expr => build_power_expr(pair),
-        Rule::postfix_expr => build_postfix_expr(pair),
+        Rule::logic_or_expr | Rule::comp_logic_or_expr => build_binary_chain(pair, BinaryOp::Or),
+        Rule::logic_and_expr | Rule::comp_logic_and_expr => build_binary_chain(pair, BinaryOp::And),
+        Rule::logic_not_expr | Rule::comp_logic_not_expr => build_logic_not_expr(pair),
+        Rule::comparison_expr | Rule::comp_comparison_expr => build_comparison_expr(pair),
+        Rule::bitwise_or_expr | Rule::comp_bitwise_or_expr => {
+            build_binary_chain(pair, BinaryOp::BitOr)
+        }
+        Rule::bitwise_xor_expr | Rule::comp_bitwise_xor_expr => {
+            build_binary_chain(pair, BinaryOp::BitXor)
+        }
+        Rule::bitwise_and_expr | Rule::comp_bitwise_and_expr => {
+            build_binary_chain(pair, BinaryOp::BitAnd)
+        }
+        Rule::shift_expr | Rule::comp_shift_expr => build_shift_expr(pair),
+        Rule::arith_expr | Rule::comp_arith_expr => build_arith_expr(pair),
+        Rule::term_expr | Rule::comp_term_expr => build_term_expr(pair),
+        Rule::factor_expr | Rule::comp_factor_expr => build_factor_expr(pair),
+        Rule::power_expr | Rule::comp_power_expr => build_power_expr(pair),
+        Rule::postfix_expr | Rule::comp_postfix_expr => build_postfix_expr(pair),
         Rule::subscript_expr => build_subscript_expr(pair),
         Rule::attribute_expr => build_attribute_expr(pair),
         _ => panic!("Unexpected rule in expression: {:?}", pair.as_rule()),
@@ -1091,7 +1174,7 @@ fn build_factor_expr(pair: Pair<Rule>) -> Expression {
                 operand: Box::new(operand),
             }
         }
-        Rule::power_expr => {
+        Rule::power_expr | Rule::comp_power_expr => {
             assert_eq!(inner.next(), None);
             build_expression(first_pair)
         }
@@ -1139,7 +1222,10 @@ fn build_postfix_expr(pair: Pair<Rule>) -> Expression {
 
     // Process postfix operations
     for trailer in inner {
-        assert_eq!(trailer.as_rule(), Rule::postfix_trailer);
+        assert!(
+            trailer.as_rule() == Rule::postfix_trailer
+                || trailer.as_rule() == Rule::comp_postfix_trailer
+        );
         expr = build_postfix_trailer(expr, trailer);
     }
 
@@ -1218,23 +1304,36 @@ fn build_slice_expr(pair: Pair<Rule>) -> Expression {
 }
 
 /// Build a subscript expression from the standalone subscript_expr rule
-/// subscript_expr = { ID ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
+/// subscript_base = { (SELF | ID) ~ (WS* ~ DOT ~ WS* ~ ID)* }
+/// subscript_expr = { subscript_base ~ (WS* ~ LBRACKET ~ WS* ~ (slice_expr | expression) ~ WS* ~ RBRACKET)+ }
 fn build_subscript_expr(pair: Pair<Rule>) -> Expression {
     let items: Vec<_> = pair.into_inner().collect();
 
-    // First item is the ID or SELF
-    let id_pair = &items[0];
-    let mut expr = match id_pair.as_rule() {
-        Rule::ID => Expression::Var(id_pair.as_str().to_string()),
+    // First item is subscript_base
+    let base_pair = &items[0];
+    assert_eq!(base_pair.as_rule(), Rule::subscript_base);
+
+    // Build the base expression (which may include attribute accesses)
+    let base_items: Vec<_> = base_pair.clone().into_inner().collect();
+    let first = &base_items[0];
+    let mut expr = match first.as_rule() {
+        Rule::ID => Expression::Var(first.as_str().to_string()),
         Rule::SELF => Expression::Var("self".to_string()),
-        _ => panic!(
-            "Unexpected rule in subscript_expr base: {:?}",
-            id_pair.as_rule()
-        ),
+        _ => panic!("Unexpected rule in subscript_base: {:?}", first.as_rule()),
     };
 
+    // Handle any attribute accesses in the base (e.g., self.counts in self.counts[key])
+    for item in base_items.iter().skip(1) {
+        if item.as_rule() == Rule::ID {
+            expr = Expression::Attribute {
+                object: Box::new(expr),
+                attr: item.as_str().to_string(),
+            };
+        }
+        // Skip DOT tokens
+    }
+
     // Remaining items are subscript sequences: LBRACKET, expression, RBRACKET
-    // Note: slices are handled through build_postfix_trailer, not here
     for item in items.iter().skip(1) {
         if item.as_rule() == Rule::expression {
             expr = Expression::Subscript {
@@ -1329,10 +1428,44 @@ fn build_binop_chain(items: Vec<(Option<BinaryOp>, Expression)>) -> Expression {
 }
 
 fn build_arg_list(pair: Pair<Rule>) -> Vec<Expression> {
-    pair.into_inner()
-        .filter(|p| p.as_rule() != Rule::COMMA)
-        .map(build_expression)
-        .collect()
+    let inner: Vec<_> = pair.into_inner().collect();
+
+    // Check if this is a generator expression argument (comp_iterable_expr + comprehension_clauses)
+    let has_comprehension = inner
+        .iter()
+        .any(|p| p.as_rule() == Rule::comprehension_clauses);
+
+    if has_comprehension {
+        // Generator expression as sole argument: sum(x for x in items)
+        let element_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+            .expect("arg_list comprehension must have element");
+        let element = build_expression_from_comp(element_pair.clone());
+
+        let clauses_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comprehension_clauses)
+            .expect("arg_list comprehension must have clauses");
+        let clauses: Vec<crate::ast::ComprehensionClause> = clauses_pair
+            .clone()
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::comprehension_clause)
+            .map(|clause| build_comprehension_clause(clause))
+            .collect();
+
+        vec![Expression::GeneratorExpression {
+            element: Box::new(element),
+            clauses,
+        }]
+    } else {
+        // Regular arguments
+        inner
+            .into_iter()
+            .filter(|p| p.as_rule() != Rule::COMMA)
+            .map(build_expression)
+            .collect()
+    }
 }
 
 fn build_atom(pair: Pair<Rule>) -> Expression {
@@ -1424,6 +1557,10 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
                 assert_eq!(inner.next(), None);
                 build_tuple_literal(first)
             }
+            Rule::generator_expression => {
+                assert_eq!(inner.next(), None);
+                build_generator_expression(first)
+            }
             _ => panic!("Unexpected rule in atom: {:?}", first.as_rule()),
         },
         None => panic!("Empty atom - grammar should ensure atoms have content"),
@@ -1431,43 +1568,257 @@ fn build_atom(pair: Pair<Rule>) -> Expression {
 }
 
 fn build_list_literal(pair: Pair<Rule>) -> Expression {
-    let elements: Vec<Expression> = pair
+    let inner: Vec<_> = pair.into_inner().collect();
+
+    // Check if this is a list comprehension (has comprehension_clauses)
+    let has_comprehension = inner
+        .iter()
+        .any(|p| p.as_rule() == Rule::comprehension_clauses);
+
+    if has_comprehension {
+        // List comprehension: [expr for var in iterable]
+        // Element now uses comp_iterable_expr to support ternary
+        let element_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+            .expect("list comprehension must have element");
+        let element = build_expression_from_comp(element_pair.clone());
+
+        // Find comprehension_clauses and extract individual clauses
+        let clauses_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comprehension_clauses)
+            .unwrap();
+        let clauses: Vec<crate::ast::ComprehensionClause> = clauses_pair
+            .clone()
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::comprehension_clause)
+            .map(|clause| build_comprehension_clause(clause))
+            .collect();
+
+        Expression::ListComprehension {
+            element: Box::new(element),
+            clauses,
+        }
+    } else {
+        // Regular list literal
+        let elements: Vec<Expression> = inner
+            .into_iter()
+            .filter(|p| !matches!(p.as_rule(), Rule::LBRACKET | Rule::RBRACKET | Rule::COMMA))
+            .map(build_expression)
+            .collect();
+
+        Expression::List(elements)
+    }
+}
+
+fn build_comprehension_clause(pair: Pair<Rule>) -> crate::ast::ComprehensionClause {
+    let inner: Vec<_> = pair.into_inner().collect();
+
+    // Find target (comprehension_target)
+    let target_pair = inner
+        .iter()
+        .find(|p| p.as_rule() == Rule::comprehension_target)
+        .unwrap();
+    let targets: Vec<String> = target_pair
+        .clone()
         .into_inner()
-        .filter(|p| !matches!(p.as_rule(), Rule::LBRACKET | Rule::RBRACKET | Rule::COMMA))
-        .map(build_expression)
+        .filter(|p| p.as_rule() == Rule::ID)
+        .map(|p| p.as_str().to_string())
         .collect();
 
-    Expression::List(elements)
+    // Find iterable expression (comp_iterable_expr wraps comp_logic_or_expr)
+    let iterable_pair = inner
+        .iter()
+        .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+        .unwrap();
+    // Unwrap to get to the actual expression
+    let iterable = build_expression_from_comp(iterable_pair.clone());
+
+    // Find all conditions - now inside comprehension_ifs rule
+    let conditions: Vec<crate::ast::Expression> = if let Some(ifs_pair) = inner
+        .iter()
+        .find(|p| p.as_rule() == Rule::comprehension_ifs)
+    {
+        ifs_pair
+            .clone()
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::comprehension_if)
+            .map(|cond| {
+                // comprehension_if contains comp_condition_expr
+                let cond_expr = cond
+                    .into_inner()
+                    .find(|p| p.as_rule() == Rule::comp_condition_expr)
+                    .unwrap();
+                build_expression_from_comp(cond_expr)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    crate::ast::ComprehensionClause {
+        target: targets,
+        iterable: Box::new(iterable),
+        conditions,
+    }
+}
+
+/// Build expression from comprehension-specific expression rules
+fn build_expression_from_comp(pair: Pair<Rule>) -> Expression {
+    // These rules wrap the actual expression logic, unwrap to get to standard expression handling
+    match pair.as_rule() {
+        Rule::comp_iterable_expr | Rule::comp_condition_expr => {
+            // These contain comp_ternary_expr or comp_logic_or_expr
+            let inner = pair.into_inner().next().unwrap();
+            build_expression_from_comp(inner)
+        }
+        Rule::comp_ternary_expr => {
+            // Ternary: value if condition else other
+            // Structure: comp_logic_or_expr (IF comp_logic_or_expr ELSE comp_ternary_expr)?
+            // Filter out IF and ELSE tokens
+            let inner: Vec<_> = pair
+                .into_inner()
+                .filter(|p| !matches!(p.as_rule(), Rule::IF | Rule::ELSE))
+                .collect();
+            if inner.len() == 1 {
+                // No ternary, just the value
+                build_expression_from_comp(inner[0].clone())
+            } else {
+                // Ternary expression: value if condition else other
+                // inner[0] = true_value, inner[1] = condition, inner[2] = false_value
+                let true_value = build_expression_from_comp(inner[0].clone());
+                let condition = build_expression_from_comp(inner[1].clone());
+                let false_value = build_expression_from_comp(inner[2].clone());
+                Expression::Ternary {
+                    condition: Box::new(condition),
+                    true_value: Box::new(true_value),
+                    false_value: Box::new(false_value),
+                }
+            }
+        }
+        Rule::comp_logic_or_expr | Rule::comp_logic_and_expr | Rule::comp_logic_not_expr => {
+            // These have the same structure as the standard expression rules
+            // but we need to process them as expressions
+            build_expression(pair)
+        }
+        _ => build_expression(pair),
+    }
 }
 
 fn build_dict_literal(pair: Pair<Rule>) -> Expression {
-    let pairs: Vec<(Expression, Expression)> = pair
-        .into_inner()
-        .filter(|p| p.as_rule() == Rule::dict_pair)
-        .map(|dict_pair| {
-            // Filter to get only expression rules (key and value), skipping COLON
-            let exprs: Vec<_> = dict_pair
-                .into_inner()
-                .filter(|p| p.as_rule() == Rule::expression)
-                .collect();
-            assert_eq!(exprs.len(), 2, "dict_pair must have exactly 2 expressions");
-            let key = build_expression(exprs[0].clone());
-            let value = build_expression(exprs[1].clone());
-            (key, value)
-        })
-        .collect();
+    let inner: Vec<_> = pair.into_inner().collect();
 
-    Expression::Dict(pairs)
+    // Check if this is a dict comprehension (has comprehension_clauses)
+    let has_comprehension = inner
+        .iter()
+        .any(|p| p.as_rule() == Rule::comprehension_clauses);
+
+    if has_comprehension {
+        // Dict comprehension: {key: val for var in iterable}
+        // Pattern is: key_expr COLON val_expr comprehension_clauses
+        let _key_expr = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+            .expect("dict comprehension must have key expression");
+
+        // The second comp_iterable_expr is the value
+        let mut comp_exprs = inner
+            .iter()
+            .filter(|p| p.as_rule() == Rule::comp_iterable_expr);
+        let key_pair = comp_exprs
+            .next()
+            .expect("dict comprehension must have key expression");
+        let val_pair = comp_exprs
+            .next()
+            .expect("dict comprehension must have value expression");
+
+        let key = build_expression_from_comp(key_pair.clone());
+        let value = build_expression_from_comp(val_pair.clone());
+
+        let clauses_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comprehension_clauses)
+            .expect("dict comprehension must have clauses");
+
+        let clauses: Vec<crate::ast::ComprehensionClause> = clauses_pair
+            .clone()
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::comprehension_clause)
+            .map(|clause| build_comprehension_clause(clause))
+            .collect();
+
+        Expression::DictComprehension {
+            key: Box::new(key),
+            value: Box::new(value),
+            clauses,
+        }
+    } else {
+        // Regular dict literal
+        let pairs: Vec<(Expression, Expression)> = inner
+            .iter()
+            .filter(|p| p.as_rule() == Rule::dict_pair)
+            .map(|dict_pair| {
+                // Filter to get only expression rules (key and value), skipping COLON
+                let exprs: Vec<_> = dict_pair
+                    .clone()
+                    .into_inner()
+                    .filter(|p| p.as_rule() == Rule::expression)
+                    .collect();
+                assert_eq!(exprs.len(), 2, "dict_pair must have exactly 2 expressions");
+                let key = build_expression(exprs[0].clone());
+                let value = build_expression(exprs[1].clone());
+                (key, value)
+            })
+            .collect();
+
+        Expression::Dict(pairs)
+    }
 }
 
 fn build_set_literal(pair: Pair<Rule>) -> Expression {
-    let elements: Vec<Expression> = pair
-        .into_inner()
-        .filter(|p| !matches!(p.as_rule(), Rule::LBRACE | Rule::RBRACE | Rule::COMMA))
-        .map(build_expression)
-        .collect();
+    let inner: Vec<_> = pair.into_inner().collect();
 
-    Expression::Set(elements)
+    // Check if this is a set comprehension (has comprehension_clauses)
+    let has_comprehension = inner
+        .iter()
+        .any(|p| p.as_rule() == Rule::comprehension_clauses);
+
+    if has_comprehension {
+        // Set comprehension: {elem for var in iterable}
+        let elem_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+            .expect("set comprehension must have element expression");
+
+        let element = build_expression_from_comp(elem_pair.clone());
+
+        let clauses_pair = inner
+            .iter()
+            .find(|p| p.as_rule() == Rule::comprehension_clauses)
+            .expect("set comprehension must have clauses");
+
+        let clauses: Vec<crate::ast::ComprehensionClause> = clauses_pair
+            .clone()
+            .into_inner()
+            .filter(|p| p.as_rule() == Rule::comprehension_clause)
+            .map(|clause| build_comprehension_clause(clause))
+            .collect();
+
+        Expression::SetComprehension {
+            element: Box::new(element),
+            clauses,
+        }
+    } else {
+        // Regular set literal
+        let elements: Vec<Expression> = inner
+            .iter()
+            .filter(|p| !matches!(p.as_rule(), Rule::LBRACE | Rule::RBRACE | Rule::COMMA))
+            .map(|p| build_expression(p.clone()))
+            .collect();
+
+        Expression::Set(elements)
+    }
 }
 
 fn build_tuple_literal(pair: Pair<Rule>) -> Expression {
@@ -1478,6 +1829,34 @@ fn build_tuple_literal(pair: Pair<Rule>) -> Expression {
         .collect();
 
     Expression::Tuple(elements)
+}
+
+fn build_generator_expression(pair: Pair<Rule>) -> Expression {
+    let inner: Vec<_> = pair.into_inner().collect();
+
+    // Find element expression - it uses comp_iterable_expr rule
+    let element_pair = inner
+        .iter()
+        .find(|p| p.as_rule() == Rule::comp_iterable_expr)
+        .expect("Generator expression must have element");
+    let element = build_expression_from_comp(element_pair.clone());
+
+    // Find comprehension_clauses and extract individual clauses
+    let clauses_pair = inner
+        .iter()
+        .find(|p| p.as_rule() == Rule::comprehension_clauses)
+        .expect("Generator expression must have comprehension clauses");
+    let clauses: Vec<crate::ast::ComprehensionClause> = clauses_pair
+        .clone()
+        .into_inner()
+        .filter(|p| p.as_rule() == Rule::comprehension_clause)
+        .map(|clause| build_comprehension_clause(clause))
+        .collect();
+
+    Expression::GeneratorExpression {
+        element: Box::new(element),
+        clauses,
+    }
 }
 
 /// Process escape sequences in a string literal

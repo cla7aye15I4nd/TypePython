@@ -1,6 +1,9 @@
 # Test class that is iterable (returns separate iterator)
 
 class NumberIterator:
+    numbers: list[int]
+    index: int
+
     def __init__(self, numbers: list[int]) -> None:
         self.numbers: list[int] = numbers
         self.index: int = 0
@@ -13,6 +16,8 @@ class NumberIterator:
         return value
 
 class NumberCollection:
+    data: list[int]
+
     def __init__(self) -> None:
         self.data: list[int] = []
 

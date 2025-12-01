@@ -15,13 +15,7 @@ pub trait Visitor {
     fn visit_import(&mut self, import: &Import) -> Result<(), Self::Error>;
 
     /// Visit a function declaration
-    fn visit_function(&mut self, function: &Function) -> Result<(), Self::Error> {
-        self.enter_function(function)?;
-        for statement in &function.body {
-            self.visit_statement(statement)?;
-        }
-        self.exit_function(function)
-    }
+    fn visit_function(&mut self, function: &Function) -> Result<(), Self::Error>;
 
     /// Called when entering a function (before visiting body)
     fn enter_function(&mut self, function: &Function) -> Result<(), Self::Error>;
@@ -40,7 +34,15 @@ pub trait Visitor {
                 var_type,
                 value,
             } => self.visit_var_decl(name, var_type, value),
+            Statement::AnnotatedAssignment {
+                target,
+                var_type,
+                value,
+            } => self.visit_annotated_assignment(target, var_type, value),
             Statement::Assignment { target, value } => self.visit_assignment(target, value),
+            Statement::TupleUnpackAssignment { targets, value } => {
+                self.visit_tuple_unpack_assignment(targets, value)
+            }
             Statement::AugAssignment { target, op, value } => {
                 self.visit_aug_assignment(target, op, value)
             }
@@ -84,10 +86,25 @@ pub trait Visitor {
         value: &Expression,
     ) -> Result<(), Self::Error>;
 
+    /// Visit annotated assignment (e.g., self.x: int = 5)
+    fn visit_annotated_assignment(
+        &mut self,
+        target: &Expression,
+        var_type: &Type,
+        value: &Expression,
+    ) -> Result<(), Self::Error>;
+
     /// Visit assignment statement
     fn visit_assignment(
         &mut self,
         target: &Expression,
+        value: &Expression,
+    ) -> Result<(), Self::Error>;
+
+    /// Visit tuple unpacking assignment (e.g., x, y = expr or self.a, self.b = expr)
+    fn visit_tuple_unpack_assignment(
+        &mut self,
+        targets: &[Expression],
         value: &Expression,
     ) -> Result<(), Self::Error>;
 

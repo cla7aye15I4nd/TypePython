@@ -715,6 +715,8 @@ impl<'ctx> CodeGen<'ctx> {
     /// Generate iter() builtin call
     /// iter(iterable) -> iterator
     pub fn generate_iter_call(&mut self, args: &[Expression]) -> Result<PyValue<'ctx>, String> {
+        use inkwell::values::AnyValue;
+
         if args.is_empty() || args.len() > 2 {
             return Err("iter() takes 1 or 2 arguments".to_string());
         }
@@ -737,6 +739,59 @@ impl<'ctx> CodeGen<'ctx> {
                     vec![("element_type".to_string(), PyType::Int)],
                 ),
             ));
+        }
+
+        // Handle user-defined classes with __iter__ method
+        if let PyType::Instance(inst) = arg_val.ty() {
+            // Check if this class has __iter__ method
+            if let Some(class_info) = self.classes.get(&inst.class_name).cloned() {
+                if class_info.methods.contains(&"__iter__".to_string()) {
+                    // Call __iter__ method on the instance
+                    let iter_fn_name = format!("__main___{}___iter__", inst.class_name);
+                    let iter_fn = self.cg.module.get_function(&iter_fn_name).ok_or_else(|| {
+                        format!("__iter__ method not found for class {}", inst.class_name)
+                    })?;
+
+                    let iter_ptr = arg_val.value().into_pointer_value();
+                    let iter_call = self
+                        .cg
+                        .builder
+                        .build_call(iter_fn, &[iter_ptr.into()], "iter")
+                        .unwrap();
+                    let iterator_ptr = iter_call.as_any_value_enum().into_pointer_value();
+
+                    // Determine return type from __next__ method
+                    let next_fn_name = format!("__main___{}___next__", inst.class_name);
+                    let elem_type =
+                        if let Some(next_fn) = self.cg.module.get_function(&next_fn_name) {
+                            if let Some(ret_ty) = next_fn.get_type().get_return_type() {
+                                if ret_ty.is_int_type() {
+                                    PyType::Int
+                                } else if ret_ty.is_pointer_type() {
+                                    PyType::Str
+                                } else if ret_ty.is_float_type() {
+                                    PyType::Float
+                                } else {
+                                    PyType::Int
+                                }
+                            } else {
+                                PyType::Int
+                            }
+                        } else {
+                            PyType::Int
+                        };
+
+                    // Return the iterator as an instance of the same class
+                    // (since __iter__ returns self in most iterator implementations)
+                    return Ok(PyValue::Instance(
+                        PtrStorage::Direct(iterator_ptr),
+                        InstanceType::new(
+                            inst.class_name.clone(),
+                            vec![("element_type".to_string(), elem_type)],
+                        ),
+                    ));
+                }
+            }
         }
 
         let elem_type = match arg_val.ty() {
@@ -885,10 +940,77 @@ impl<'ctx> CodeGen<'ctx> {
                     };
                 }
                 _ => {
+                    // Check if this is a user-defined iterator class with __next__ method
+                    use inkwell::values::AnyValue;
+                    if let Some(class_info) = self.classes.get(&inst.class_name).cloned() {
+                        if class_info.methods.contains(&"__next__".to_string()) {
+                            // Call __next__ method on the iterator
+                            let next_fn_name = format!("__main___{}___next__", inst.class_name);
+                            let next_fn =
+                                self.cg.module.get_function(&next_fn_name).ok_or_else(|| {
+                                    format!(
+                                        "__next__ method not found for class {}",
+                                        inst.class_name
+                                    )
+                                })?;
+
+                            // Get or declare the stop iteration flag
+                            let stop_flag_global = self
+                                .cg
+                                .module
+                                .get_global("__stop_iteration_flag")
+                                .unwrap_or_else(|| {
+                                    let g = self.cg.module.add_global(
+                                        self.cg.ctx.bool_type(),
+                                        None,
+                                        "__stop_iteration_flag",
+                                    );
+                                    g.set_initializer(&self.cg.ctx.bool_type().const_zero());
+                                    g
+                                });
+
+                            // Reset the flag before calling __next__
+                            self.cg
+                                .builder
+                                .build_store(
+                                    stop_flag_global.as_pointer_value(),
+                                    self.cg.ctx.bool_type().const_zero(),
+                                )
+                                .unwrap();
+
+                            // Call __next__
+                            let next_call = self
+                                .cg
+                                .builder
+                                .build_call(next_fn, &[iter_ptr.into()], "next_val")
+                                .unwrap();
+
+                            // Extract the return value based on element type
+                            let next_value: inkwell::values::BasicValueEnum = match elem_type {
+                                PyType::Int | PyType::Bool => {
+                                    next_call.as_any_value_enum().into_int_value().into()
+                                }
+                                PyType::Float => {
+                                    next_call.as_any_value_enum().into_float_value().into()
+                                }
+                                _ => next_call.as_any_value_enum().into_pointer_value().into(),
+                            };
+
+                            // Return value based on element type
+                            return match elem_type {
+                                PyType::Int => Ok(PyValue::int(next_value.into_int_value())),
+                                PyType::Float => Ok(PyValue::float(next_value.into_float_value())),
+                                PyType::Str => {
+                                    Ok(PyValue::new_str(next_value.into_pointer_value()))
+                                }
+                                _ => Ok(PyValue::int(next_value.into_int_value())),
+                            };
+                        }
+                    }
                     return Err(format!(
                         "next() not supported for iterator type: {}",
                         inst.class_name
-                    ))
+                    ));
                 }
             }
         }

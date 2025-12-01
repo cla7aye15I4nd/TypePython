@@ -17,3 +17,11 @@ print(s.isalpha())
 print(s.isdigit())
 print(s.isspace())
 print(len(s))
+
+# Test join method
+lst: list[str] = ["a", "b", "c"]
+sep: str = ","
+result: str = sep.join(lst)
+print(result)
+print("-".join(lst))
+print("".join(lst))

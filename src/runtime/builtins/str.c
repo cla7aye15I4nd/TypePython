@@ -1779,13 +1779,17 @@ sds str_format_bool(const char* fmt, int64_t arg) {
     return str_format_str(fmt, val);
 }
 
-// Format string with bytes argument (b'...')
+// Format string with bytes argument (uses repr like b'...')
 sds str_format_bytes(const char* fmt, const char* arg) {
-    // Format bytes as b'...'
     sds bytes_repr = bytes_to_str(arg);
     sds result = str_format_str(fmt, bytes_repr);
     sdsfree(bytes_repr);
     return result;
+}
+
+// Format bytes with bytes argument (uses raw bytes)
+sds bytes_format_bytes(const char* fmt, const char* arg) {
+    return str_format_str(fmt, arg);
 }
 
 // Format string with None argument

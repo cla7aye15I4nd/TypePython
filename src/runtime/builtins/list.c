@@ -529,6 +529,20 @@ void print_list_float(PyList* list) {
     printf("]");
 }
 
+// Print list of lists (nested list)
+void print_list_list(PyList* list) {
+    printf("[");
+    if (list != NULL) {
+        for (int64_t i = 0; i < list->len; i++) {
+            if (i > 0) printf(", ");
+            // Each element is a pointer to another list, stored as int64
+            PyList* inner = (PyList*)(uintptr_t)list->data[i];
+            print_list(inner);  // Recursive call to print inner list
+        }
+    }
+    printf("]");
+}
+
 // ============================================================================
 // String List (PyStrList) Functions
 // ============================================================================

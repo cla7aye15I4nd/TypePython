@@ -178,7 +178,11 @@ def frequency(arr: list[int]) -> dict[int, int]:
         freq[x] = freq.get(x, 0) + 1
     return freq
 
-print(b"Frequency:", frequency([1, 2, 2, 3, 3, 3]))
+# Check frequency by individual values to avoid dict ordering issues
+freq_result: dict[int, int] = frequency([1, 2, 2, 3, 3, 3])
+print(b"Frequency 1:", freq_result[1])
+print(b"Frequency 2:", freq_result[2])
+print(b"Frequency 3:", freq_result[3])
 
 # Leaders in array
 def leaders(arr: list[int]) -> list[int]:

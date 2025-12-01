@@ -1,6 +1,9 @@
 # Test class methods that return iterables
 
 class DataStore:
+    items: list[str]
+    counts: dict[str, int]
+
     def __init__(self) -> None:
         self.items: list[str] = []
         self.counts: dict[str, int] = {}

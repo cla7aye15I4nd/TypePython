@@ -2,6 +2,9 @@
 ///
 /// This module implements the transformation of Python generator functions
 /// into LLVM coroutines with a state machine pattern.
+///
+/// It also provides utility functions for detecting generator functions
+/// and counting yield points.
 use super::super::CodeGen;
 use crate::ast::visitor::Visitor;
 use crate::ast::*;
@@ -11,30 +14,291 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::values::{AnyValue, FunctionValue, PointerValue};
 use std::collections::HashMap;
 
-/// Tracks local variable info for generator frame storage
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct LocalVarInfo {
-    pub name: String,
-    pub py_type: PyType,
-    pub offset: i64,
+// ============================================================================
+// Generator detection utilities
+// ============================================================================
+
+/// Check if a function is a generator (contains yield expression)
+pub fn is_generator_function(func: &Function) -> bool {
+    func.body.iter().any(contains_yield)
 }
 
-/// Context for tracking generator state during code generation
-#[allow(dead_code)]
-pub struct GeneratorContext<'ctx> {
-    /// The coroutine handle
-    pub coro_handle: PointerValue<'ctx>,
-    /// The promise pointer (where yielded values are stored)
-    pub promise_ptr: PointerValue<'ctx>,
-    /// Current yield point index (for state machine)
-    pub yield_index: usize,
-    /// Block to jump to for cleanup/final suspend
-    pub cleanup_block: BasicBlock<'ctx>,
-    /// Block for final suspend
-    pub final_suspend_block: BasicBlock<'ctx>,
-    /// Resume blocks for each yield point
-    pub resume_blocks: Vec<BasicBlock<'ctx>>,
+/// Check if a statement contains a yield expression
+fn contains_yield(stmt: &Statement) -> bool {
+    match stmt {
+        Statement::Expr(expr) => expr_contains_yield(expr),
+        Statement::Return(Some(expr)) => expr_contains_yield(expr),
+        Statement::Return(None) => false,
+        Statement::VarDecl { value, .. } => expr_contains_yield(value),
+        Statement::AnnotatedAssignment { value, target, .. } => {
+            expr_contains_yield(value) || expr_contains_yield(target)
+        }
+        Statement::Assignment { value, target } => {
+            expr_contains_yield(value) || expr_contains_yield(target)
+        }
+        Statement::TupleUnpackAssignment { targets, value } => {
+            expr_contains_yield(value) || targets.iter().any(expr_contains_yield)
+        }
+        Statement::AugAssignment { value, target, .. } => {
+            expr_contains_yield(value) || expr_contains_yield(target)
+        }
+        Statement::If {
+            condition,
+            then_block,
+            elif_clauses,
+            else_block,
+        } => {
+            expr_contains_yield(condition)
+                || then_block.iter().any(contains_yield)
+                || elif_clauses
+                    .iter()
+                    .any(|(c, b)| expr_contains_yield(c) || b.iter().any(contains_yield))
+                || else_block
+                    .as_ref()
+                    .map(|b| b.iter().any(contains_yield))
+                    .unwrap_or(false)
+        }
+        Statement::While { condition, body } => {
+            expr_contains_yield(condition) || body.iter().any(contains_yield)
+        }
+        Statement::For { iter, body, .. } => {
+            expr_contains_yield(iter) || body.iter().any(contains_yield)
+        }
+        Statement::Try {
+            body,
+            handlers,
+            else_block,
+            finally_block,
+        } => {
+            body.iter().any(contains_yield)
+                || handlers.iter().any(|h| h.body.iter().any(contains_yield))
+                || else_block
+                    .as_ref()
+                    .map(|b| b.iter().any(contains_yield))
+                    .unwrap_or(false)
+                || finally_block
+                    .as_ref()
+                    .map(|b| b.iter().any(contains_yield))
+                    .unwrap_or(false)
+        }
+        Statement::Raise { exception, cause } => {
+            exception.as_ref().map(expr_contains_yield).unwrap_or(false)
+                || cause.as_ref().map(expr_contains_yield).unwrap_or(false)
+        }
+        Statement::Assert { test, msg } => {
+            expr_contains_yield(test) || msg.as_ref().map(expr_contains_yield).unwrap_or(false)
+        }
+        Statement::Delete(expr) => expr_contains_yield(expr),
+        Statement::Break | Statement::Continue | Statement::Pass => false,
+        Statement::Global { .. } | Statement::Nonlocal { .. } => false,
+    }
+}
+
+/// Check if an expression contains a yield
+fn expr_contains_yield(expr: &Expression) -> bool {
+    match expr {
+        Expression::Yield { .. } => true,
+        Expression::BinOp { left, right, .. } => {
+            expr_contains_yield(left) || expr_contains_yield(right)
+        }
+        Expression::UnaryOp { operand, .. } => expr_contains_yield(operand),
+        Expression::Call { func, args } => {
+            expr_contains_yield(func) || args.iter().any(expr_contains_yield)
+        }
+        Expression::Attribute { object, .. } => expr_contains_yield(object),
+        Expression::Subscript { object, index } => {
+            expr_contains_yield(object) || expr_contains_yield(index)
+        }
+        Expression::List(elems) | Expression::Tuple(elems) | Expression::Set(elems) => {
+            elems.iter().any(expr_contains_yield)
+        }
+        Expression::Dict(pairs) => pairs
+            .iter()
+            .any(|(k, v)| expr_contains_yield(k) || expr_contains_yield(v)),
+        Expression::Slice { start, stop, step } => {
+            start
+                .as_ref()
+                .map(|e| expr_contains_yield(e))
+                .unwrap_or(false)
+                || stop
+                    .as_ref()
+                    .map(|e| expr_contains_yield(e))
+                    .unwrap_or(false)
+                || step
+                    .as_ref()
+                    .map(|e| expr_contains_yield(e))
+                    .unwrap_or(false)
+        }
+        Expression::IntLit(_)
+        | Expression::FloatLit(_)
+        | Expression::StrLit(_)
+        | Expression::BytesLit(_)
+        | Expression::BoolLit(_)
+        | Expression::NoneLit
+        | Expression::Var(_) => false,
+        Expression::ListComprehension { element, clauses } => {
+            expr_contains_yield(element)
+                || clauses.iter().any(|c| {
+                    expr_contains_yield(&c.iterable) || c.conditions.iter().any(expr_contains_yield)
+                })
+        }
+        Expression::DictComprehension {
+            key,
+            value,
+            clauses,
+        } => {
+            expr_contains_yield(key)
+                || expr_contains_yield(value)
+                || clauses.iter().any(|c| {
+                    expr_contains_yield(&c.iterable) || c.conditions.iter().any(expr_contains_yield)
+                })
+        }
+        Expression::SetComprehension { element, clauses } => {
+            expr_contains_yield(element)
+                || clauses.iter().any(|c| {
+                    expr_contains_yield(&c.iterable) || c.conditions.iter().any(expr_contains_yield)
+                })
+        }
+        Expression::GeneratorExpression { element, clauses } => {
+            expr_contains_yield(element)
+                || clauses.iter().any(|c| {
+                    expr_contains_yield(&c.iterable) || c.conditions.iter().any(expr_contains_yield)
+                })
+        }
+        Expression::Ternary {
+            condition,
+            true_value,
+            false_value,
+        } => {
+            expr_contains_yield(condition)
+                || expr_contains_yield(true_value)
+                || expr_contains_yield(false_value)
+        }
+    }
+}
+
+/// Count yield points in a function body for state machine generation
+pub fn count_yield_points(func: &Function) -> usize {
+    func.body.iter().map(count_yields_in_stmt).sum()
+}
+
+fn count_yields_in_stmt(stmt: &Statement) -> usize {
+    match stmt {
+        Statement::Expr(expr) => count_yields_in_expr(expr),
+        Statement::Return(Some(expr)) => count_yields_in_expr(expr),
+        Statement::Return(None) => 0,
+        Statement::VarDecl { value, .. } => count_yields_in_expr(value),
+        Statement::AnnotatedAssignment { value, target, .. } => {
+            count_yields_in_expr(value) + count_yields_in_expr(target)
+        }
+        Statement::Assignment { value, target } => {
+            count_yields_in_expr(value) + count_yields_in_expr(target)
+        }
+        Statement::TupleUnpackAssignment { targets, value } => {
+            count_yields_in_expr(value) + targets.iter().map(count_yields_in_expr).sum::<usize>()
+        }
+        Statement::AugAssignment { value, target, .. } => {
+            count_yields_in_expr(value) + count_yields_in_expr(target)
+        }
+        Statement::If {
+            condition,
+            then_block,
+            elif_clauses,
+            else_block,
+        } => {
+            count_yields_in_expr(condition)
+                + then_block.iter().map(count_yields_in_stmt).sum::<usize>()
+                + elif_clauses
+                    .iter()
+                    .map(|(c, b)| {
+                        count_yields_in_expr(c) + b.iter().map(count_yields_in_stmt).sum::<usize>()
+                    })
+                    .sum::<usize>()
+                + else_block
+                    .as_ref()
+                    .map(|b| b.iter().map(count_yields_in_stmt).sum())
+                    .unwrap_or(0)
+        }
+        Statement::While { condition, body } => {
+            count_yields_in_expr(condition) + body.iter().map(count_yields_in_stmt).sum::<usize>()
+        }
+        Statement::For { iter, body, .. } => {
+            count_yields_in_expr(iter) + body.iter().map(count_yields_in_stmt).sum::<usize>()
+        }
+        Statement::Try {
+            body,
+            handlers,
+            else_block,
+            finally_block,
+        } => {
+            body.iter().map(count_yields_in_stmt).sum::<usize>()
+                + handlers
+                    .iter()
+                    .map(|h| h.body.iter().map(count_yields_in_stmt).sum::<usize>())
+                    .sum::<usize>()
+                + else_block
+                    .as_ref()
+                    .map(|b| b.iter().map(count_yields_in_stmt).sum())
+                    .unwrap_or(0)
+                + finally_block
+                    .as_ref()
+                    .map(|b| b.iter().map(count_yields_in_stmt).sum())
+                    .unwrap_or(0)
+        }
+        Statement::Raise { exception, cause } => {
+            exception.as_ref().map(count_yields_in_expr).unwrap_or(0)
+                + cause.as_ref().map(count_yields_in_expr).unwrap_or(0)
+        }
+        Statement::Assert { test, msg } => {
+            count_yields_in_expr(test) + msg.as_ref().map(count_yields_in_expr).unwrap_or(0)
+        }
+        Statement::Delete(expr) => count_yields_in_expr(expr),
+        Statement::Break | Statement::Continue | Statement::Pass => 0,
+        Statement::Global { .. } | Statement::Nonlocal { .. } => 0,
+    }
+}
+
+fn count_yields_in_expr(expr: &Expression) -> usize {
+    match expr {
+        Expression::Yield { value, .. } => {
+            1 + value.as_ref().map(|e| count_yields_in_expr(e)).unwrap_or(0)
+        }
+        Expression::BinOp { left, right, .. } => {
+            count_yields_in_expr(left) + count_yields_in_expr(right)
+        }
+        Expression::UnaryOp { operand, .. } => count_yields_in_expr(operand),
+        Expression::Call { func, args } => {
+            count_yields_in_expr(func) + args.iter().map(count_yields_in_expr).sum::<usize>()
+        }
+        Expression::Attribute { object, .. } => count_yields_in_expr(object),
+        Expression::Subscript { object, index } => {
+            count_yields_in_expr(object) + count_yields_in_expr(index)
+        }
+        Expression::List(elems) | Expression::Tuple(elems) | Expression::Set(elems) => {
+            elems.iter().map(count_yields_in_expr).sum()
+        }
+        Expression::Dict(pairs) => pairs
+            .iter()
+            .map(|(k, v)| count_yields_in_expr(k) + count_yields_in_expr(v))
+            .sum(),
+        Expression::Slice { start, stop, step } => {
+            start.as_ref().map(|e| count_yields_in_expr(e)).unwrap_or(0)
+                + stop.as_ref().map(|e| count_yields_in_expr(e)).unwrap_or(0)
+                + step.as_ref().map(|e| count_yields_in_expr(e)).unwrap_or(0)
+        }
+        _ => 0,
+    }
+}
+
+// ============================================================================
+// CodeGen implementation for generators
+// ============================================================================
+
+/// Tracks local variable info for generator frame storage
+#[derive(Clone)]
+pub struct LocalVarInfo {
+    pub py_type: PyType,
+    pub offset: i64,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -235,7 +499,6 @@ impl<'ctx> CodeGen<'ctx> {
             var_infos.insert(
                 name.clone(),
                 LocalVarInfo {
-                    name: name.clone(),
                     py_type: py_type.clone(),
                     offset,
                 },
@@ -442,7 +705,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         // Count yield points to create switch targets
-        let yield_count = crate::codegen::generator::count_yield_points(func);
+        let yield_count = count_yield_points(func);
 
         // Create basic blocks for each yield resume point
         let mut resume_blocks = Vec::new();
@@ -653,7 +916,7 @@ impl<'ctx> CodeGen<'ctx> {
 
     /// Check if expression contains yield
     fn expr_has_yield(&self, expr: &Expression) -> bool {
-        crate::codegen::generator::count_yield_points(&Function {
+        count_yield_points(&Function {
             name: String::new(),
             params: vec![],
             return_type: Type::None,
@@ -813,8 +1076,6 @@ impl<'ctx> CodeGen<'ctx> {
         frame_ptr: PointerValue<'ctx>,
         var_infos: &HashMap<String, LocalVarInfo>,
     ) -> Result<(), String> {
-        // For simplicity, use normal if generation
-        // A full implementation would handle yields in any branch
         let cond_val = self.evaluate_expression(condition)?;
         let cond_bool = self.cg.value_to_bool(&cond_val);
 
@@ -822,6 +1083,7 @@ impl<'ctx> CodeGen<'ctx> {
         let then_bb = self.cg.ctx.append_basic_block(function, "then");
         let merge_bb = self.cg.ctx.append_basic_block(function, "ifcont");
 
+        // Create else block if we have elif or else clauses
         let else_bb = if !elif_clauses.is_empty() || else_block.is_some() {
             self.cg.ctx.append_basic_block(function, "else")
         } else {
@@ -856,11 +1118,25 @@ impl<'ctx> CodeGen<'ctx> {
                 .unwrap();
         }
 
-        // Else block
+        // Handle elif and else blocks
         if !elif_clauses.is_empty() || else_block.is_some() {
             self.cg.builder.position_at_end(else_bb);
 
-            if let Some(else_stmts) = else_block {
+            if !elif_clauses.is_empty() {
+                // Process elif clauses - generate nested if/else chain
+                self.generate_elif_chain_with_yield(
+                    elif_clauses,
+                    else_block,
+                    gen_ptr,
+                    yield_index,
+                    resume_blocks,
+                    done_bb,
+                    frame_ptr,
+                    var_infos,
+                    merge_bb,
+                )?;
+            } else if let Some(else_stmts) = else_block {
+                // Only else block, no elifs
                 for stmt in else_stmts {
                     self.generate_statement_with_yield(
                         stmt,
@@ -875,8 +1151,109 @@ impl<'ctx> CodeGen<'ctx> {
                         break;
                     }
                 }
+                if !self.is_block_terminated() {
+                    self.cg
+                        .builder
+                        .build_unconditional_branch(merge_bb)
+                        .unwrap();
+                }
+            }
+        }
+
+        self.cg.builder.position_at_end(merge_bb);
+        Ok(())
+    }
+
+    /// Generate elif chain with yield support
+    #[allow(clippy::too_many_arguments)]
+    fn generate_elif_chain_with_yield(
+        &mut self,
+        elif_clauses: &[(Expression, Vec<Statement>)],
+        else_block: &Option<Vec<Statement>>,
+        gen_ptr: PointerValue<'ctx>,
+        yield_index: &mut usize,
+        resume_blocks: &[BasicBlock<'ctx>],
+        done_bb: BasicBlock<'ctx>,
+        frame_ptr: PointerValue<'ctx>,
+        var_infos: &HashMap<String, LocalVarInfo>,
+        merge_bb: BasicBlock<'ctx>,
+    ) -> Result<(), String> {
+        let function = self.current_function.unwrap();
+
+        for (i, (elif_cond, elif_body)) in elif_clauses.iter().enumerate() {
+            // Evaluate elif condition
+            let cond_val = self.evaluate_expression(elif_cond)?;
+            let cond_bool = self.cg.value_to_bool(&cond_val);
+
+            let elif_then_bb = self
+                .cg
+                .ctx
+                .append_basic_block(function, &format!("elif_then_{}", i));
+
+            // Determine next block (either next elif, else, or merge)
+            let is_last_elif = i == elif_clauses.len() - 1;
+            let elif_else_bb = if is_last_elif {
+                if else_block.is_some() {
+                    self.cg.ctx.append_basic_block(function, "final_else")
+                } else {
+                    merge_bb
+                }
+            } else {
+                self.cg
+                    .ctx
+                    .append_basic_block(function, &format!("elif_cond_{}", i + 1))
+            };
+
+            self.cg
+                .builder
+                .build_conditional_branch(cond_bool, elif_then_bb, elif_else_bb)
+                .unwrap();
+
+            // Generate elif body
+            self.cg.builder.position_at_end(elif_then_bb);
+            for stmt in elif_body {
+                self.generate_statement_with_yield(
+                    stmt,
+                    gen_ptr,
+                    yield_index,
+                    resume_blocks,
+                    done_bb,
+                    frame_ptr,
+                    var_infos,
+                )?;
+                if self.is_block_terminated() {
+                    break;
+                }
+            }
+            if !self.is_block_terminated() {
+                self.cg
+                    .builder
+                    .build_unconditional_branch(merge_bb)
+                    .unwrap();
             }
 
+            // Position for next elif condition or else block
+            if !is_last_elif || else_block.is_some() {
+                self.cg.builder.position_at_end(elif_else_bb);
+            }
+        }
+
+        // Handle final else block if present
+        if let Some(else_stmts) = else_block {
+            for stmt in else_stmts {
+                self.generate_statement_with_yield(
+                    stmt,
+                    gen_ptr,
+                    yield_index,
+                    resume_blocks,
+                    done_bb,
+                    frame_ptr,
+                    var_infos,
+                )?;
+                if self.is_block_terminated() {
+                    break;
+                }
+            }
             if !self.is_block_terminated() {
                 self.cg
                     .builder
@@ -885,7 +1262,6 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
 
-        self.cg.builder.position_at_end(merge_bb);
         Ok(())
     }
 

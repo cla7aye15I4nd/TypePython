@@ -376,7 +376,7 @@ print(min(seq_list[0], seq_list[2]))  # 5
 print(max(seq_list[0], seq_list[2]))  # 8
 
 # Apply pow
-print(pow(2, seq_list[1]))  # 2^(-3) in Python, but as int it's 2^3 = 8 (using abs conceptually)
+print(pow(2, abs(seq_list[1])))  # 2^3 = 8
 
 # ============================================================================
 # PART 8: EDGE CASES ACROSS ALL STRUCTURES

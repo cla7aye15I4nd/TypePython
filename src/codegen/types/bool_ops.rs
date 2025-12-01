@@ -243,7 +243,9 @@ pub fn binary_op<'ctx>(
                         )
                         .unwrap();
                     if matches!(op, BinaryOp::NotIn) {
-                        return Ok(PyValue::bool(cg.builder.build_not(bool_val, "not").unwrap()));
+                        return Ok(PyValue::bool(
+                            cg.builder.build_not(bool_val, "not").unwrap(),
+                        ));
                     }
                     return Ok(PyValue::bool(bool_val));
                 }

@@ -1,6 +1,5 @@
 pub mod builtin;
 pub mod builtins;
-pub mod generator;
 pub mod types;
 mod visitor;
 
@@ -27,6 +26,10 @@ pub struct ClassInfo {
     pub name: String,
     pub fields: Vec<(String, PyType)>,
     pub methods: Vec<String>,
+    /// Parameter types for __init__ (excluding self)
+    pub init_params: Vec<PyType>,
+    /// Method return types: method_name -> return_type
+    pub method_return_types: HashMap<String, PyType>,
 }
 
 pub struct CodeGen<'ctx> {
@@ -152,14 +155,107 @@ impl<'ctx> CodeGen<'ctx> {
 
         let methods: Vec<String> = class.methods.iter().map(|m| m.name.clone()).collect();
 
+        // Get __init__ parameter types (excluding self)
+        let init_params: Vec<PyType> =
+            if let Some(init) = class.methods.iter().find(|m| m.name == "__init__") {
+                init.params
+                    .iter()
+                    .skip(1) // Skip 'self'
+                    .map(|p| PyType::from_ast_type(&p.param_type))
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                vec![]
+            };
+
+        // Get method return types
+        let mut method_return_types = HashMap::new();
+        for method in &class.methods {
+            let return_type = PyType::from_ast_type(&method.return_type)?;
+            method_return_types.insert(method.name.clone(), return_type);
+        }
+
         let class_info = ClassInfo {
             name: class.name.clone(),
-            fields,
+            fields: fields.clone(),
             methods,
+            init_params,
+            method_return_types,
         };
 
         self.classes.insert(class.name.clone(), class_info);
         Ok(())
+    }
+
+    /// Convert an i64 value loaded from an instance field back to the proper PyValue type
+    pub(crate) fn convert_i64_to_value(
+        &self,
+        i64_val: inkwell::values::IntValue<'ctx>,
+        ty: &PyType,
+    ) -> Result<PyValue<'ctx>, String> {
+        use types::{BoolStorage, PtrStorage};
+        match ty {
+            PyType::Int => Ok(PyValue::int(i64_val)),
+            PyType::Bool => {
+                let bool_val = self
+                    .cg
+                    .builder
+                    .build_int_truncate(i64_val, self.cg.ctx.bool_type(), "i64_to_bool")
+                    .unwrap();
+                Ok(PyValue::Bool(BoolStorage::Immediate(bool_val)))
+            }
+            PyType::Float => {
+                let float_val = self
+                    .cg
+                    .builder
+                    .build_bit_cast(i64_val, self.cg.ctx.f64_type(), "i64_to_float")
+                    .unwrap()
+                    .into_float_value();
+                Ok(PyValue::float(float_val))
+            }
+            PyType::Str | PyType::Bytes | PyType::List(_) | PyType::Dict(_, _) | PyType::Set(_) => {
+                let ptr_val = self
+                    .cg
+                    .builder
+                    .build_int_to_ptr(
+                        i64_val,
+                        self.cg.ctx.ptr_type(inkwell::AddressSpace::default()),
+                        "i64_to_ptr",
+                    )
+                    .unwrap();
+                match ty {
+                    PyType::Str => Ok(PyValue::new_str(ptr_val)),
+                    PyType::Bytes => Ok(PyValue::bytes(ptr_val)),
+                    PyType::List(elem_ty) => {
+                        Ok(PyValue::List(PtrStorage::Direct(ptr_val), elem_ty.clone()))
+                    }
+                    PyType::Dict(k, v) => Ok(PyValue::Dict(
+                        PtrStorage::Direct(ptr_val),
+                        k.clone(),
+                        v.clone(),
+                    )),
+                    PyType::Set(elem_ty) => {
+                        Ok(PyValue::Set(PtrStorage::Direct(ptr_val), elem_ty.clone()))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            PyType::Instance(inst_ty) => {
+                let ptr_val = self
+                    .cg
+                    .builder
+                    .build_int_to_ptr(
+                        i64_val,
+                        self.cg.ctx.ptr_type(inkwell::AddressSpace::default()),
+                        "i64_to_instance_ptr",
+                    )
+                    .unwrap();
+                Ok(PyValue::Instance(
+                    PtrStorage::Direct(ptr_val),
+                    inst_ty.clone(),
+                ))
+            }
+            _ => Err(format!("Unsupported field type for conversion: {:?}", ty)),
+        }
     }
 
     /// Evaluate an expression and return its Python value (IR value + type)
@@ -310,11 +406,77 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             Expression::List(elements) => self.visit_list_lit_impl(elements),
+            Expression::ListComprehension { element, clauses } => {
+                self.visit_list_comprehension_impl(element, clauses)
+            }
+            Expression::DictComprehension {
+                key,
+                value,
+                clauses,
+            } => self.visit_dict_comprehension_impl(key, value, clauses),
+            Expression::SetComprehension { element, clauses } => {
+                self.visit_set_comprehension_impl(element, clauses)
+            }
+            Expression::GeneratorExpression { element, clauses } => {
+                self.visit_generator_expression_impl(element, clauses)
+            }
+            Expression::Ternary {
+                condition,
+                true_value,
+                false_value,
+            } => self.visit_ternary_impl(condition, true_value, false_value),
             Expression::Tuple(elements) => self.visit_tuple_lit_impl(elements),
             Expression::Dict(pairs) => self.visit_dict_lit_impl(pairs),
             Expression::Set(elements) => self.visit_set_lit_impl(elements),
             Expression::Attribute { object, attr } => {
                 let obj = self.evaluate_expression(object)?;
+                // For instance types, handle field access directly
+                if let PyType::Instance(ref inst) = obj.ty() {
+                    // Check if it's a field
+                    if let Some(field_idx) = inst.fields.iter().position(|(name, _)| name == attr) {
+                        let field_type = &inst.fields[field_idx].1;
+                        // Create struct type matching how the instance was allocated
+                        let struct_type = self.cg.ctx.struct_type(
+                            &vec![self.cg.ctx.i64_type().into(); inst.fields.len()],
+                            false,
+                        );
+                        let obj_ptr = obj.value().into_pointer_value();
+                        let field_ptr = self
+                            .cg
+                            .builder
+                            .build_struct_gep(struct_type, obj_ptr, field_idx as u32, "field_gep")
+                            .map_err(|e| format!("Field GEP error: {:?}", e))?;
+                        let loaded_i64 = self
+                            .cg
+                            .builder
+                            .build_load(self.cg.ctx.i64_type(), field_ptr, "load_field")
+                            .unwrap()
+                            .into_int_value();
+                        // Convert i64 back to the proper type
+                        return self.convert_i64_to_value(loaded_i64, field_type);
+                    }
+                    // Check if it's a method
+                    let method_name = format!("__main___{}_{}", inst.class_name, attr);
+                    if self.cg.module.get_function(&method_name).is_some() {
+                        // Look up the method return type from class info
+                        let return_type = self
+                            .classes
+                            .get(&inst.class_name)
+                            .and_then(|class_info| class_info.method_return_types.get(attr))
+                            .cloned()
+                            .unwrap_or(PyType::None);
+                        // Return bound method
+                        return Ok(PyValue::function(types::FunctionInfo::bound(
+                            Box::leak(method_name.into_boxed_str()),
+                            return_type,
+                            obj.value(),
+                        )));
+                    }
+                    return Err(format!(
+                        "Instance '{}' has no attribute '{}'",
+                        inst.class_name, attr
+                    ));
+                }
                 // Use unified get_member for all types (modules, bytes, str, list, dict, set)
                 obj.get_member(attr)
             }
@@ -518,7 +680,7 @@ impl<'ctx> CodeGen<'ctx> {
             .collect();
 
         // Check if this is a generator function
-        let is_gen = generator::is_generator_function(func);
+        let is_gen = visitor::is_generator_function(func);
 
         let fn_type = if is_gen {
             // Generator functions return a pointer to the generator object
@@ -805,10 +967,23 @@ impl<'ctx> CodeGen<'ctx> {
                     // Note: RANGE_ITERATOR, LIST_ITERATOR, STR_ITERATOR are iterator objects
                     // that are typically consumed via next(), not directly in for-loops.
                     // For direct for-loop usage, iterate over the source (Range, List, Str) instead.
-                    _ => Err(format!(
-                        "for loop iteration not supported for instance type: {}",
-                        inst.class_name
-                    )),
+                    _ => {
+                        // Check if this is a user-defined class with __iter__ and __next__ methods
+                        if let Some(class_info) = self.classes.get(&inst.class_name).cloned() {
+                            if class_info.methods.contains(&"__iter__".to_string())
+                                && class_info.methods.contains(&"__next__".to_string())
+                            {
+                                // User class iterator
+                                return self.generate_user_class_for_loop(
+                                    target, iter_val, &inst, body, else_block,
+                                );
+                            }
+                        }
+                        Err(format!(
+                            "for loop iteration not supported for instance type: {}",
+                            inst.class_name
+                        ))
+                    }
                 }
             }
             _ => Err(format!(
@@ -1348,6 +1523,181 @@ impl<'ctx> CodeGen<'ctx> {
 
         // Suppress warning
         let _ = ptr_type;
+
+        Ok(())
+    }
+
+    /// Generate a for loop for user-defined iterator classes (classes with __iter__ and __next__)
+    fn generate_user_class_for_loop(
+        &mut self,
+        target: &str,
+        iter_val: PyValue<'ctx>,
+        inst: &types::InstanceType,
+        body: &[Statement],
+        _else_block: &Option<Vec<Statement>>,
+    ) -> Result<(), String> {
+        use inkwell::values::AnyValue;
+
+        let function = self.current_function.unwrap();
+        let class_name = &inst.class_name;
+        let _i64_type = self.cg.ctx.i64_type();
+
+        // Get the __next__ method to determine return type
+        let next_fn_name = format!("__main___{}___next__", class_name);
+        let next_fn_for_type = self
+            .cg
+            .module
+            .get_function(&next_fn_name)
+            .ok_or_else(|| format!("__next__ method not found for class {}", class_name))?;
+
+        // Determine return type from the LLVM function signature
+        let next_return_type = if let Some(ret_ty) = next_fn_for_type.get_type().get_return_type() {
+            if ret_ty.is_int_type() {
+                PyType::Int
+            } else if ret_ty.is_pointer_type() {
+                // Could be str, bytes, list, etc. - assume str for now
+                PyType::Str
+            } else if ret_ty.is_float_type() {
+                PyType::Float
+            } else {
+                PyType::Int
+            }
+        } else {
+            PyType::Int
+        };
+
+        // Get the instance pointer (call __iter__ which returns self)
+        let iter_fn_name = format!("__main___{}___iter__", class_name);
+        let iter_fn = self
+            .cg
+            .module
+            .get_function(&iter_fn_name)
+            .ok_or_else(|| format!("__iter__ method not found for class {}", class_name))?;
+
+        let iter_ptr = iter_val.value().into_pointer_value();
+        let iter_call = self
+            .cg
+            .builder
+            .build_call(iter_fn, &[iter_ptr.into()], "iter")
+            .unwrap();
+        let iterator_ptr = iter_call.as_any_value_enum().into_pointer_value();
+
+        // Allocate space for the loop variable
+        let elem_llvm_type = next_return_type.to_llvm(self.cg.ctx);
+        let target_alloca = self.create_entry_block_alloca_with_type(target, elem_llvm_type);
+
+        // Create basic blocks
+        let cond_bb = self.cg.ctx.append_basic_block(function, "user_iter_cond");
+        let body_bb = self.cg.ctx.append_basic_block(function, "user_iter_body");
+        let after_bb = self.cg.ctx.append_basic_block(function, "user_iter_after");
+
+        // Jump to condition check
+        self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // Condition block - call __next__ in a try/except StopIteration pattern
+        // Since we don't have exceptions fully implemented, we'll simulate using a return code
+        // For now, use a simpler approach: call __next__ and check for a sentinel value
+        self.cg.builder.position_at_end(cond_bb);
+
+        // Get __next__ method
+        let next_fn_name = format!("__main___{}___next__", class_name);
+        let next_fn = self
+            .cg
+            .module
+            .get_function(&next_fn_name)
+            .ok_or_else(|| format!("__next__ method not found for class {}", class_name))?;
+
+        // We need to handle StopIteration. For now, let's use a global flag approach.
+        // Get or declare a stop_iteration flag
+        let stop_flag_global = self
+            .cg
+            .module
+            .get_global("__stop_iteration_flag")
+            .unwrap_or_else(|| {
+                let g = self.cg.module.add_global(
+                    self.cg.ctx.bool_type(),
+                    None,
+                    "__stop_iteration_flag",
+                );
+                g.set_initializer(&self.cg.ctx.bool_type().const_zero());
+                g
+            });
+
+        // Reset the flag before calling __next__
+        self.cg
+            .builder
+            .build_store(
+                stop_flag_global.as_pointer_value(),
+                self.cg.ctx.bool_type().const_zero(),
+            )
+            .unwrap();
+
+        // Call __next__
+        let next_call = self
+            .cg
+            .builder
+            .build_call(next_fn, &[iterator_ptr.into()], "next_val")
+            .unwrap();
+
+        // Extract the return value based on type
+        let next_value: inkwell::values::BasicValueEnum = match next_return_type {
+            PyType::Int | PyType::Bool => next_call.as_any_value_enum().into_int_value().into(),
+            PyType::Float => next_call.as_any_value_enum().into_float_value().into(),
+            _ => next_call.as_any_value_enum().into_pointer_value().into(),
+        };
+
+        // Check if StopIteration was raised
+        let stop_flag_val = self
+            .cg
+            .builder
+            .build_load(
+                self.cg.ctx.bool_type(),
+                stop_flag_global.as_pointer_value(),
+                "stop_check",
+            )
+            .unwrap()
+            .into_int_value();
+
+        // If stop flag is set, exit the loop
+        self.cg
+            .builder
+            .build_conditional_branch(stop_flag_val, after_bb, body_bb)
+            .unwrap();
+
+        // Body block
+        self.cg.builder.position_at_end(body_bb);
+
+        // Store the next value
+        self.cg
+            .builder
+            .build_store(target_alloca, next_value)
+            .unwrap();
+
+        // Register the loop variable
+        let loop_var = PyValue::new(next_value, next_return_type.clone(), Some(target_alloca));
+        self.variables.insert(target.to_string(), loop_var);
+
+        // Push loop context for break/continue support
+        self.loop_stack.push(LoopContext {
+            continue_block: cond_bb,
+            break_block: after_bb,
+        });
+
+        // Generate body statements
+        for stmt in body {
+            self.visit_statement(stmt)?;
+        }
+
+        // Pop loop context
+        self.loop_stack.pop();
+
+        // Jump back to condition
+        if !self.is_block_terminated() {
+            self.cg.builder.build_unconditional_branch(cond_bb).unwrap();
+        }
+
+        // After block
+        self.cg.builder.position_at_end(after_bb);
 
         Ok(())
     }

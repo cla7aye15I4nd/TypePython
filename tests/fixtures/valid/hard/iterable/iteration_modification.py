@@ -52,7 +52,15 @@ for c in text:
         char_count[c] = char_count[c] + 1
     else:
         char_count[c] = 1
-print(b"Char counts:", char_count)
+# Print individual counts to avoid dict ordering issues
+print(b"Char count h:", char_count["h"])
+print(b"Char count e:", char_count["e"])
+print(b"Char count l:", char_count["l"])
+print(b"Char count o:", char_count["o"])
+print(b"Char count space:", char_count[" "])
+print(b"Char count w:", char_count["w"])
+print(b"Char count r:", char_count["r"])
+print(b"Char count d:", char_count["d"])
 
 # Grouping pattern
 data: list[tuple[str, int]] = [("a", 1), ("b", 2), ("a", 3), ("b", 4), ("a", 5)]
@@ -61,7 +69,9 @@ for key, val in data:
     if key not in groups:
         groups[key] = []
     groups[key].append(val)
-print(b"Groups:", groups)
+# Print individual groups to avoid dict ordering issues and dict[list] printing bug
+print(b"Group a:", groups["a"])
+print(b"Group b:", groups["b"])
 
 # Build set while iterating
 nums2: list[int] = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]

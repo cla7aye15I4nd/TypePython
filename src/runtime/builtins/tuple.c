@@ -377,3 +377,18 @@ PyTuple* tuple_from_dict(PyDictTuple* dict) {
     }
     return result;
 }
+
+// ============================================================================
+// Tuple reversed - create a new reversed tuple
+// ============================================================================
+
+// Create a reversed copy of the tuple
+PyTuple* tuple_reversed(PyTuple* tuple) {
+    if (tuple == NULL) return tuple_new(0);
+    PyTuple* result = tuple_new(tuple->len);
+    if (result == NULL) return NULL;
+    for (int64_t i = 0; i < tuple->len; i++) {
+        result->data[i] = tuple->data[tuple->len - 1 - i];
+    }
+    return result;
+}

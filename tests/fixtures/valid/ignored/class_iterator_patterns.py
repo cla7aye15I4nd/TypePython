@@ -2,11 +2,14 @@
 
 # Simple counter iterator
 class Counter:
+    current: int
+    stop: int
+
     def __init__(self, start: int, stop: int) -> None:
         self.current: int = start
         self.stop: int = stop
 
-    def __iter__(self) -> Counter:
+    def __iter__(self) -> 'Counter':
         return self
 
     def __next__(self) -> int:
@@ -21,12 +24,16 @@ for n in Counter(0, 5):
 
 # Step iterator
 class StepCounter:
+    current: int
+    stop: int
+    step: int
+
     def __init__(self, start: int, stop: int, step: int) -> None:
         self.current: int = start
         self.stop: int = stop
         self.step: int = step
 
-    def __iter__(self) -> StepCounter:
+    def __iter__(self) -> 'StepCounter':
         return self
 
     def __next__(self) -> int:
@@ -46,13 +53,18 @@ for n in StepCounter(10, 0, -2):
 
 # Fibonacci iterator
 class Fibonacci:
+    limit: int
+    a: int
+    b: int
+    count: int
+
     def __init__(self, limit: int) -> None:
         self.limit: int = limit
         self.a: int = 0
         self.b: int = 1
         self.count: int = 0
 
-    def __iter__(self) -> Fibonacci:
+    def __iter__(self) -> 'Fibonacci':
         return self
 
     def __next__(self) -> int:
@@ -68,12 +80,16 @@ for n in Fibonacci(10):
 
 # Repeat iterator
 class Repeat:
+    value: str
+    times: int
+    count: int
+
     def __init__(self, value: str, times: int) -> None:
         self.value: str = value
         self.times: int = times
         self.count: int = 0
 
-    def __iter__(self) -> Repeat:
+    def __iter__(self) -> 'Repeat':
         return self
 
     def __next__(self) -> str:
@@ -87,13 +103,18 @@ for s in Repeat("hello", 3):
 
 # Cycle iterator
 class Cycle:
+    items: list[int]
+    times: int
+    cycle: int
+    index: int
+
     def __init__(self, items: list[int], times: int) -> None:
         self.items: list[int] = items
         self.times: int = times
         self.cycle: int = 0
         self.index: int = 0
 
-    def __iter__(self) -> Cycle:
+    def __iter__(self) -> 'Cycle':
         return self
 
     def __next__(self) -> int:
@@ -111,12 +132,16 @@ for n in Cycle([1, 2, 3], 2):
 
 # Filter iterator
 class FilterIter:
+    data: list[int]
+    threshold: int
+    index: int
+
     def __init__(self, data: list[int], threshold: int) -> None:
         self.data: list[int] = data
         self.threshold: int = threshold
         self.index: int = 0
 
-    def __iter__(self) -> FilterIter:
+    def __iter__(self) -> 'FilterIter':
         return self
 
     def __next__(self) -> int:
@@ -132,11 +157,14 @@ for n in FilterIter([1, 5, 2, 8, 3, 9, 4], 4):
 
 # Map iterator
 class MapIter:
+    data: list[int]
+    index: int
+
     def __init__(self, data: list[int]) -> None:
         self.data: list[int] = data
         self.index: int = 0
 
-    def __iter__(self) -> MapIter:
+    def __iter__(self) -> 'MapIter':
         return self
 
     def __next__(self) -> int:
@@ -151,6 +179,9 @@ for n in MapIter([1, 2, 3, 4, 5]):
 
 # Separate iterator from iterable
 class NumberIterator:
+    numbers: list[int]
+    index: int
+
     def __init__(self, numbers: list[int]) -> None:
         self.numbers: list[int] = numbers
         self.index: int = 0
@@ -163,6 +194,8 @@ class NumberIterator:
         return val
 
 class NumberCollection:
+    data: list[int]
+
     def __init__(self) -> None:
         self.data: list[int] = []
 
@@ -186,13 +219,18 @@ for n in coll:
 
 # Grid iterator
 class GridIterator:
+    rows: int
+    cols: int
+    row: int
+    col: int
+
     def __init__(self, rows: int, cols: int) -> None:
         self.rows: int = rows
         self.cols: int = cols
         self.row: int = 0
         self.col: int = 0
 
-    def __iter__(self) -> GridIterator:
+    def __iter__(self) -> 'GridIterator':
         return self
 
     def __next__(self) -> tuple[int, int]:
@@ -210,10 +248,12 @@ for pos in GridIterator(3, 4):
 
 # Countdown iterator
 class Countdown:
+    current: int
+
     def __init__(self, start: int) -> None:
         self.current: int = start
 
-    def __iter__(self) -> Countdown:
+    def __iter__(self) -> 'Countdown':
         return self
 
     def __next__(self) -> int:
@@ -228,11 +268,14 @@ for n in Countdown(5):
 
 # Prime iterator
 class Primes:
+    limit: int
+    current: int
+
     def __init__(self, limit: int) -> None:
         self.limit: int = limit
         self.current: int = 2
 
-    def __iter__(self) -> Primes:
+    def __iter__(self) -> 'Primes':
         return self
 
     def _is_prime(self, n: int) -> bool:

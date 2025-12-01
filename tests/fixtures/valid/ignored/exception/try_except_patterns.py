@@ -365,10 +365,12 @@ multi_same_handler()
 
 # Exception with context manager pattern
 class SimpleContext:
+    name: str
+
     def __init__(self, name: str) -> None:
         self.name: str = name
 
-    def __enter__(self) -> SimpleContext:
+    def __enter__(self) -> 'SimpleContext':
         print(b"Entering:", self.name)
         return self
 
@@ -455,6 +457,8 @@ test_factorial()
 
 # Exception in class method
 class Calculator:
+    pass
+
     def divide(self, a: int, b: int) -> float:
         if b == 0:
             raise ZeroDivisionError("cannot divide by zero")
@@ -473,6 +477,9 @@ test_calculator()
 
 # Custom exception class
 class CustomError(Exception):
+    code: int
+    message: str
+
     def __init__(self, code: int, message: str) -> None:
         super().__init__(message)
         self.code: int = code
