@@ -311,6 +311,27 @@ impl<'ctx> CodeGen<'ctx> {
                             )
                             .unwrap()
                             .into()
+                    } else if function_info.mangled_name() == "list_append"
+                        && matches!(
+                            arg_val.ty(),
+                            PyType::List(_)
+                                | PyType::Dict(_, _)
+                                | PyType::Set(_)
+                                | PyType::Tuple(_)
+                                | PyType::Bytes
+                                | PyType::Instance(_)
+                        )
+                    {
+                        // For nested containers being appended to a list, convert pointer to i64
+                        self.cg
+                            .builder
+                            .build_ptr_to_int(
+                                arg_val.value().into_pointer_value(),
+                                self.cg.ctx.i64_type(),
+                                "ptr_to_i64",
+                            )
+                            .unwrap()
+                            .into()
                     } else {
                         arg_val.value().into()
                     };

@@ -12,6 +12,7 @@ mod list_ops;
 mod none_ops;
 mod set_ops;
 mod str_ops;
+pub mod type_registry;
 mod value;
 
 pub use value::{
