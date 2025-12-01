@@ -143,8 +143,6 @@ impl<'ctx> CodeGen<'ctx> {
             .get(name)
             .unwrap_or_else(|| panic!("Unknown builtin function: {}", name));
 
-        self.used_builtin_modules.insert(builtin.module.to_string());
-
         if let Some(func) = self.cg.module.get_function(builtin.symbol) {
             return func;
         }

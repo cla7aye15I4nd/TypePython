@@ -2794,9 +2794,6 @@ impl<'ctx> CodeGen<'ctx> {
             return f;
         }
 
-        // Mark generator module as used
-        self.used_builtin_modules.insert("generator".to_string());
-
         let fn_type = match name {
             "generator_new" => ptr_type.fn_type(&[ptr_type.into(), i64_type.into()], false),
             "generator_free" => void_type.fn_type(&[ptr_type.into()], false),

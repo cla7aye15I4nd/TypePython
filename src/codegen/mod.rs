@@ -44,8 +44,6 @@ pub struct CodeGen<'ctx> {
     pub(crate) module_name: String,
     /// Stack of loop contexts for break/continue statements
     pub(crate) loop_stack: Vec<LoopContext<'ctx>>,
-    /// Set of builtin modules that have been used (for selective linking)
-    pub used_builtin_modules: HashSet<String>,
     /// Registered classes: name -> ClassInfo
     pub(crate) classes: HashMap<String, ClassInfo>,
     /// Generator functions: mangled_name -> yield type
@@ -94,7 +92,6 @@ impl<'ctx> CodeGen<'ctx> {
             strings: HashMap::new(),
             module_name: module_name.to_string(),
             loop_stack: Vec::new(),
-            used_builtin_modules: HashSet::new(),
             classes: HashMap::new(),
             generator_functions: HashSet::new(),
             global_vars: HashSet::new(),
@@ -124,25 +121,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     pub fn generate(&mut self, program: &Program) -> Result<(), String> {
-        // Use the visitor pattern to generate code
         self.visit_program(program)?;
-
-        // Scan the module for builtin function usages and update used_builtin_modules
-        // This captures usages from type operations that don't go through get_or_declare_c_builtin
-        self.scan_for_builtin_usages();
-
         Ok(())
-    }
-
-    /// Scan the module for declared builtin functions and update used_builtin_modules
-    fn scan_for_builtin_usages(&mut self) {
-        for (_, builtin_fn) in builtins::BUILTIN_TABLE.iter() {
-            // Check if this builtin function is declared in the module
-            if self.cg.module.get_function(builtin_fn.symbol).is_some() {
-                self.used_builtin_modules
-                    .insert(builtin_fn.module.to_string());
-            }
-        }
     }
 
     /// Register a class definition
@@ -1714,9 +1694,6 @@ impl<'ctx> CodeGen<'ctx> {
         if let Some(f) = self.cg.module.get_function(&mangled_name) {
             return f;
         }
-
-        // Mark generator module as used
-        self.used_builtin_modules.insert("generator".to_string());
 
         let fn_type = match name {
             "generator_new" => ptr_type.fn_type(&[ptr_type.into(), i64_type.into()], false),

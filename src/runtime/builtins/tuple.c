@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "../common.h"
+
 // ============================================================================
 // Tuple Data Structure
 // ============================================================================
@@ -22,46 +24,26 @@ typedef struct {
 // Tuple Core Functions
 // ============================================================================
 
-// Create a new tuple with specified length
 PyTuple* tuple_new(int64_t len) {
     PyTuple* tuple = (PyTuple*)malloc(sizeof(PyTuple));
-    if (tuple == NULL) return NULL;
+    if (!tuple) return NULL;
     tuple->data = (int64_t*)malloc(len * sizeof(int64_t));
-    if (tuple->data == NULL && len > 0) {
-        free(tuple);
-        return NULL;
-    }
+    if (!tuple->data && len > 0) { free(tuple); return NULL; }
     tuple->len = len;
     return tuple;
 }
 
-// Set item at index (used during construction only)
 void tuple_setitem(PyTuple* tuple, int64_t index, int64_t value) {
-    if (tuple == NULL || index < 0 || index >= tuple->len) return;
+    if (!tuple || index < 0 || index >= tuple->len) return;
     tuple->data[index] = value;
 }
 
-// Get the length of the tuple
-int64_t tuple_len(PyTuple* tuple) {
-    if (tuple == NULL) return 0;
-    return tuple->len;
-}
+int64_t tuple_len(PyTuple* tuple) { return tuple ? tuple->len : 0; }
 
-// Normalize negative index to positive
-static int64_t normalize_index(int64_t index, int64_t len) {
-    if (index < 0) {
-        index = len + index;
-    }
-    return index;
-}
-
-// Get item at index (returns 0 if out of bounds)
 int64_t tuple_getitem(PyTuple* tuple, int64_t index) {
-    if (tuple == NULL) return 0;
-    index = normalize_index(index, tuple->len);
-    if (index < 0 || index >= tuple->len) {
-        return 0;
-    }
+    if (!tuple) return 0;
+    index = tpy_normalize_index(index, tuple->len);
+    if (index < 0 || index >= tuple->len) return 0;
     return tuple->data[index];
 }
 

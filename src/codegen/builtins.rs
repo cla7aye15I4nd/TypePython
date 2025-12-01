@@ -1,16 +1,14 @@
 // Include the auto-generated builtin table from build.rs
 include!(concat!(env!("OUT_DIR"), "/builtins_generated.rs"));
 
-/// Get the path to the builtin build directory where .o files are stored
-pub fn get_builtin_build_dir() -> std::path::PathBuf {
-    // This is set by build.rs
-    let dir = env!("TYPEPYTHON_BUILTIN_BUILD_DIR");
-    std::path::PathBuf::from(dir)
+/// Get the path to the builtin build directory where runtime.o is stored
+fn get_builtin_build_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("TYPEPYTHON_BUILTIN_BUILD_DIR"))
 }
 
-/// Get the path to a specific builtin module's object file
-pub fn get_builtin_object_path(module_name: &str) -> std::path::PathBuf {
-    get_builtin_build_dir().join(format!("{}.o", module_name))
+/// Get the path to the unified runtime object file
+pub fn get_runtime_object_path() -> std::path::PathBuf {
+    get_builtin_build_dir().join("runtime.o")
 }
 
 impl BuiltinFunction {

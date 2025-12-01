@@ -99,15 +99,17 @@ fn main() {
         .map(|s| format!("-D{}=__builtin_tpy_{}", s, s))
         .collect();
 
-    // Second pass: compile with symbol renaming and extract signatures
-    let mut all_functions: HashMap<String, Vec<BuiltinFunction>> = HashMap::new();
+    // Second pass: compile each C file with symbol renaming, then link into single runtime.o
+    let llvm_link = format!("{}/bin/llvm-link", llvm_prefix);
+    let mut object_files: Vec<PathBuf> = Vec::new();
 
     for module in &modules {
         let source_path = builtins_dir.join(format!("{}.c", module));
-        let object_path = build_dir.join(format!("{}.o", module));
+        let object_path = build_dir.join(format!("{}.bc", module));
 
         let mut cmd = Command::new(&clang);
         cmd.args(["-c", "-emit-llvm", "-flto", "-O2"]);
+        cmd.arg(format!("-I{}", runtime_dir.display())); // Include path for sds.h/common.h
         for flag in &rename_flags {
             cmd.arg(flag);
         }
@@ -117,23 +119,43 @@ fn main() {
         if !status.success() {
             panic!("Failed to compile {} to bitcode", source_path.display());
         }
-
-        // Use llvm-dis to get LLVM IR with function signatures
-        let output = Command::new(&llvm_dis)
-            .arg(&object_path)
-            .arg("-o")
-            .arg("-")
-            .output()
-            .expect("Failed to run llvm-dis");
-
-        if !output.status.success() {
-            panic!("llvm-dis failed on {}", object_path.display());
-        }
-
-        let ir_output = String::from_utf8_lossy(&output.stdout);
-        let functions = parse_llvm_ir(&ir_output, module);
-        all_functions.insert(module.clone(), functions);
+        object_files.push(object_path);
     }
+
+    // Link all bitcode files into a single runtime.o
+    let runtime_object = build_dir.join("runtime.o");
+    let mut link_cmd = Command::new(&llvm_link);
+    link_cmd.arg("-o").arg(&runtime_object);
+    for obj in &object_files {
+        link_cmd.arg(obj);
+    }
+
+    let status = link_cmd.status().expect("Failed to run llvm-link");
+    if !status.success() {
+        panic!("Failed to link runtime.o");
+    }
+
+    // Clean up individual .bc files
+    for obj in &object_files {
+        let _ = fs::remove_file(obj);
+    }
+
+    // Use llvm-dis to get LLVM IR with function signatures
+    let output = Command::new(&llvm_dis)
+        .arg(&runtime_object)
+        .arg("-o")
+        .arg("-")
+        .output()
+        .expect("Failed to run llvm-dis");
+
+    if !output.status.success() {
+        panic!("llvm-dis failed on runtime.o");
+    }
+
+    let ir_output = String::from_utf8_lossy(&output.stdout);
+    let functions = parse_llvm_ir(&ir_output, "runtime");
+    let mut all_functions: HashMap<String, Vec<BuiltinFunction>> = HashMap::new();
+    all_functions.insert("runtime".to_string(), functions);
 
     let _ = fs::remove_dir_all(&temp_dir);
 

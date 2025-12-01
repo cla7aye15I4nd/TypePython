@@ -11,19 +11,7 @@
 #include <math.h>
 #include <ctype.h>
 
-// Create a single-character string using malloc
-// Returns heap-allocated null-terminated string
-static char* local_str_char_at(const char* s, int64_t index) {
-    if (s == NULL) return NULL;
-    size_t len = strlen(s);
-    if (index < 0) index = len + index;
-    if (index < 0 || (size_t)index >= len) return NULL;
-    char* result = (char*)malloc(2);  // 1 char + null terminator
-    if (result == NULL) return NULL;
-    result[0] = s[index];
-    result[1] = '\0';
-    return result;
-}
+#include "../common.h"
 
 // ============================================================================
 // List Data Structure
@@ -48,40 +36,37 @@ typedef struct {
 // Internal Helper Functions
 // ============================================================================
 
+// Create a single-character string using malloc
+static char* local_str_char_at(const char* s, int64_t index) {
+    if (!s) return NULL;
+    size_t len = strlen(s);
+    if (index < 0) index = len + index;
+    if (index < 0 || (size_t)index >= len) return NULL;
+    char* result = (char*)malloc(2);
+    if (!result) return NULL;
+    result[0] = s[index];
+    result[1] = '\0';
+    return result;
+}
+
 static PyList* list_alloc(int64_t capacity) {
-    if (capacity < INITIAL_CAPACITY) {
-        capacity = INITIAL_CAPACITY;
-    }
+    if (capacity < INITIAL_CAPACITY) capacity = INITIAL_CAPACITY;
     PyList* list = (PyList*)malloc(sizeof(PyList));
-    if (list == NULL) return NULL;
+    if (!list) return NULL;
     list->data = (int64_t*)malloc(capacity * sizeof(int64_t));
-    if (list->data == NULL) {
-        free(list);
-        return NULL;
-    }
+    if (!list->data) { free(list); return NULL; }
     list->len = 0;
     list->capacity = capacity;
     return list;
 }
 
-// Grow the list's data array (PyList struct stays at same address)
 static void list_grow(PyList* list, int64_t min_capacity) {
     int64_t new_capacity = list->capacity * 2;
-    if (new_capacity < min_capacity) {
-        new_capacity = min_capacity;
-    }
+    if (new_capacity < min_capacity) new_capacity = min_capacity;
     int64_t* new_data = (int64_t*)realloc(list->data, new_capacity * sizeof(int64_t));
-    if (new_data == NULL) return;  // Keep old data on failure
+    if (!new_data) return;
     list->data = new_data;
     list->capacity = new_capacity;
-}
-
-// Normalize negative index to positive
-static int64_t normalize_index(int64_t index, int64_t len) {
-    if (index < 0) {
-        index = len + index;
-    }
-    return index;
 }
 
 // ============================================================================
@@ -107,7 +92,7 @@ int64_t list_len(PyList* list) {
 // Get item at index (returns 0 if out of bounds - caller should check)
 int64_t list_getitem(PyList* list, int64_t index) {
     if (list == NULL) return 0;
-    index = normalize_index(index, list->len);
+    index = tpy_normalize_index(index, list->len);
     if (index < 0 || index >= list->len) {
         // TODO: Error handling - for now return 0
         return 0;
@@ -118,7 +103,7 @@ int64_t list_getitem(PyList* list, int64_t index) {
 // Set item at index
 void list_setitem(PyList* list, int64_t index, int64_t value) {
     if (list == NULL) return;
-    index = normalize_index(index, list->len);
+    index = tpy_normalize_index(index, list->len);
     if (index < 0 || index >= list->len) {
         // TODO: Error handling - for now silently fail
         return;
@@ -142,7 +127,7 @@ void list_delitem(PyList* list, int64_t index) {
         return;
     }
 
-    index = normalize_index(index, list->len);
+    index = tpy_normalize_index(index, list->len);
     if (index < 0 || index >= list->len) {
         return;
     }
@@ -167,7 +152,7 @@ int64_t list_pop(PyList* list, int64_t index) {
         return list->data[--list->len];
     }
 
-    index = normalize_index(index, list->len);
+    index = tpy_normalize_index(index, list->len);
     if (index < 0 || index >= list->len) {
         // TODO: Error handling for out of bounds
         return 0;
@@ -186,7 +171,7 @@ int64_t list_pop(PyList* list, int64_t index) {
 void list_insert(PyList* list, int64_t index, int64_t value) {
     if (list == NULL) return;
 
-    index = normalize_index(index, list->len);
+    index = tpy_normalize_index(index, list->len);
     if (index < 0) index = 0;
     if (index > list->len) index = list->len;
 

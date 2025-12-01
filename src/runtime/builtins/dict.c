@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "../common.h"
+
 // ============================================================================
 // Dict Data Structure
 // ============================================================================
@@ -35,20 +37,8 @@ typedef struct {
 // Internal Helper Functions
 // ============================================================================
 
-// Hash function for int keys (simple identity hash for now)
-static uint64_t hash_int(int64_t key) {
-    // Mix the bits to distribute evenly
-    uint64_t h = (uint64_t)key;
-    h ^= h >> 33;
-    h *= 0xff51afd7ed558ccdULL;
-    h ^= h >> 33;
-    h *= 0xc4ceb9fe1a85ec53ULL;
-    h ^= h >> 33;
-    return h;
-}
-
 static int64_t find_slot(PyDict* dict, int64_t key, int for_insert) {
-    uint64_t hash = hash_int(key);
+    uint64_t hash = tpy_hash_int(key);
     int64_t mask = dict->capacity - 1;
     int64_t index = hash & mask;
     int64_t first_deleted = -1;
