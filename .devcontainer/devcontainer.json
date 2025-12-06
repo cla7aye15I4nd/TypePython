@@ -27,7 +27,8 @@
                 "tamasfe.even-better-toml",
                 "vadimcn.vscode-lldb",
                 "Anthropic.claude-code",
-                "ms-python.python"
+                "ms-python.python",
+                "ritwickdey.LiveServer"
             ]
         }
     },
