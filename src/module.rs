@@ -2,13 +2,66 @@
 use inkwell::context::Context;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use crate::ast::Program;
-use crate::Parser;
+use crate::ast::{self, Expr, Module, Stmt};
 
 /// Get the clang executable path (hardcoded at compile time from build.rs)
 pub fn get_clang_path() -> String {
     format!("{}/bin/clang", env!("TYPEPYTHON_LLVM_PREFIX"))
+}
+
+/// Parse a Python file using the ast_to_json.py script
+pub fn parse_python_file(path: &Path) -> Result<Module, String> {
+    // Try to find the script relative to the executable or use a fallback
+    let script_path = find_ast_script()?;
+
+    let output = Command::new("python3")
+        .arg(&script_path)
+        .arg(path)
+        .output()
+        .map_err(|e| format!("Failed to run Python AST parser: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "Python AST parser failed for {}: {}\n{}",
+            path.display(),
+            stderr,
+            stdout
+        ));
+    }
+
+    let json = String::from_utf8_lossy(&output.stdout);
+    ast::parse_json(&json)
+}
+
+/// Find the ast_to_json.py script
+fn find_ast_script() -> Result<PathBuf, String> {
+    // Try multiple locations
+    let candidates = [
+        // Relative to current working directory
+        PathBuf::from("scripts/ast_to_json.py"),
+        // Relative to executable
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.join("../scripts/ast_to_json.py")))
+            .unwrap_or_default(),
+        // Relative to manifest dir (for development)
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/ast_to_json.py"),
+    ];
+
+    for candidate in &candidates {
+        if candidate.exists() {
+            return Ok(candidate.clone());
+        }
+    }
+
+    Err(format!(
+        "Could not find ast_to_json.py script. Searched: {:?}",
+        candidates
+    ))
 }
 
 /// Module registry manages all compiled modules
@@ -17,8 +70,8 @@ pub struct ModuleRegistry<'ctx> {
     root: PathBuf,
     /// Module values: module_name -> PyValue (Module type with ModuleInfo)
     pub modules: HashMap<String, crate::types::PyValue<'ctx>>,
-    /// AST programs: module_name -> Program (for codegen to look up function definitions)
-    pub programs: HashMap<String, Program>,
+    /// AST modules: module_name -> Module (for codegen to look up function definitions)
+    pub programs: HashMap<String, Module>,
 }
 
 impl<'ctx> ModuleRegistry<'ctx> {
@@ -59,12 +112,8 @@ impl<'ctx> ModuleRegistry<'ctx> {
 
     /// Preprocess all modules using BFS starting from entry file
     /// Discovers all imported modules, generates module names, and builds PyValue modules
-    ///
-    /// Note: C builtin modules are no longer automatically loaded here.
-    /// They are compiled at build time and linked selectively based on usage.
     pub fn preprocess_modules(&mut self, entry_path: &Path) -> Result<(), String> {
         use crate::types::{ModuleInfo, PyValue};
-        use crate::{LangParser, Rule};
 
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
@@ -86,40 +135,39 @@ impl<'ctx> ModuleRegistry<'ctx> {
             // Generate module name for this module
             let module_name = self.generate_module_name(&current_path)?;
 
-            // Read source file
-            let current_source = std::fs::read_to_string(&current_path)
-                .map_err(|e| format!("Error reading {}: {}", current_path.display(), e))?;
+            // Parse Python file to AST
+            let module = parse_python_file(&current_path)?;
 
-            // Parse and build AST
-            let preprocessed = crate::preprocessor::preprocess(&current_source)?;
-            let pairs = LangParser::parse(Rule::program, &preprocessed)
-                .map_err(|e| format!("Parse error in {}: {}", current_path.display(), e))?;
-            let program = crate::ast::parser::build_program(pairs);
-
-            // Collect imports for second pass
+            // Extract imports from module body
             let mut imports = Vec::new();
-            for import in &program.imports {
-                // Resolve import path
-                let import_path =
-                    self.resolve_module(&import.module_path, current_path.parent().unwrap())?;
+            for stmt in &module.body {
+                if let Stmt::Import(import_stmt) = stmt {
+                    for alias in &import_stmt.names {
+                        // Parse module path from name (e.g., "math.helpers" -> ["math", "helpers"])
+                        let module_path: Vec<String> =
+                            alias.name.split('.').map(String::from).collect();
 
-                // Generate the real module name for the imported module
-                let import_module_name = self.generate_module_name(&import_path)?;
+                        // Resolve import path - error if module not found
+                        let import_path =
+                            self.resolve_module(&module_path, current_path.parent().unwrap())?;
 
-                // For now, use the last component as local name
-                // TODO: Support "import foo as bar" syntax
-                let local_name = import
-                    .module_path
-                    .last()
-                    .ok_or_else(|| "Empty import path".to_string())?
-                    .clone();
+                        // Generate the real module name for the imported module
+                        let import_module_name = self.generate_module_name(&import_path)?;
 
-                imports.push((local_name, import_module_name));
-                queue.push_back(import_path);
+                        // Use asname if provided, otherwise use the last component
+                        let local_name = alias
+                            .asname
+                            .clone()
+                            .unwrap_or_else(|| module_path.last().unwrap().clone());
+
+                        imports.push((local_name, import_module_name));
+                        queue.push_back(import_path);
+                    }
+                }
             }
 
             // Store program and create module (members will be populated in second pass)
-            self.programs.insert(module_name.clone(), program);
+            self.programs.insert(module_name.clone(), module);
             self.modules.insert(
                 module_name.clone(),
                 PyValue::module(ModuleInfo {
@@ -133,20 +181,20 @@ impl<'ctx> ModuleRegistry<'ctx> {
         // Second pass: Add functions to each module's members FIRST
         // This must happen before import resolution so imported modules have their functions
         for module_name in import_map.keys() {
-            if let Some(program) = self.programs.get(module_name) {
-                let functions_to_add: Vec<_> = program
-                    .functions
+            if let Some(module) = self.programs.get(module_name) {
+                let functions_to_add: Vec<_> = extract_functions(module)
                     .iter()
                     .map(|func| {
                         let mangled_name = Self::mangle_function_name(module_name, &func.name);
-                        let func_info = crate::types::FunctionInfo::from_ast(&mangled_name, func);
+                        let func_info =
+                            crate::types::FunctionInfo::from_function_def(&mangled_name, func);
                         (func.name.clone(), PyValue::function(func_info))
                     })
                     .collect();
 
-                if let Some(module) = self.modules.get_mut(module_name) {
+                if let Some(module_val) = self.modules.get_mut(module_name) {
                     for (func_name, func_value) in functions_to_add {
-                        module.add_member(func_name, func_value).ok();
+                        module_val.add_member(func_name, func_value).ok();
                     }
                 }
             }
@@ -201,5 +249,95 @@ impl<'ctx> ModuleRegistry<'ctx> {
             "Module '{}' not found in current directory",
             module_path.join(".")
         ))
+    }
+}
+
+// ============================================================================
+// Helper functions for extracting info from Python AST
+// ============================================================================
+
+/// Extract all function definitions from a module
+pub fn extract_functions(module: &Module) -> Vec<&ast::FunctionDef> {
+    module
+        .body
+        .iter()
+        .filter_map(|stmt| {
+            if let Stmt::FunctionDef(func) = stmt {
+                Some(func)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Extract all class definitions from a module
+pub fn extract_classes(module: &Module) -> Vec<&ast::ClassDef> {
+    module
+        .body
+        .iter()
+        .filter_map(|stmt| {
+            if let Stmt::ClassDef(class) = stmt {
+                Some(class)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Extract all import statements from a module
+pub fn extract_imports(module: &Module) -> Vec<&ast::PyImport> {
+    module
+        .body
+        .iter()
+        .filter_map(|stmt| {
+            if let Stmt::Import(import) = stmt {
+                Some(import)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Extract top-level statements (excluding functions, classes, and imports)
+pub fn extract_statements(module: &Module) -> Vec<&Stmt> {
+    module
+        .body
+        .iter()
+        .filter(|stmt| {
+            !matches!(
+                stmt,
+                Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::Import(_) | Stmt::ImportFrom(_)
+            )
+        })
+        .collect()
+}
+
+/// Get type annotation as string from an expression (for type hints)
+pub fn type_annotation_to_string(expr: &Expr) -> String {
+    match expr {
+        Expr::Name(name) => name.id.clone(),
+        Expr::Subscript(sub) => {
+            let base = type_annotation_to_string(&sub.value);
+            let slice = type_annotation_to_string(&sub.slice);
+            format!("{}[{}]", base, slice)
+        }
+        Expr::Tuple(tuple) => {
+            let types: Vec<String> = tuple.elts.iter().map(type_annotation_to_string).collect();
+            types.join(", ")
+        }
+        Expr::Constant(c) => {
+            if let ast::ConstantValue::None = &c.value {
+                "None".to_string()
+            } else if let Some(s) = c.value.as_str() {
+                // Forward reference
+                s.to_string()
+            } else {
+                "Any".to_string()
+            }
+        }
+        _ => "Any".to_string(),
     }
 }

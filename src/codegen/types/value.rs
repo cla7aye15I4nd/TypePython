@@ -583,7 +583,7 @@ impl<'ctx> FunctionInfo<'ctx> {
         }
     }
 
-    /// Create a FunctionInfo from an AST function definition
+    /// Create a FunctionInfo from a legacy AST function definition
     pub fn from_ast(mangled_name: &str, func: &crate::ast::Function) -> Self {
         let param_types: Vec<PyType> = func
             .params
@@ -592,6 +592,38 @@ impl<'ctx> FunctionInfo<'ctx> {
             .collect();
 
         let return_type = PyType::from_ast_type(&func.return_type).unwrap_or(PyType::None);
+
+        FunctionInfo {
+            storage: FunctionStorage {
+                mangled_name: mangled_name.to_string(),
+                bound_args: vec![],
+                macro_kind: None,
+            },
+            fn_type: FunctionType::new(param_types, return_type),
+        }
+    }
+
+    /// Create a FunctionInfo from a Python AST FunctionDef
+    pub fn from_function_def(mangled_name: &str, func: &crate::ast::FunctionDef) -> Self {
+        let param_types: Vec<PyType> = func
+            .args
+            .args
+            .iter()
+            .filter_map(|arg| {
+                arg.annotation.as_ref().and_then(|ann| {
+                    crate::ast::Type::from_expr(ann)
+                        .ok()
+                        .and_then(|t| PyType::from_ast_type(&t).ok())
+                })
+            })
+            .collect();
+
+        let return_type = func
+            .returns
+            .as_ref()
+            .and_then(|ret| crate::ast::Type::from_expr(ret).ok())
+            .and_then(|t| PyType::from_ast_type(&t).ok())
+            .unwrap_or(PyType::None);
 
         FunctionInfo {
             storage: FunctionStorage {

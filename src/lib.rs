@@ -1,19 +1,9 @@
-use pest_derive::Parser;
-
-#[derive(Parser)]
-#[grammar = "grammar.pest"]
-pub struct LangParser;
-
-pub use pest::iterators::Pairs;
-pub use pest::Parser;
-
-// Public modules - now organized in folders
+// Public modules
 pub mod ast;
 pub mod cli;
 pub mod codegen;
 pub mod module;
 pub mod pipeline;
-pub mod preprocessor;
 
 // Re-export types from codegen for backwards compatibility
 pub use codegen::types;

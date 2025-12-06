@@ -63,10 +63,13 @@ pub fn compile(source_path: &Path, output_path: &Path) -> Result<(), String> {
     let mut object_files = Vec::new();
 
     for (module_name, module_value) in module_registry.modules.iter() {
-        let program = module_registry
+        let module = module_registry
             .programs
             .get(module_name)
             .ok_or_else(|| format!("Program not found for module '{}'", module_name))?;
+
+        // Convert Python AST Module to legacy Program
+        let program = crate::ast::Program::from_module(module)?;
 
         let module_info = module_value.module_info();
         let global_variables: HashMap<String, crate::types::PyValue> = module_info
@@ -77,7 +80,7 @@ pub fn compile(source_path: &Path, output_path: &Path) -> Result<(), String> {
 
         let mut codegen = CodeGen::new(&context, module_name);
         codegen.set_global_variables(global_variables);
-        codegen.generate(program)?;
+        codegen.generate(&program)?;
 
         codegen
             .get_module()

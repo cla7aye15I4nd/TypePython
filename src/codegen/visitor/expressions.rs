@@ -31,20 +31,22 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(PyValue::new_str(str_const.as_pointer_value()))
     }
 
-    pub(crate) fn visit_bytes_lit_impl(&mut self, val: &str) -> Result<PyValue<'ctx>, String> {
+    pub(crate) fn visit_bytes_lit_impl(&mut self, val: &[u8]) -> Result<PyValue<'ctx>, String> {
         // Bytes literals are the same as string literals in C (char*)
         // They're both null-terminated byte sequences
-        let str_name = if let Some(&id) = self.strings.get(val) {
+        // Convert bytes to string for storage (lossy if not valid UTF-8)
+        let val_str = String::from_utf8_lossy(val);
+        let str_name = if let Some(&id) = self.strings.get(val_str.as_ref()) {
             format!(".bytes_{}", id)
         } else {
             let id = self.strings.len() as u64;
-            self.strings.insert(val.to_string(), id);
+            self.strings.insert(val_str.to_string(), id);
             format!(".bytes_{}", id)
         };
         let str_const = self
             .cg
             .builder
-            .build_global_string_ptr(val, &str_name)
+            .build_global_string_ptr(&val_str, &str_name)
             .unwrap();
         Ok(PyValue::bytes(str_const.as_pointer_value()))
     }
