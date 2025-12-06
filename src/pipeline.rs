@@ -46,7 +46,7 @@ pub fn link_object_files(object_files: &[PathBuf], output_path: &Path) -> Result
 /// 2. Creates a function map and compiles each AST to corresponding .o file
 /// 3. Links all .o files with the unified runtime.o into executable
 pub fn compile(source_path: &Path, output_path: &Path) -> Result<(), String> {
-    let context = Context::create();
+    let context: Context = Context::create();
 
     // Step 1: Preprocess all modules - discover and register all modules via BFS
     let module_registry = ModuleRegistry::new(

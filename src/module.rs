@@ -5,7 +5,7 @@ use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict, PyList};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use crate::ast::{self, Expr, Module, Stmt};
+use crate::ast::{self, Module, Stmt};
 
 /// Get the clang executable path (hardcoded at compile time from build.rs)
 pub fn get_clang_path() -> String {
@@ -351,75 +351,4 @@ pub fn extract_functions(module: &Module) -> Vec<&ast::FunctionDef> {
             }
         })
         .collect()
-}
-
-/// Extract all class definitions from a module
-pub fn extract_classes(module: &Module) -> Vec<&ast::ClassDef> {
-    module
-        .body
-        .iter()
-        .filter_map(|stmt| {
-            if let Stmt::ClassDef(class) = stmt {
-                Some(class)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-/// Extract all import statements from a module
-pub fn extract_imports(module: &Module) -> Vec<&ast::PyImport> {
-    module
-        .body
-        .iter()
-        .filter_map(|stmt| {
-            if let Stmt::Import(import) = stmt {
-                Some(import)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-/// Extract top-level statements (excluding functions, classes, and imports)
-pub fn extract_statements(module: &Module) -> Vec<&Stmt> {
-    module
-        .body
-        .iter()
-        .filter(|stmt| {
-            !matches!(
-                stmt,
-                Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::Import(_) | Stmt::ImportFrom(_)
-            )
-        })
-        .collect()
-}
-
-/// Get type annotation as string from an expression (for type hints)
-pub fn type_annotation_to_string(expr: &Expr) -> String {
-    match expr {
-        Expr::Name(name) => name.id.clone(),
-        Expr::Subscript(sub) => {
-            let base = type_annotation_to_string(&sub.value);
-            let slice = type_annotation_to_string(&sub.slice);
-            format!("{}[{}]", base, slice)
-        }
-        Expr::Tuple(tuple) => {
-            let types: Vec<String> = tuple.elts.iter().map(type_annotation_to_string).collect();
-            types.join(", ")
-        }
-        Expr::Constant(c) => {
-            if let ast::ConstantValue::None = &c.value {
-                "None".to_string()
-            } else if let Some(s) = c.value.as_str() {
-                // Forward reference
-                s.to_string()
-            } else {
-                "Any".to_string()
-            }
-        }
-        _ => "Any".to_string(),
-    }
 }

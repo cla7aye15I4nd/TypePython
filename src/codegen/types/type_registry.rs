@@ -10,15 +10,10 @@
 //! 3. Maintain type information through all operations
 
 use super::PyType;
-use std::collections::HashSet;
 
 /// Registry for tracking and generating type-specialized functions
 #[derive(Default)]
-pub struct TypeRegistry {
-    /// Set of complex types that need specialized function generation
-    /// Stored as mangled type names (e.g., "list_list_int")
-    registered_types: HashSet<String>,
-}
+pub struct TypeRegistry {}
 
 impl TypeRegistry {
     pub fn new() -> Self {
@@ -87,76 +82,6 @@ impl TypeRegistry {
             PyType::Tuple(elems) => 1 + elems.iter().map(Self::nesting_depth).max().unwrap_or(0),
             _ => 0,
         }
-    }
-
-    /// Register a type for specialized function generation
-    /// Returns true if the type was newly registered
-    pub fn register_type(&mut self, ty: &PyType) -> bool {
-        if Self::is_complex_type(ty) {
-            let mangled = Self::mangle_type(ty);
-            self.registered_types.insert(mangled)
-        } else {
-            false
-        }
-    }
-
-    /// Check if a type has been registered
-    pub fn is_registered(&self, ty: &PyType) -> bool {
-        let mangled = Self::mangle_type(ty);
-        self.registered_types.contains(&mangled)
-    }
-
-    /// Get the function name for list operations based on element type
-    /// This handles both simple types (uses existing C functions) and
-    /// complex nested types (uses generic pointer-based functions)
-    pub fn get_list_append_fn(elem_type: &PyType) -> &'static str {
-        match elem_type {
-            PyType::Str => "str_list_append",
-            PyType::Float => "float_list_append",
-            PyType::Bool => "bool_list_append",
-            // For nested containers and other types, use generic int64 storage
-            _ => "list_append",
-        }
-    }
-
-    /// Get the function name for list creation with capacity
-    pub fn get_list_with_capacity_fn(elem_type: &PyType) -> &'static str {
-        match elem_type {
-            PyType::Str => "str_list_with_capacity",
-            PyType::Float => "float_list_with_capacity",
-            PyType::Bool => "bool_list_with_capacity",
-            // For nested containers and other types, use generic int64 storage
-            _ => "list_with_capacity",
-        }
-    }
-
-    /// Get the function name for list getitem based on element type
-    pub fn get_list_getitem_fn(elem_type: &PyType) -> &'static str {
-        match elem_type {
-            PyType::Bool => "bool_list_getitem",
-            PyType::Float => "float_list_getitem",
-            PyType::Str => "str_list_getitem",
-            // For nested containers and other types, use generic int64 storage
-            _ => "list_getitem",
-        }
-    }
-
-    /// Check if the element type requires pointer-to-int conversion for storage
-    pub fn needs_ptr_to_int(elem_type: &PyType) -> bool {
-        matches!(
-            elem_type,
-            PyType::List(_)
-                | PyType::Dict(_, _)
-                | PyType::Set(_)
-                | PyType::Tuple(_)
-                | PyType::Bytes
-                | PyType::Instance(_)
-        )
-    }
-
-    /// Check if the element type requires int-to-ptr conversion when reading
-    pub fn needs_int_to_ptr(elem_type: &PyType) -> bool {
-        Self::needs_ptr_to_int(elem_type)
     }
 }
 
