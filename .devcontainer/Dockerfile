@@ -40,5 +40,11 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 # Update PATH so cargo and rustc are available
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# Install llvm-tools-preview component for llvm-cov support
+RUN rustup component add llvm-tools-preview
+
+# Install useful Rust components
+RUN cargo install cargo-llvm-cov
+
 # Verify installation
 RUN rustc --version && cargo --version && python3 --version
