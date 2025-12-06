@@ -1,8 +1,9 @@
 /// Module resolution and management for TypePython
 use inkwell::context::Context;
+use pyo3::prelude::*;
+use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict, PyList};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::ast::{self, Expr, Module, Stmt};
 
@@ -11,57 +12,138 @@ pub fn get_clang_path() -> String {
     format!("{}/bin/clang", env!("TYPEPYTHON_LLVM_PREFIX"))
 }
 
-/// Parse a Python file using the ast_to_json.py script
+/// Parse a Python file using PyO3 to call Python's ast module directly
 pub fn parse_python_file(path: &Path) -> Result<Module, String> {
-    // Try to find the script relative to the executable or use a fallback
-    let script_path = find_ast_script()?;
+    // Read the source file
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read file {}: {}", path.display(), e))?;
+    let path_str = path.to_string_lossy().to_string();
 
-    let output = Command::new("python3")
-        .arg(&script_path)
-        .arg(path)
-        .output()
-        .map_err(|e| format!("Failed to run Python AST parser: {}", e))?;
+    let json = Python::with_gil(|py| -> PyResult<String> {
+        // Import Python's ast and json modules directly
+        let ast_mod = py.import("ast")?;
+        let json_mod = py.import("json")?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "Python AST parser failed for {}: {}\n{}",
-            path.display(),
-            stderr,
-            stdout
-        ));
-    }
+        // Parse the source code: ast.parse(source, filename=path)
+        let tree = ast_mod.call_method(
+            "parse",
+            (&source,),
+            Some(&[("filename", &path_str)].into_py_dict(py)?),
+        )?;
 
-    let json = String::from_utf8_lossy(&output.stdout);
+        // Convert AST to JSON-serializable dict
+        let dict = ast_node_to_dict(py, &tree)?;
+
+        // Serialize to JSON string
+        let json_str = json_mod.call_method1("dumps", (dict,))?;
+        json_str.extract::<String>()
+    })
+    .map_err(|e| format!("Python AST parser failed for {}: {}", path.display(), e))?;
+
     ast::parse_json(&json)
 }
 
-/// Find the ast_to_json.py script
-fn find_ast_script() -> Result<PathBuf, String> {
-    // Try multiple locations
-    let candidates = [
-        // Relative to current working directory
-        PathBuf::from("scripts/ast_to_json.py"),
-        // Relative to executable
-        std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.join("../scripts/ast_to_json.py")))
-            .unwrap_or_default(),
-        // Relative to manifest dir (for development)
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("scripts/ast_to_json.py"),
-    ];
+/// Recursively convert a Python AST node to a dictionary
+fn ast_node_to_dict<'py>(
+    py: Python<'py>,
+    node: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let ast_mod = py.import("ast")?;
+    let dict = PyDict::new(py);
 
-    for candidate in &candidates {
-        if candidate.exists() {
-            return Ok(candidate.clone());
+    // Get the node type name
+    let type_name: String = node.get_type().name()?.extract()?;
+    dict.set_item("_type", &type_name)?;
+
+    // Iterate over fields using ast.iter_fields() - returns a generator, convert to list
+    let iter_fields = ast_mod.getattr("iter_fields")?;
+    let fields_gen = iter_fields.call1((node,))?;
+    let fields: Bound<'py, PyList> = py
+        .get_type::<PyList>()
+        .call1((fields_gen,))?
+        .downcast_into()?;
+
+    for item in fields.iter() {
+        let tuple: (String, Bound<'py, PyAny>) = item.extract()?;
+        let (field_name, value) = tuple;
+        let serialized = serialize_value(py, &value)?;
+        dict.set_item(field_name, serialized)?;
+    }
+
+    // Add location info if present
+    if let Ok(lineno) = node.getattr("lineno") {
+        if !lineno.is_none() {
+            dict.set_item("lineno", lineno)?;
+        }
+    }
+    if let Ok(col_offset) = node.getattr("col_offset") {
+        if !col_offset.is_none() {
+            dict.set_item("col_offset", col_offset)?;
+        }
+    }
+    if let Ok(end_lineno) = node.getattr("end_lineno") {
+        if !end_lineno.is_none() {
+            dict.set_item("end_lineno", end_lineno)?;
+        }
+    }
+    if let Ok(end_col_offset) = node.getattr("end_col_offset") {
+        if !end_col_offset.is_none() {
+            dict.set_item("end_col_offset", end_col_offset)?;
         }
     }
 
-    Err(format!(
-        "Could not find ast_to_json.py script. Searched: {:?}",
-        candidates
-    ))
+    Ok(dict)
+}
+
+/// Serialize a Python value for JSON conversion
+fn serialize_value<'py>(py: Python<'py>, value: &Bound<'py, PyAny>) -> PyResult<PyObject> {
+    let ast_mod = py.import("ast")?;
+    let ast_class = ast_mod.getattr("AST")?;
+
+    // Check if it's an AST node
+    if value.is_instance(&ast_class)? {
+        return Ok(ast_node_to_dict(py, value)?.into_any().unbind());
+    }
+
+    // Check if it's a list
+    if let Ok(list) = value.downcast::<PyList>() {
+        let py_list = PyList::empty(py);
+        for item in list.iter() {
+            py_list.append(serialize_value(py, &item)?)?;
+        }
+        return Ok(py_list.into_any().unbind());
+    }
+
+    // Check if it's bytes - convert to list of integers for JSON serialization
+    if value.get_type().name()? == "bytes" {
+        let bytes: Vec<u8> = value.extract()?;
+        let int_list: Vec<i64> = bytes.iter().map(|&b| b as i64).collect();
+        let dict = PyDict::new(py);
+        dict.set_item("_bytes", int_list)?;
+        return Ok(dict.into_any().unbind());
+    }
+
+    // Check if it's a complex number
+    if value.get_type().name()? == "complex" {
+        let real: f64 = value.getattr("real")?.extract()?;
+        let imag: f64 = value.getattr("imag")?.extract()?;
+        let complex_dict = PyDict::new(py);
+        complex_dict.set_item("real", real)?;
+        complex_dict.set_item("imag", imag)?;
+        let dict = PyDict::new(py);
+        dict.set_item("_complex", complex_dict)?;
+        return Ok(dict.into_any().unbind());
+    }
+
+    // Check for ellipsis
+    if value.is(&py.Ellipsis()) {
+        let dict = PyDict::new(py);
+        dict.set_item("_ellipsis", true)?;
+        return Ok(dict.into_any().unbind());
+    }
+
+    // For None, bool, int, float, str - return as-is (JSON-compatible)
+    Ok(value.clone().unbind())
 }
 
 /// Module registry manages all compiled modules

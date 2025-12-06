@@ -8,7 +8,6 @@
 //! functions from Python AST to the legacy format.
 
 use serde::{Deserialize, Serialize};
-use std::process::Command;
 
 // ============================================================================
 // Legacy AST types for codegen compatibility
@@ -1309,31 +1308,7 @@ pub struct MatchOr {
 // Parsing
 // ============================================================================
 
-/// Parse a Python file using the Python AST serializer script
-pub fn parse_file(path: &std::path::Path) -> Result<Module, String> {
-    let script_path = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .map(|p| p.join("../scripts/ast_to_json.py"))
-        .unwrap_or_else(|| std::path::PathBuf::from("scripts/ast_to_json.py"));
-
-    let output = Command::new("python3")
-        .arg(&script_path)
-        .arg(path)
-        .output()
-        .map_err(|e| format!("Failed to run Python AST parser: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!("Python AST parser failed: {}\n{}", stderr, stdout));
-    }
-
-    let json = String::from_utf8_lossy(&output.stdout);
-    parse_json(&json)
-}
-
-/// Parse JSON from Python ast_to_json.py into Module
+/// Parse JSON AST representation into Module
 pub fn parse_json(json: &str) -> Result<Module, String> {
     // Check for error response
     if json.contains("\"_error\"") {

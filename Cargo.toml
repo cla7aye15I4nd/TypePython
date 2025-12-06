@@ -12,6 +12,7 @@ inkwell = { version = "0.7.0", features = ["llvm21-1"] }
 either = "1.9"
 tempfile = "3"
 lazy_static = "1.4"
+pyo3 = { version = "0.23", features = ["auto-initialize"] }
 
 [dev-dependencies]
 anyhow = "1.0"
