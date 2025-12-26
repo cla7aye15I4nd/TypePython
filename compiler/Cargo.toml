@@ -1,0 +1,26 @@
+[package]
+name = "compiler"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# PyO3 for Python AST parsing
+pyo3 = { version = "0.27", features = ["auto-initialize"] }
+
+# Inkwell for LLVM code generation
+inkwell = { version = "0.7.0", features = ["llvm21-1"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Utilities
+indexmap = "2.0"
+either = "1.13"
+
+# Runtime for musl library paths
+runtime = { path = "../runtime" }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+tempfile = "3.24.0"

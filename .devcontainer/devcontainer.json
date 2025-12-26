@@ -1,0 +1,34 @@
+{
+    "name": "PyCompiler Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "runArgs": [
+        "--privileged",
+        "--network=host"
+    ],
+    "remoteUser": "ubuntu",
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh/,target=/home/ubuntu/.ssh/,type=bind"
+    ],
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "lldb.executable": "/usr/bin/lldb",
+                "rust-analyzer.check.command": "clippy"
+            },
+            "extensions": [
+                "fill-labs.dependi",
+                "GitHub.copilot",
+                "rust-lang.rust-analyzer",
+                "shd101wyy.markdown-preview-enhanced",
+                "tamasfe.even-better-toml",
+                "vadimcn.vscode-lldb",
+                "Anthropic.claude-code",
+                "ms-python.python",
+                "ritwickdey.LiveServer"
+            ]
+        }
+    },
+    "postCreateCommand": "bash scripts/install-hooks.sh"
+}
