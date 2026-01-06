@@ -59,6 +59,8 @@ from basic.primitives.float_test import test_float_div, test_int_div_returns_flo
 from basic.primitives.float_test import test_float_gt, test_float_lt, test_float_eq
 from basic.primitives.float_test import test_float_truthy, test_float_falsy
 from basic.primitives.float_test import test_float_floordiv, test_float_mod, test_float_pow, test_print_float
+from basic.primitives.str_methods_test import main as str_methods_main
+from basic.primitives.str_unicode_test import main as str_unicode_main
 
 def test() -> int:
     # Basic function tests
@@ -333,4 +335,7 @@ def test() -> int:
     print(test_float_pow())                  # 1
     print(test_print_float())                # prints 3.14, returns 1
 
+    # String methods tests (Phase 3: Unicode support)
+    print(str_methods_main())                # 0 (all 34 tests pass)
+    print(str_unicode_main())                # 0 (all 15 tests pass)
     return 0

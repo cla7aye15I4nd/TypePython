@@ -21,6 +21,8 @@ struct TargetConfig {
     runtime_filename: &'static str,
     qemu_command: Option<&'static str>,
     musl_lib_path: &'static str,
+    icu_lib_path: &'static str,
+    libcxx_lib_path: &'static str,
 }
 
 const X86_64_CONFIG: TargetConfig = TargetConfig {
@@ -29,6 +31,8 @@ const X86_64_CONFIG: TargetConfig = TargetConfig {
     runtime_filename: "runtime-x86_64.o",
     qemu_command: None,
     musl_lib_path: runtime::MUSL_X86_64_LIB,
+    icu_lib_path: runtime::ICU_X86_64_LIB,
+    libcxx_lib_path: runtime::LIBCXX_X86_64_LIB,
 };
 
 const RISCV64_CONFIG: TargetConfig = TargetConfig {
@@ -37,6 +41,8 @@ const RISCV64_CONFIG: TargetConfig = TargetConfig {
     runtime_filename: "runtime-riscv64.o",
     qemu_command: Some("qemu-riscv64"),
     musl_lib_path: runtime::MUSL_RISCV64_LIB,
+    icu_lib_path: runtime::ICU_RISCV64_LIB,
+    libcxx_lib_path: runtime::LIBCXX_RISCV64_LIB,
 };
 
 /// Target architecture for compilation
@@ -74,6 +80,16 @@ impl Target {
     /// Get the musl library directory (set at compile time by runtime crate)
     pub fn musl_lib_dir(&self) -> PathBuf {
         PathBuf::from(self.config().musl_lib_path)
+    }
+
+    /// Get the ICU library directory (set at compile time by runtime crate)
+    pub fn icu_lib_dir(&self) -> PathBuf {
+        PathBuf::from(self.config().icu_lib_path)
+    }
+
+    /// Get the libc++ library directory for static C++ linking (set at compile time by runtime crate)
+    pub fn libcxx_lib_dir(&self) -> PathBuf {
+        PathBuf::from(self.config().libcxx_lib_path)
     }
 
     fn find_workspace_root() -> Option<PathBuf> {
@@ -269,28 +285,83 @@ impl Compiler {
     ) -> Result<()> {
         let runtime_path = self.find_runtime_library()?;
         let musl_lib = self.options.target.musl_lib_dir();
+        let icu_lib = self.options.target.icu_lib_dir();
         let bc_path = output_path.with_extension("bc");
 
         llvm_module.write_bitcode_to_path(&bc_path);
 
+        // Static linking with musl and ICU
         let mut cmd = Command::new("clang");
-        cmd.args([&bc_path, &runtime_path])
-            .arg("-o")
-            .arg(output_path)
-            .args(["-flto", "-O2", "-static", "-nostdlib"])
-            .arg(musl_lib.join("crt1.o"))
-            .arg(musl_lib.join("crti.o"))
-            .arg(format!("-L{}", musl_lib.display()))
-            .arg("-lc")
-            .arg(musl_lib.join("crtn.o"));
 
+        // Target-specific flags must come first
         if let Some(target_flag) = self.options.target.clang_target() {
-            cmd.args([target_flag, "-fuse-ld=lld"]);
+            cmd.arg(target_flag);
+            cmd.arg("-fuse-ld=lld");
             if matches!(self.options.target, Target::RiscV64) {
-                cmd.args(["-mabi=lp64d", "--rtlib=libgcc"]);
-                cmd.args(["-L/usr/lib/gcc-cross/riscv64-linux-gnu/13", "-lgcc"]);
+                cmd.arg("-mabi=lp64d");
             }
         }
+
+        // Static linking with no default libraries
+        cmd.arg("-static").arg("-nostdlib");
+
+        // musl CRT start objects
+        cmd.arg(format!("{}/crt1.o", musl_lib.display()))
+            .arg(format!("{}/crti.o", musl_lib.display()));
+
+        // Our compiled code and runtime
+        cmd.arg(&bc_path).arg(&runtime_path);
+
+        // Library search paths
+        cmd.arg(format!("-L{}", musl_lib.display()));
+
+        // Check if ICU is available (not a placeholder path)
+        let icu_available = !icu_lib.to_string_lossy().contains("placeholder");
+
+        if icu_available {
+            cmd.arg(format!("-L{}", icu_lib.display()));
+
+            // Add GCC library path for libstdc++ (target-specific)
+            match self.options.target {
+                Target::X86_64 => {
+                    cmd.arg("-L/usr/lib/gcc/x86_64-linux-gnu/13");
+                }
+                Target::RiscV64 => {
+                    cmd.arg("-L/usr/lib/gcc-cross/riscv64-linux-gnu/13");
+                }
+            }
+
+            // Static ICU libraries (order matters, use --start-group/--end-group for circular deps)
+            cmd.arg("-Wl,--start-group")
+                .arg("-l:libicui18n.a")
+                .arg("-l:libicuuc.a")
+                .arg("-l:libicudata.a")
+                .arg("-Wl,--end-group");
+
+            // Static libstdc++ for ICU's C++ code
+            cmd.arg("-l:libstdc++.a")
+                .arg("-l:libgcc.a")
+                .arg("-l:libgcc_eh.a"); // Exception handling
+        }
+
+        // For RISC-V, we always need libgcc for soft-float operations (128-bit float)
+        // even without ICU, because musl's printf uses these
+        if matches!(self.options.target, Target::RiscV64) && !icu_available {
+            cmd.arg("-L/usr/lib/gcc-cross/riscv64-linux-gnu/13")
+                .arg("-l:libgcc.a");
+        }
+
+        // musl libc (must come after C++ libs since they may reference libc functions)
+        cmd.arg("-lc");
+
+        // musl CRT end object
+        cmd.arg(format!("{}/crtn.o", musl_lib.display()));
+
+        // Output file
+        cmd.arg("-o").arg(output_path);
+
+        // Optimization flags
+        cmd.args(["-flto", "-O2"]);
 
         let output = cmd.output().map_err(CompilerError::IOError)?;
         let _ = fs::remove_file(&bc_path);

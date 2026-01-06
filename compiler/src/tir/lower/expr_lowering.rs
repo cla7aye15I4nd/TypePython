@@ -59,6 +59,25 @@ impl<'a> BodyLowerer<'a> {
                 let left_expr = self.lower_expr(left)?;
                 let right_expr = self.lower_expr(right)?;
 
+                // Special case: String concatenation with +
+                if *op == BinOperator::Add {
+                    let str_class_id = self.symbols.get_or_create_str_class();
+                    let str_type = TirTypeUnresolved::Class(str_class_id);
+
+                    // Check if both operands are strings
+                    if left_expr.ty == str_type && right_expr.ty == str_type {
+                        // String concatenation
+                        return Ok(TirExprUnresolved::new(
+                            TirExprKindUnresolved::BinOp {
+                                left: Box::new(left_expr),
+                                op: *op,
+                                right: Box::new(right_expr),
+                            },
+                            str_type,
+                        ));
+                    }
+                }
+
                 // Check that both operands are numeric
                 if !left_expr.ty.is_numeric() {
                     return Err(CompilerError::TypeErrorSimple(format!(

@@ -19,6 +19,35 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
             TirExprKind::Var(var_ref) => self.load_var(var_ref, program),
 
             TirExprKind::BinOp { left, op, right } => {
+                use crate::ast::BinOperator;
+
+                // Special case: String concatenation
+                if matches!(expr.ty, TirType::Class(_)) && *op == BinOperator::Add {
+                    let lhs = self.codegen_expr(left, program);
+                    let rhs = self.codegen_expr(right, program);
+
+                    // Call __pyc___builtin___str___add__(lhs, rhs)
+                    let func = self
+                        .ctx
+                        .module
+                        .get_function("__pyc___builtin___str___add__")
+                        .expect("String __add__ function not declared");
+
+                    let result = self
+                        .ctx
+                        .builder
+                        .build_call(func, &[lhs.into(), rhs.into()], "str_concat")
+                        .unwrap();
+
+                    let default = self
+                        .ctx
+                        .context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .const_null()
+                        .into();
+                    return call_result_to_basic_value(result, default);
+                }
+
                 let lhs = self.codegen_expr(left, program);
                 let rhs = self.codegen_expr(right, program);
 
@@ -39,6 +68,39 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
             }
 
             TirExprKind::Compare { left, op, right } => {
+                use crate::ast::CompareOp;
+
+                // Special case: String comparison
+                if matches!(left.ty, TirType::Class(_)) {
+                    let lhs = self.codegen_expr(left, program);
+                    let rhs = self.codegen_expr(right, program);
+
+                    // Map comparison operator to runtime function
+                    let func_name = match op {
+                        CompareOp::Eq => "__pyc___builtin___str___eq__",
+                        CompareOp::NotEq => "__pyc___builtin___str___ne__",
+                        CompareOp::Lt => "__pyc___builtin___str___lt__",
+                        CompareOp::LtE => "__pyc___builtin___str___le__",
+                        CompareOp::Gt => "__pyc___builtin___str___gt__",
+                        CompareOp::GtE => "__pyc___builtin___str___ge__",
+                    };
+
+                    let func = self
+                        .ctx
+                        .module
+                        .get_function(func_name)
+                        .unwrap_or_else(|| panic!("{} function not declared", func_name));
+
+                    let result = self
+                        .ctx
+                        .builder
+                        .build_call(func, &[lhs.into(), rhs.into()], "str_cmp")
+                        .unwrap();
+
+                    let default = self.ctx.context.i8_type().const_int(0, false).into();
+                    return call_result_to_basic_value(result, default);
+                }
+
                 let lhs = self.codegen_expr(left, program);
                 let rhs = self.codegen_expr(right, program);
 
@@ -642,25 +704,39 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
                 .into(),
             TirConstant::Float(f) => self.ctx.context.f64_type().const_float(*f).into(),
             TirConstant::Str(s) => {
-                // Create a static String struct: { i64 len, [N+1 x i8] data }
-                // This matches the C String struct layout with flexible array member
+                // Create a static String struct: { i64 len, i32 cp_count, i16 flags, [N+1 x i8] data }
+                // This matches the C String struct layout with Unicode support
                 // +1 for null terminator for C compatibility
                 let i64_type = self.ctx.context.i64_type();
+                let i32_type = self.ctx.context.i32_type();
+                let i16_type = self.ctx.context.i16_type();
                 let i8_type = self.ctx.context.i8_type();
                 let str_bytes = s.as_bytes();
                 let len = str_bytes.len();
 
+                // Detect if string is ASCII-only
+                let is_ascii = str_bytes.iter().all(|&b| b < 128);
+                let flags: u16 = if is_ascii { 0x03 } else { 0x02 }; // ASCII_ONLY | VALID_UTF8 or just VALID_UTF8
+                let cp_count: i32 = if is_ascii { len as i32 } else { -1 }; // Known for ASCII, unknown for Unicode
+
                 // Array type includes null terminator
                 let array_type = i8_type.array_type((len + 1) as u32);
 
-                // Create struct type { i64, [N+1 x i8] }
+                // Create struct type { i64 len, i32 cp_count, i16 flags, [N+1 x i8] data }
                 let string_struct_type = self.ctx.context.struct_type(
-                    &[i64_type.into(), array_type.into()],
+                    &[
+                        i64_type.into(),
+                        i32_type.into(),
+                        i16_type.into(),
+                        array_type.into(),
+                    ],
                     false, // not packed
                 );
 
                 // Build the constant values
                 let len_val = i64_type.const_int(len as u64, false);
+                let cp_count_val = i32_type.const_int(cp_count as u64, true); // signed
+                let flags_val = i16_type.const_int(flags as u64, false);
                 let mut char_values: Vec<_> = str_bytes
                     .iter()
                     .map(|&b| i8_type.const_int(b as u64, false))
@@ -669,8 +745,12 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
                 let char_array = i8_type.const_array(&char_values);
 
                 // Create the struct constant
-                let struct_val =
-                    string_struct_type.const_named_struct(&[len_val.into(), char_array.into()]);
+                let struct_val = string_struct_type.const_named_struct(&[
+                    len_val.into(),
+                    cp_count_val.into(),
+                    flags_val.into(),
+                    char_array.into(),
+                ]);
 
                 // Create a global constant for this String struct
                 let global = self
@@ -699,23 +779,48 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
     }
 
     /// Create a string constant and return a pointer to it
+    /// Creates a String struct matching the C layout: { i64 len, i32 cp_count, i16 flags, char[] data }
     fn create_string_constant(&mut self, s: &str) -> inkwell::values::BasicValueEnum<'ctx> {
         let i64_type = self.ctx.context.i64_type();
+        let i32_type = self.ctx.context.i32_type();
+        let i16_type = self.ctx.context.i16_type();
         let i8_type = self.ctx.context.i8_type();
         let str_bytes = s.as_bytes();
         let len = str_bytes.len();
 
+        // Check if string is ASCII-only
+        let is_ascii = str_bytes.iter().all(|&b| b < 128);
+
         // Array type includes null terminator
         let array_type = i8_type.array_type((len + 1) as u32);
 
-        // Create struct type { i64, [N+1 x i8] }
-        let string_struct_type = self
-            .ctx
-            .context
-            .struct_type(&[i64_type.into(), array_type.into()], false);
+        // Create struct type { i64 len, i32 cp_count, i16 flags, [N+1 x i8] data }
+        // This matches the C String struct layout
+        let string_struct_type = self.ctx.context.struct_type(
+            &[
+                i64_type.into(),
+                i32_type.into(),
+                i16_type.into(),
+                array_type.into(),
+            ],
+            false,
+        );
 
         // Build the constant values
         let len_val = i64_type.const_int(len as u64, false);
+        // For ASCII strings, cp_count equals byte length; otherwise -1 (not computed)
+        let cp_count_val = if is_ascii {
+            i32_type.const_int(len as u64, false)
+        } else {
+            i32_type.const_int((-1i32) as u64, true)
+        };
+        // Flags: 0x01 = ASCII_ONLY, 0x02 = VALID_UTF8
+        let flags_val = if is_ascii {
+            i16_type.const_int(0x03, false) // ASCII_ONLY | VALID_UTF8
+        } else {
+            i16_type.const_int(0x02, false) // VALID_UTF8 only
+        };
+
         let mut char_values: Vec<_> = str_bytes
             .iter()
             .map(|&b| i8_type.const_int(b as u64, false))
@@ -724,8 +829,12 @@ impl<'ctx, 'a> FunctionGenContext<'ctx, 'a> {
         let char_array = i8_type.const_array(&char_values);
 
         // Create the struct constant
-        let struct_val =
-            string_struct_type.const_named_struct(&[len_val.into(), char_array.into()]);
+        let struct_val = string_struct_type.const_named_struct(&[
+            len_val.into(),
+            cp_count_val.into(),
+            flags_val.into(),
+            char_array.into(),
+        ]);
 
         // Create a global constant for this String struct
         let global = self

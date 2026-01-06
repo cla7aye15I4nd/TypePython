@@ -137,13 +137,124 @@ impl<'ctx> CodegenContext<'ctx> {
             string_ptr_type
         );
 
-        // str_getitem(String*, i64) -> i8 (returns character at index)
+        // str_getitem(String*, i64) -> i64 (returns Unicode codepoint at index)
         declare_fn!(
-            i8_type,
+            i64_type,
             "__pyc___builtin___str___getitem__",
             string_ptr_type,
             i64_type
         );
+
+        // str_add(String*, String*) -> String* (string concatenation)
+        declare_fn!(
+            string_ptr_type,
+            "__pyc___builtin___str___add__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        // String comparison operators
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___eq__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___ne__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___lt__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___le__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___gt__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str___ge__",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        // Phase 3: String methods
+
+        // Case conversion
+        declare_fn!(
+            string_ptr_type,
+            "__pyc___builtin___str_lower",
+            string_ptr_type
+        );
+
+        declare_fn!(
+            string_ptr_type,
+            "__pyc___builtin___str_upper",
+            string_ptr_type
+        );
+
+        // Whitespace operations
+        declare_fn!(
+            string_ptr_type,
+            "__pyc___builtin___str_strip",
+            string_ptr_type
+        );
+
+        // String search
+        declare_fn!(
+            i64_type,
+            "__pyc___builtin___str_find",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str_startswith",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        declare_fn!(
+            i8_type,
+            "__pyc___builtin___str_endswith",
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        // String modification
+        declare_fn!(
+            string_ptr_type,
+            "__pyc___builtin___str_replace",
+            string_ptr_type,
+            string_ptr_type,
+            string_ptr_type
+        );
+
+        // Character classification
+        declare_fn!(i8_type, "__pyc___builtin___str_isalpha", string_ptr_type);
+
+        declare_fn!(i8_type, "__pyc___builtin___str_isdigit", string_ptr_type);
+
+        declare_fn!(i8_type, "__pyc___builtin___str_isspace", string_ptr_type);
 
         // int.__print__(i64) -> void (prints int without newline)
         declare_fn!(void_type, "__pyc___builtin___int___print__", i64_type);
